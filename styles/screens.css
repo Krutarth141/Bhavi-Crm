@@ -23,7 +23,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', sans-serif;
+  font-family: "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);
 }
@@ -346,6 +346,7 @@ tr:hover td {
 
 .modal-body {
   padding: 20px;
+  background: #ffffff;
 }
 
 .modal-footer {
@@ -780,6 +781,7 @@ tr:hover td {
 
   .modal {
     max-width: 100% !important;
+    background: #ffffff;
     margin: 0 !important;
     border-radius: 16px 16px 0 0 !important;
     max-height: 90vh;
