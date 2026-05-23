@@ -1,0 +1,30 @@
+:root{
+  --primary:#1a56db;
+  --primary-dark:#1240a8;
+  --primary-light:#e8efff;
+  --success:#0e9f6e;
+  --danger:#f05252;
+  --warning:#ff9800;
+  --sidebar-bg:#1e2a3a;
+  --sidebar-text:#b0bec5;
+  --bg:#f4f6fb;
+  --card:#fff;
+  --border:#e2e8f0;
+  --text:#1a202c;
+  --text-muted:#64748b;
+  --shadow:0 2px 8px rgba(0,0,0,0.08);
+  --radius:10px;
+}
+
+/* Basic resets */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#__next{height:100%}
+body{font-family:Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;background:var(--bg);color:var(--text);}
+
+/* Layout helpers */
+.container{max-width:1200px;margin:0 auto;padding:16px}
+
+/* Buttons (used across app) */
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-outline{background:#fff;border:1px solid var(--border);color:var(--text)}
