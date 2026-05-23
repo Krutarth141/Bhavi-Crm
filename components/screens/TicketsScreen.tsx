@@ -1,583 +1,215 @@
-'use client';
+﻿'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-
-interface Ticket {
-  id: string;
-  call_type: string;
-  service_type: string;
-  status: string;
-  brand_name: string;
-  model: string;
-  serial: string;
-  cname: string;
-  mobile: string;
-  city: string;
-  problem: string;
-  assigned_name: string;
-  warranty_coverage: string;
-  created_at: string;
-  service_charges: number;
-  state?: string;
-  pin?: string;
-  area?: string;
-  labor?: number;
-  se_call_id?: string;
-  visit_date?: string;
-  rerepair?: boolean;
-  rerepair_foc?: boolean;
-  final_charges?: number;
-}
-
-const statusBadges: Record<string, string> = {
-  'Pending Allocation': 'badge-pending',
-  'Assigned': 'badge-open',
-  'In Progress': 'badge-open',
-  'Closed': 'badge-closed',
-  'Call Cancel': 'badge-cancel',
-};
-
-const callTypeBadges: Record<string, string> = {
-  'Warranty': 'badge-warranty',
-  'Non-Warranty': 'badge-open',
-  'AMC': 'badge-warranty',
-};
+import { useState, useMemo } from 'react';
+import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tickets';
+import { colors, styles } from '@/styles/ticketsStyles';
+import { useTickets } from '@/hooks/useTickets';
+import { useTicketForm } from '@/hooks/useTicketForm';
+import { createTicket, updateTicket, updateTicketRemarks } from '@/services/ticketService';
+import { printTicket, getBadgeStyle } from '@/utils/printTicket';
 
 export default function TicketsScreen() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tickets, loading, fetchTickets } = useTickets();
+  const { formData, handleFormChange, setFormValues, resetForm } = useTicketForm();
+
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
-  const [formData, setFormData] = useState({
-    cname: '',
-    mobile: '',
-    city: '',
-    state: '',
-    pin: '',
-    area: '',
-    call_type: 'Warranty',
-    service_type: 'Repair',
-    brand_name: '',
-    model: '',
-    serial: '',
-    problem: '',
-    warranty_coverage: 'Yes',
-    status: 'Pending Allocation',
-    service_charges: 0,
-    labor: 0,
-    final_charges: 0,
-    se_call_id: '',
-    visit_date: '',
-    rerepair: false,
-    rerepair_foc: false,
-    assigned_name: '',
-  });
-
-  useEffect(() => {
-    fetchTickets();
-  }, []);
-
-  const fetchTickets = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('tickets')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      setTickets(data || []);
-    } catch (err) {
-      console.error('Failed to fetch tickets:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const statusOptions = [
-    'Pending Allocation',
-    'Assigned',
-    'In Progress',
-    'Pending Customer Approval',
-    'Closed',
-  ];
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const handleAddClick = () => {
     setModalMode('add');
-    setFormData({
-      cname: '',
-      mobile: '',
-      city: '',
-      state: '',
-      pin: '',
-      area: '',
-      call_type: 'Warranty',
-      service_type: 'Repair',
-      brand_name: '',
-      model: '',
-      serial: '',
-      problem: '',
-      warranty_coverage: 'Yes',
-      status: 'Pending Allocation',
-      service_charges: 0,
-      labor: 0,
-      final_charges: 0,
-      se_call_id: '',
-      visit_date: '',
-      rerepair: false,
-      rerepair_foc: false,
-      assigned_name: '',
-    });
+    setSelectedTicket(null);
+    resetForm();
     setModalOpen(true);
   };
 
   const handleViewTicket = (ticket: Ticket) => {
     setModalMode('view');
-    setFormData({
-      cname: ticket.cname,
-      mobile: ticket.mobile,
-      city: ticket.city,
-      state: ticket.state || '',
-      pin: ticket.pin || '',
-      area: ticket.area || '',
-      call_type: ticket.call_type,
-      service_type: ticket.service_type,
-      brand_name: ticket.brand_name,
-      model: ticket.model,
-      serial: ticket.serial,
-      problem: ticket.problem,
-      warranty_coverage: ticket.warranty_coverage,
-      status: ticket.status,
-      service_charges: ticket.service_charges || 0,
-      labor: ticket.labor || 0,
-      final_charges: ticket.final_charges || 0,
-      se_call_id: ticket.se_call_id || '',
-      visit_date: ticket.visit_date || '',
-      rerepair: ticket.rerepair || false,
-      rerepair_foc: ticket.rerepair_foc || false,
-      assigned_name: ticket.assigned_name || '',
-    });
+    setSelectedTicket(ticket);
+    setFormValues(ticket);
     setModalOpen(true);
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target as any;
-    const numFields = ['service_charges', 'labor', 'final_charges', 'pin'];
-    const boolFields = ['rerepair', 'rerepair_foc'];
+  const handlePrintTicket = () => {
+    if (selectedTicket) printTicket(selectedTicket);
+  };
 
-    setFormData(prev => ({
-      ...prev,
-      [name]: numFields.includes(name)
-        ? (value === '' ? 0 : Number(value) || 0)
-        : boolFields.includes(name)
-          ? value === 'true'
-          : value || '',
-    }));
+  const handleSaveRemarks = async () => {
+    if (!selectedTicket) return;
+    try {
+      const result = await updateTicketRemarks(selectedTicket.id, formData.remarks);
+      if (result.success) {
+        alert('✅ Remarks saved!');
+        await fetchTickets();
+      } else alert('❌ Failed');
+    } catch (err) {
+      alert('❌ Error');
+    }
   };
 
   const handleAddTicket = async () => {
     if (!formData.cname || !formData.mobile || !formData.serial) {
-      alert('Please fill in required fields: Customer Name, Mobile, Serial No');
+      alert('❌ Fill required fields');
       return;
     }
-
     try {
-      const { data: lastTickets } = await supabase
-        .from('tickets')
-        .select('id')
-        .like('id', 'BEA-%')
-        .order('id', { ascending: false })
-        .limit(1);
-
-      let newId = 'BEA-2026-001';
-      if (lastTickets && lastTickets.length > 0) {
-        const lastId = lastTickets[0].id;
-        const lastNum = parseInt(lastId.split('-')[2]) || 0;
-        const nextNum = String(lastNum + 1).padStart(3, '0');
-        const year = new Date().getFullYear();
-        newId = `BEA-${year}-${nextNum}`;
+      if (modalMode === 'edit' && selectedTicket) {
+        const result = await updateTicket(selectedTicket.id, formData);
+        if (!result.success) throw new Error(result.error);
+        alert('✅ Updated!');
+      } else {
+        const result = await createTicket(formData);
+        if (!result.success) throw new Error(result.error);
+        alert('✅ Created! ID: ' + result.id);
       }
-
-      const { error } = await supabase.from('tickets').insert([
-        {
-          id: newId,
-          cname: formData.cname,
-          mobile: formData.mobile,
-          city: formData.city,
-          state: formData.state,
-          pin: formData.pin,
-          area: formData.area,
-          call_type: formData.call_type,
-          service_type: formData.service_type,
-          brand_name: formData.brand_name,
-          model: formData.model,
-          serial: formData.serial,
-          problem: formData.problem,
-          warranty_coverage: formData.warranty_coverage,
-          status: formData.status,
-          service_charges: formData.service_charges || 0,
-          labor: formData.labor || 0,
-          final_charges: formData.final_charges || 0,
-          se_call_id: formData.se_call_id,
-          visit_date: formData.visit_date,
-          rerepair: formData.rerepair,
-          rerepair_foc: formData.rerepair_foc,
-          assigned_name: formData.assigned_name,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      ]);
-
-      if (error) {
-        console.error('Insert error:', error);
-        alert(`Error adding ticket: ${error.message}`);
-        return;
-      }
-
-      alert('Ticket added successfully!');
       setModalOpen(false);
-      fetchTickets();
+      resetForm();
+      await fetchTickets();
     } catch (err) {
-      console.error('Failed to add ticket:', err);
-      alert('Failed to add ticket');
+      alert('❌ Error');
     }
   };
 
-  const filteredTickets = tickets.filter((ticket) => {
-    const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus;
-    const matchesSearch =
-      ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.mobile.includes(searchTerm) ||
-      ticket.serial.includes(searchTerm);
-    return matchesStatus && matchesSearch;
-  });
+  const filteredTickets = useMemo(() => {
+    return tickets.filter((ticket) => {
+      const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus;
+      const matchesSearch = ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ticket.mobile.includes(searchTerm) ||
+        ticket.serial.includes(searchTerm) ||
+        ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesStatus && matchesSearch;
+    });
+  }, [tickets, filterStatus, searchTerm]);
 
   return (
-    <div className="content-section">
-      <div className="section-header">
-        <h2>🎫 All Tickets</h2>
-        <button className="btn btn-primary" onClick={handleAddClick}>➕ New Call</button>
+    <div style={{ padding: '20px' }}>
+      <div style={styles.sectionHeader}>
+        <h2 style={styles.sectionTitle}>🎫 All Tickets</h2>
+        <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
+          ➕ New Call
+        </button>
       </div>
 
-      <div className="filter-bar">
-        <input
-          type="text"
-          placeholder="Search by name, mobile, or serial..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="all">All Status</option>
-          {statusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
+      <div style={styles.filterBar}>
+        <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...styles.filterInput, flex: 1 }} />
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={styles.filterSelect}>
+          <option value="all">All</option>
+          {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
         </select>
       </div>
 
-      {loading ? (
-        <p className="loading">Loading tickets...</p>
-      ) : filteredTickets.length === 0 ? (
-        <p className="empty-message">
-          {tickets.length === 0 ? 'No tickets created yet' : 'No tickets match your filters'}
-        </p>
-      ) : (
-        <div className="card">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ticket</th>
-                  <th>Date</th>
-                  <th>Customer</th>
-                  <th>Mobile</th>
-                  <th>Brand / Model</th>
-                  <th>Serial No</th>
-                  <th>Call Type</th>
-                  <th>Service</th>
-                  <th>Problem</th>
-                  <th>Status</th>
-                  <th>Engineer</th>
-                  <th>Action</th>
+      {loading ? <div style={styles.loadingText}>Loading...</div> : filteredTickets.length === 0 ? <div style={styles.emptyMessage}>{tickets.length === 0 ? 'No tickets' : 'No matches'}</div> : (
+        <div style={styles.card}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.tableHeader}>ID</th>
+                <th style={styles.tableHeader}>Date</th>
+                <th style={styles.tableHeader}>Customer</th>
+                <th style={styles.tableHeader}>Mobile</th>
+                <th style={styles.tableHeader}>Brand/Model</th>
+                <th style={styles.tableHeader}>Serial</th>
+                <th style={styles.tableHeader}>Type</th>
+                <th style={styles.tableHeader}>Service</th>
+                <th style={styles.tableHeader}>Problem</th>
+                <th style={styles.tableHeader}>Status</th>
+                <th style={styles.tableHeader}>Engineer</th>
+                <th style={styles.tableHeader}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTickets.map((t) => (
+                <tr key={t.id} style={styles.tableRow} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = colors.card)}>
+                  <td style={styles.tableCell}><strong>{t.id}</strong></td>
+                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString()}</td>
+                  <td style={styles.tableCell}><strong>{t.cname}</strong></td>
+                  <td style={{ ...styles.tableCell, color: colors.primary, fontWeight: 600 }}>{t.mobile}</td>
+                  <td style={styles.tableCell}>{t.brand_name} / {t.model}</td>
+                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.serial}</td>
+                  <td style={styles.tableCell}><span style={{ ...styles.badge, ...getBadgeStyle(callTypeBadges[t.call_type] || 'badge-open') }}>{t.call_type}</span></td>
+                  <td style={styles.tableCell}>{t.service_type}</td>
+                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.problem}</td>
+                  <td style={styles.tableCell}><span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
+                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.assigned_name || '—'}</td>
+                  <td style={styles.tableCell}>
+                    <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
+                      👁 View
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredTickets.map((ticket) => (
-                  <tr key={ticket.id}>
-                    <td>
-                      <strong>{ticket.id}</strong>
-                    </td>
-                    <td style={{ fontSize: '12px' }}>
-                      {new Date(ticket.created_at).toLocaleDateString()}
-                    </td>
-                    <td>
-                      <strong>{ticket.cname}</strong>
-                    </td>
-                    <td>
-                      <span className="clickable-phone" onClick={() => { }}>
-                        {ticket.mobile}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontSize: '13px' }}>
-                        {ticket.brand_name} / {ticket.model}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: '12px' }}>{ticket.serial}</td>
-                    <td>
-                      <span className={`badge ${callTypeBadges[ticket.call_type] || 'badge-open'}`}>
-                        {ticket.call_type}
-                      </span>
-                    </td>
-                    <td>{ticket.service_type}</td>
-                    <td style={{ fontSize: '12px', maxWidth: '150px' }}>{ticket.problem}</td>
-                    <td>
-                      <span className={`badge ${statusBadges[ticket.status] || 'badge-open'}`}>
-                        {ticket.status}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '12px' }}>{ticket.assigned_name || '—'}</td>
-                    <td>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => handleViewTicket(ticket)}
-                      >
-                        👁 View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* Modal for Add/Edit/View */}
       {modalOpen && (
-        <div className="modal-overlay" onClick={() => !['add', 'edit'].includes(modalMode) && setModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{modalMode === 'add' ? '➕ New Ticket' : modalMode === 'edit' ? '✏️ Edit Ticket' : '👁 View Ticket'}</h3>
-              <button className="close-btn" onClick={() => setModalOpen(false)}>✕</button>
-            </div>
-
-            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-              {/* Customer Details Section */}
-              <div style={{ marginBottom: '20px', borderBottom: '2px solid #1a56db', paddingBottom: '10px' }}>
-                <h4 style={{ color: '#1a56db', marginBottom: '10px' }}>👤 Customer Details</h4>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Customer Name *</label>
-                    <input
-                      type="text"
-                      name="cname"
-                      value={formData.cname}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Mobile *</label>
-                    <input
-                      type="text"
-                      name="mobile"
-                      value={formData.mobile}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>City</label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>State</label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>PIN</label>
-                    <input
-                      type="number"
-                      name="pin"
-                      value={formData.pin}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                </div>
+        <div style={styles.modalOverlay} onClick={() => setModalOpen(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <div>
+                <h2 style={styles.modalTitle}>{modalMode === 'add' ? '➕ New' : modalMode === 'edit' ? '✏️ Edit' : '👁 View'} Ticket</h2>
               </div>
-
-              {/* Product Details Section */}
-              <div style={{ marginBottom: '20px', borderBottom: '2px solid #0e9f6e', paddingBottom: '10px' }}>
-                <h4 style={{ color: '#0e9f6e', marginBottom: '10px' }}>🏭 Product Details</h4>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Brand Name</label>
-                    <input
-                      type="text"
-                      name="brand_name"
-                      value={formData.brand_name}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Model</label>
-                    <input
-                      type="text"
-                      name="model"
-                      value={formData.model}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Serial No *</label>
-                    <input
-                      type="text"
-                      name="serial"
-                      value={formData.serial}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Problem</label>
-                    <textarea
-                      name="problem"
-                      value={formData.problem}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Service Details Section */}
-              <div style={{ marginBottom: '20px', borderBottom: '2px solid #ff9800', paddingBottom: '10px' }}>
-                <h4 style={{ color: '#ff9800', marginBottom: '10px' }}>🔧 Service Details</h4>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Call Type</label>
-                    <select
-                      name="call_type"
-                      value={formData.call_type}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    >
-                      <option>Warranty</option>
-                      <option>Non-Warranty</option>
-                      <option>AMC</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Service Type</label>
-                    <select
-                      name="service_type"
-                      value={formData.service_type}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    >
-                      <option>Repair</option>
-                      <option>Installation</option>
-                      <option>Maintenance</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Warranty Coverage</label>
-                    <select
-                      name="warranty_coverage"
-                      value={formData.warranty_coverage}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    >
-                      <option>Yes</option>
-                      <option>No</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select
-                      name="status"
-                      value={formData.status}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    >
-                      {statusOptions.map(status => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Service Charges</label>
-                    <input
-                      type="number"
-                      name="service_charges"
-                      value={formData.service_charges}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Labor Charges</label>
-                    <input
-                      type="number"
-                      name="labor"
-                      value={formData.labor}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Final Charges</label>
-                    <input
-                      type="number"
-                      name="final_charges"
-                      value={formData.final_charges}
-                      onChange={handleFormChange}
-                      disabled={modalMode === 'view'}
-                    />
-                  </div>
-                </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                {modalMode === 'view' && (
+                  <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={handlePrintTicket}>
+                    🖨️ Print
+                  </button>
+                )}
+                <button style={styles.closeBtn} onClick={() => setModalOpen(false)}>✕</button>
               </div>
             </div>
 
-            <div className="modal-footer">
+            <div style={styles.modalBody}>
+              <div style={styles.sectionDivider}>
+                <h3 style={styles.sectionHeader2}>👤 Customer</h3>
+                <div style={styles.formGrid}>
+                  <FormInput label="Name *" name="cname" value={formData.cname} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Mobile *" name="mobile" value={formData.mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="City *" name="city" value={formData.city} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Alt Mobile" name="alt_mobile" value={formData.alt_mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="State" name="state" value={formData.state} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="PIN" name="pin" value={formData.pin} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                </div>
+              </div>
+
+              <div style={styles.sectionDivider}>
+                <h3 style={styles.sectionHeader2}>🏭 Product</h3>
+                <div style={styles.formGrid}>
+                  <FormInput label="Brand" name="brand_name" value={formData.brand_name} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Model" name="model" value={formData.model} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Serial *" name="serial" value={formData.serial} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                </div>
+              </div>
+
+              <div style={styles.sectionDivider}>
+                <h3 style={styles.sectionHeader2}>🔧 Service</h3>
+                <div style={styles.formGrid}>
+                  <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
+                  <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={statusOptions} disabled={modalMode === 'view'} />
+                </div>
+              </div>
+
+              <div style={styles.sectionDivider}>
+                <h3 style={styles.sectionHeader2}>📝 Remarks</h3>
+                <textarea name="remarks" value={formData.remarks} onChange={handleFormChange} rows={3} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+              </div>
+            </div>
+
+            <div style={styles.modalFooter}>
+              <button style={{ ...styles.btn, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={() => setModalOpen(false)}>
+                Cancel
+              </button>
               {modalMode === 'view' ? (
-                <button className="btn btn-outline" onClick={() => setModalOpen(false)}>Close</button>
+                <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
+                  💾 Save Remarks
+                </button>
               ) : (
-                <>
-                  <button className="btn btn-outline" onClick={() => setModalOpen(false)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={handleAddTicket}>💾 Save Ticket</button>
-                </>
+                <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddTicket}>
+                  💾 Save
+                </button>
               )}
             </div>
           </div>
@@ -587,32 +219,22 @@ export default function TicketsScreen() {
   );
 }
 
-function getStatusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    'Pending Allocation': 'pending',
-    'Assigned': 'progress',
-    'In Progress': 'progress',
-    'Pending Approval': 'hold',
-    'Closed': 'closed',
-    'Cancelled': 'cancel',
-  };
-  return map[status] || 'pending';
+function FormInput({ label, name, value, onChange, disabled }: any) {
+  return (
+    <div style={{ ...styles.formGroup }}>
+      <label style={styles.formLabel}>{label}</label>
+      <input type="text" name={name} value={value || ''} onChange={onChange} disabled={disabled} style={{ ...styles.formInput, opacity: disabled ? 0.6 : 1 }} />
+    </div>
+  );
 }
 
-function getCallTypeBadgeClass(callType: string): string {
-  const map: Record<string, string> = {
-    'Warranty': 'warranty',
-    'Non-Warranty': 'cancel',
-    'AMC': 'approve',
-  };
-  return map[callType] || 'open';
-}
-
-function getPriorityColor(priority: string): string {
-  const colors: Record<string, string> = {
-    'High': '#f05252',
-    'Normal': '#ff9800',
-    'Low': '#0e9f6e',
-  };
-  return colors[priority] || '#64748b';
+function FormSelect({ label, name, value, onChange, options, disabled }: any) {
+  return (
+    <div style={{ ...styles.formGroup }}>
+      <label style={styles.formLabel}>{label}</label>
+      <select name={name} value={value || ''} onChange={onChange} disabled={disabled} style={{ ...styles.formInput, opacity: disabled ? 0.6 : 1 }}>
+        {options.map((o: string) => (<option key={o} value={o}>{o}</option>))}
+      </select>
+    </div>
+  );
 }
