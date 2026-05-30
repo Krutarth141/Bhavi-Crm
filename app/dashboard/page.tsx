@@ -1,38 +1,24 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import DashboardHeader from '@/components/dashboard/DashboardHeader';
+import { redirect } from 'next/navigation';
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import EngineerDashboard from '@/components/dashboard/engineer/EngineerDashboard';
 import WorkControllerDashboard from '@/components/dashboard/work-controller/WorkControllerDashboard';
-import '@/styles/dashboard.css';
+import DashboardHeader from '@/components/dashboard/DashboardHeader';
 
-function DashboardContent() {
+export default function DashboardPage() {
     const { data: session, status } = useSession();
-    const router = useRouter();
-
-    useEffect(() => {
-        if (status === 'unauthenticated') {
-            router.push('/login');
-        }
-    }, [status, router]);
 
     if (status === 'loading') {
-        return (
-            <div className="loading-container">
-                <div className="spinner"></div>
-                <p>Loading...</p>
-            </div>
-        );
+        return <div style={{ padding: '20px', textAlign: 'center' }}>Loading dashboard...</div>;
     }
 
     if (!session) {
-        return null;
+        redirect('/login');
     }
 
-    const userRole = (session?.user as any)?.role || 'engineer';
+    const userRole = (session.user as any)?.roleType;
 
     const renderDashboard = () => {
         switch (userRole) {
@@ -41,19 +27,16 @@ function DashboardContent() {
             case 'work_controller':
                 return <WorkControllerDashboard />;
             case 'engineer':
-            default:
                 return <EngineerDashboard />;
+            default:
+                return <div style={{ padding: '20px' }}>Unknown role: {userRole}</div>;
         }
     };
 
     return (
-        <div className="dashboard-container">
+        <div>
             <DashboardHeader />
-            <main className="dashboard-main">{renderDashboard()}</main>
+            {renderDashboard()}
         </div>
     );
-}
-
-export default function Dashboard() {
-    return <DashboardContent />;
 }

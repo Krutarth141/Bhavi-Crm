@@ -28,12 +28,12 @@ export async function POST(request: NextRequest) {
       .from('users')
       .insert([
         {
-          email,
+          user_id: email,
           password: hashedPassword,
           name,
           role: role || 'engineer',
           role_type: role_type || 'engineer',
-          status: 'active',
+          is_active: true,
         },
       ])
       .select()

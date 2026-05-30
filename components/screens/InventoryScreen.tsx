@@ -1,372 +1,299 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import Modal from '@/components/Modal';
+import { useState, useMemo } from 'react';
+import { useInventory } from '@/hooks/useInventory';
+import { InventoryItem, TransactionData } from '@/types/inventory';
+import { InventoryTable } from '@/components/inventory/InventoryTable';
+import { InventoryStats } from '@/components/inventory/InventoryStats';
+import { InventoryModals } from '@/components/inventory/InventoryModals';
 
-interface InventoryItem {
-    id: string;
-    item_code: string;
-    item_name: string;
-    category: string | null;
-    qty_in_stock: number;
-    min_stock: number;
-    unit_price: number;
-    brand_id: string | null;
-    description: string | null;
-    part_code: string | null;
-    created_at: string;
-    updated_at: string;
-}
+type ModalMode = 'add' | 'edit' | 'view' | null;
 
 export default function InventoryScreen() {
-    const [inventory, setInventory] = useState<InventoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showLowStock, setShowLowStock] = useState(false);
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [showViewModal, setShowViewModal] = useState(false);
+    // Data fetching
+    const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem } = useInventory();
+
+    // UI State
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+    const [modalMode, setModalMode] = useState<ModalMode>(null);
+    const [showStockTransactionModal, setShowStockTransactionModal] = useState(false);
+    const [transactionType, setTransactionType] = useState<'in' | 'out' | 'sell'>('in');
     const [submitting, setSubmitting] = useState(false);
-    const [formData, setFormData] = useState({
-        item_code: '',
-        item_name: '',
-        category: '',
-        qty_in_stock: 0,
-        min_stock: 0,
-        unit_price: 0,
-        brand_id: '',
-        description: '',
-        part_code: '',
+
+    // Form State
+    const [formData, setFormData] = useState<Partial<InventoryItem>>({});
+    const [transactionData, setTransactionData] = useState<TransactionData>({
+        quantity: 0,
+        date: new Date().toISOString().split('T')[0],
+        note: '',
+        supplier: '',
+        invoice: '',
+        customer: '',
+        sell_price: 0,
     });
 
-    useEffect(() => {
-        fetchInventory();
-    }, []);
+    // Filters
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
 
-    const fetchInventory = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('inventory')
-                .select('*')
-                .order('item_name', { ascending: true });
+    // Filtered Data
+    const filteredInventory = useMemo(() => {
+        return inventory.filter((item) => {
+            const matchesSearch =
+                !searchTerm ||
+                item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.item_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                item.part_code?.toLowerCase().includes(searchTerm.toLowerCase());
 
-            if (error) throw error;
-            setInventory(data || []);
-        } catch (err) {
-            console.error('Failed to fetch inventory:', err);
-        } finally {
-            setLoading(false);
+            const matchesCategory = !selectedCategory || item.category === selectedCategory;
+
+            return matchesSearch && matchesCategory;
+        });
+    }, [inventory, searchTerm, selectedCategory]);
+
+    // Modal Handlers
+    const openAddForm = (item?: InventoryItem) => {
+        if (item) {
+            setFormData(item);
+            setModalMode('edit');
+            setSelectedItem(item);
+        } else {
+            setFormData({
+                item_name: '',
+                item_code: '',
+                part_code: '',
+                category: '',
+                qty_in_stock: 0,
+                min_stock: 0,
+                unit_price: 0,
+                gst_pct: 18,
+                description: '',
+            });
+            setModalMode('add');
+            setSelectedItem(null);
         }
     };
 
-    const filteredInventory = inventory.filter((item) => {
-        const matchesSearch =
-            item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.item_code?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-            (item.category?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
-        const matchesStockFilter = showLowStock ? item.qty_in_stock <= item.min_stock : true;
-        return matchesSearch && matchesStockFilter;
-    });
+    const closeAddForm = () => {
+        setModalMode(null);
+        setFormData({});
+    };
 
-    const lowStockItems = inventory.filter((item) => item.qty_in_stock <= item.min_stock);
+    const openViewModal = (item: InventoryItem) => {
+        setSelectedItem(item);
+        setModalMode('view');
+    };
 
-    const handleAddItem = () => {
-        setFormData({
-            item_code: '',
-            item_name: '',
-            category: '',
-            qty_in_stock: 0,
-            min_stock: 0,
-            unit_price: 0,
-            brand_id: '',
-            description: '',
-            part_code: '',
-        });
+    const closeViewModal = () => {
+        setModalMode(null);
         setSelectedItem(null);
-        setShowAddForm(true);
     };
 
-    const handleViewItem = (item: InventoryItem) => {
+    const openStockModal = (item: InventoryItem) => {
         setSelectedItem(item);
-        setShowViewModal(true);
-    };
-
-    const handleAdjustStock = (item: InventoryItem) => {
-        setSelectedItem(item);
-        setFormData({
-            item_code: item.item_code,
-            item_name: item.item_name,
-            category: item.category || '',
-            qty_in_stock: item.qty_in_stock,
-            min_stock: item.min_stock,
-            unit_price: item.unit_price,
-            brand_id: item.brand_id || '',
-            description: item.description || '',
-            part_code: item.part_code || '',
+        setShowStockTransactionModal(true);
+        setTransactionData({
+            quantity: 0,
+            date: new Date().toISOString().split('T')[0],
+            note: '',
+            supplier: '',
+            invoice: '',
+            customer: '',
+            sell_price: 0,
         });
-        setShowAddForm(true);
+        setTransactionType('in');
     };
 
+    const closeStockModal = () => {
+        setShowStockTransactionModal(false);
+        setSelectedItem(null);
+    };
+
+    // Form Handlers
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        const numFields = ['qty_in_stock', 'min_stock', 'unit_price'];
-
-        setFormData((prev) => ({
-            ...prev,
-            [name]: numFields.includes(name)
-                ? (value === '' ? 0 : Number(value) || 0)
-                : (value === null ? '' : value),
-        }));
+        const { name, value, type } = e.target as HTMLInputElement;
+        const parsedValue = type === 'number' ? parseFloat(value) || 0 : value;
+        setFormData(prev => ({ ...prev, [name]: parsedValue }));
     };
 
-    const handleSubmitForm = async (e: React.FormEvent) => {
+    const handleTransactionChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value, type } = e.target as HTMLInputElement;
+        const parsedValue = type === 'number' ? parseFloat(value) || 0 : value;
+        setTransactionData(prev => ({ ...prev, [name]: parsedValue }));
+    };
+
+    // Save Handlers
+    const handleSaveForm = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.item_name) {
+            alert('Item name is required');
+            return;
+        }
+
         setSubmitting(true);
-
         try {
-            if (!formData.item_code || !formData.item_name) {
-                alert('Item Code and Item Name are required');
-                setSubmitting(false);
-                return;
-            }
-
-            const dataToSubmit = {
-                ...formData,
-                brand_id: null,
-                updated_at: new Date().toISOString(),
-            };
-
-            if (selectedItem?.id) {
-                const { error } = await supabase
-                    .from('inventory')
-                    .update(dataToSubmit)
-                    .eq('id', selectedItem.id);
-                if (error) throw error;
+            const result = await saveInventoryItem(formData, modalMode === 'edit' ? selectedItem?.id : undefined);
+            if (result.success) {
+                alert(modalMode === 'edit' ? '✅ Item updated successfully' : '✅ Item added successfully');
+                closeAddForm();
             } else {
-                const { error } = await supabase
-                    .from('inventory')
-                    .insert([dataToSubmit]);
-                if (error) throw error;
+                alert(`❌ Error: ${result.error}`);
             }
-
-            alert('✅ Item saved successfully!');
-            setShowAddForm(false);
-            fetchInventory();
         } catch (err: any) {
-            alert('❌ Error: ' + (err.message || 'Failed to save item'));
+            alert(`❌ Error: ${err.message}`);
         } finally {
             setSubmitting(false);
         }
     };
 
-    const handleDeleteItem = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this item?')) return;
+    const handleSaveTransaction = async () => {
+        if (!selectedItem) return;
+        if (transactionData.quantity <= 0) {
+            alert('Quantity must be greater than 0');
+            return;
+        }
 
+        setSubmitting(true);
         try {
-            const { error } = await supabase
-                .from('inventory')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            alert('✅ Item deleted successfully!');
-            fetchInventory();
+            const result = await saveStockTransaction(selectedItem, transactionData, transactionType);
+            if (result.success) {
+                alert('✅ Stock updated successfully');
+                closeStockModal();
+            } else {
+                alert(`❌ Error: ${result.error}`);
+            }
         } catch (err: any) {
-            alert('❌ Error: ' + (err.message || 'Failed to delete item'));
+            alert(`❌ Error: ${err.message}`);
+        } finally {
+            setSubmitting(false);
         }
     };
 
+    const handleDeleteItem = async (item: InventoryItem) => {
+        if (!confirm(`Delete "${item.item_name}"? This cannot be undone.`)) return;
+
+        try {
+            const result = await deleteInventoryItem(item.id);
+            if (result.success) {
+                alert('✅ Item deleted successfully');
+            } else {
+                alert(`❌ Error: ${result.error}`);
+            }
+        } catch (err: any) {
+            alert(`❌ Error: ${err.message}`);
+        }
+    };
+
+    if (loading) {
+        return <div style={{ padding: '20px', textAlign: 'center' }}>Loading inventory...</div>;
+    }
+
     return (
-        <div className="content-section">
-            <div className="section-header">
-                <div>
-                    <h2>📦 Inventory Management</h2>
-                    {lowStockItems.length > 0 && (
-                        <div style={{ fontSize: '12px', color: '#f05252', marginTop: '4px' }}>
-                            ⚠️ {lowStockItems.length} items low in stock
-                        </div>
-                    )}
-                </div>
-                <button className="btn btn-primary" onClick={handleAddItem}>
-                    ➕ Add Part
-                </button>
-            </div>
+        <div style={{ padding: '20px' }}>
+            <div style={{ marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '16px' }}>📦 Inventory Management</h2>
 
-            <div className="filter-bar">
-                <input
-                    type="text"
-                    placeholder="Search parts..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ flex: 1 }}
-                />
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {/* KPI Cards */}
+                <InventoryStats inventory={inventory} />
+
+                {/* Search & Filters */}
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 200px 200px auto',
+                        gap: '12px',
+                        marginBottom: '16px',
+                    }}
+                >
                     <input
-                        type="checkbox"
-                        checked={showLowStock}
-                        onChange={(e) => setShowLowStock(e.target.checked)}
+                        type="text"
+                        placeholder="🔍 Search items by name, code, or part..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                            padding: '10px 12px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                        }}
                     />
-                    Low Stock Only
-                </label>
+                    <select
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value)}
+                        style={{
+                            padding: '10px 12px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                        }}
+                    >
+                        <option value="">All Categories</option>
+                        {categories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                    </select>
+                    <select
+                        style={{
+                            padding: '10px 12px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                        }}
+                    >
+                        <option>Sort: A-Z</option>
+                        <option>Sort: Low Stock</option>
+                        <option>Sort: Price High</option>
+                    </select>
+                    <button
+                        onClick={() => openAddForm()}
+                        style={{
+                            padding: '10px 16px',
+                            background: '#3b82f6',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        ➕ Add New
+                    </button>
+                </div>
+
+                {/* Results */}
+                <div style={{ marginBottom: '8px', fontSize: '13px', color: '#64748b' }}>
+                    Showing {filteredInventory.length} of {inventory.length} items
+                </div>
             </div>
 
-            {loading ? (
-                <p className="loading">Loading inventory...</p>
-            ) : filteredInventory.length === 0 ? (
-                <p className="empty-message">No items found</p>
-            ) : (
-                <div className="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Item Code</th>
-                                <th>Item Name</th>
-                                <th>Category</th>
-                                <th>Stock</th>
-                                <th>Min Stock</th>
-                                <th>Price ₹</th>
-                                <th>Status</th>
-                                <th>Updated</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredInventory.map((item) => {
-                                const isLow = item.qty_in_stock <= item.min_stock;
-                                return (
-                                    <tr key={item.id}>
-                                        <td>
-                                            <strong>{item.item_code || item.part_code || '—'}</strong>
-                                        </td>
-                                        <td>{item.item_name}</td>
-                                        <td>{item.category || '—'}</td>
-                                        <td>
-                                            <strong style={{ color: isLow ? '#f05252' : '#065f46' }}>
-                                                {item.qty_in_stock}
-                                            </strong>
-                                        </td>
-                                        <td>{item.min_stock}</td>
-                                        <td>₹{(item.unit_price || 0).toLocaleString()}</td>
-                                        <td>
-                                            <span
-                                                className={`badge ${isLow ? 'badge-pending' : 'badge-approve'}`}
-                                            >
-                                                {isLow ? '⚠️ Low' : '✓ OK'}
-                                            </span>
-                                        </td>
-                                        <td style={{ fontSize: '12px' }}>
-                                            {new Date(item.updated_at).toLocaleDateString()}
-                                        </td>
-                                        <td style={{ whiteSpace: 'nowrap', gap: '4px', display: 'flex' }}>
-                                            <button
-                                                className="btn btn-sm btn-primary"
-                                                onClick={() => handleAdjustStock(item)}
-                                            >
-                                                ⚙️ Adjust
-                                            </button>
-                                            <button
-                                                className="btn btn-sm btn-danger"
-                                                onClick={() => handleDeleteItem(item.id)}
-                                                style={{ background: '#f05252' }}
-                                            >
-                                                🗑 Delete
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            {/* Inventory Table */}
+            <InventoryTable
+                filteredInventory={filteredInventory}
+                onViewItem={openViewModal}
+                onAdjustStock={openStockModal}
+                onEditItem={(item) => openAddForm(item)}
+                onDeleteItem={handleDeleteItem}
+            />
 
-            {/* Add/Edit Inventory Modal */}
-            <Modal
-                isOpen={showAddForm}
-                title={selectedItem ? 'Adjust Stock' : 'Add New Part'}
-                onClose={() => setShowAddForm(false)}
-                footer={
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-outline" onClick={() => setShowAddForm(false)}>
-                            Cancel
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleSubmitForm}
-                            disabled={submitting}
-                        >
-                            {submitting ? 'Saving...' : '💾 Save Item'}
-                        </button>
-                    </div>
-                }
-            >
-                <form onSubmit={handleSubmitForm} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                    <div className="form-group">
-                        <label>Item Code *</label>
-                        <input type="text" name="item_code" value={formData.item_code || ''} onChange={handleFormChange} placeholder="IC-001" required />
-                    </div>
-                    <div className="form-group">
-                        <label>Item Name *</label>
-                        <input type="text" name="item_name" value={formData.item_name || ''} onChange={handleFormChange} placeholder="Item name" required />
-                    </div>
-                    <div className="form-group">
-                        <label>Category</label>
-                        <input type="text" name="category" value={formData.category || ''} onChange={handleFormChange} placeholder="Electronics, Spare Parts, etc." />
-                    </div>
-                    <div className="form-group">
-                        <label>Part Code</label>
-                        <input type="text" name="part_code" value={formData.part_code || ''} onChange={handleFormChange} placeholder="OEM part code" />
-                    </div>
-                    <div className="form-group">
-                        <label>Qty in Stock</label>
-                        <input type="number" name="qty_in_stock" value={formData.qty_in_stock || 0} onChange={handleFormChange} min="0" step="1" />
-                    </div>
-                    <div className="form-group">
-                        <label>Min Stock Level</label>
-                        <input type="number" name="min_stock" value={formData.min_stock || 0} onChange={handleFormChange} min="0" step="1" />
-                    </div>
-                    <div className="form-group">
-                        <label>Unit Price ₹</label>
-                        <input type="number" name="unit_price" value={formData.unit_price || 0} onChange={handleFormChange} min="0" step="0.01" />
-                    </div>
-                    <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                        <label>Description</label>
-                        <textarea name="description" value={formData.description || ''} onChange={handleFormChange} placeholder="Item description" rows={2} />
-                    </div>
-                </form>
-            </Modal>
-
-            {/* View Item Modal */}
-            <Modal
-                isOpen={showViewModal}
-                title="Item Details"
-                onClose={() => setShowViewModal(false)}
-                footer={
-                    <button className="btn btn-outline" onClick={() => setShowViewModal(false)}>
-                        Close
-                    </button>
-                }
-            >
-                {selectedItem && (
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                            <div><strong>Item Code:</strong> {selectedItem.item_code}</div>
-                            <div><strong>Part Code:</strong> {selectedItem.part_code || '—'}</div>
-                            <div><strong>Item Name:</strong> {selectedItem.item_name}</div>
-                            <div><strong>Category:</strong> {selectedItem.category || '—'}</div>
-                            <div><strong>Stock Qty:</strong> {selectedItem.qty_in_stock}</div>
-                            <div><strong>Min Stock:</strong> {selectedItem.min_stock}</div>
-                            <div><strong>Unit Price:</strong> ₹{(selectedItem.unit_price || 0).toLocaleString()}</div>
-                            <div><strong>Brand:</strong> {selectedItem.brand_id || '—'}</div>
-                        </div>
-                        <div><strong>Description:</strong> {selectedItem.description || '—'}</div>
-                        <div><strong>Updated:</strong> {new Date(selectedItem.updated_at).toLocaleString()}</div>
-                    </div>
-                )}
-            </Modal>
+            {/* Modals */}
+            <InventoryModals
+                showAddForm={modalMode === 'add' || modalMode === 'edit'}
+                showViewModal={modalMode === 'view'}
+                showStockTransactionModal={showStockTransactionModal}
+                selectedItem={selectedItem}
+                formData={formData}
+                transactionData={transactionData}
+                transactionType={transactionType}
+                submitting={submitting}
+                onCloseAddForm={closeAddForm}
+                onCloseViewModal={closeViewModal}
+                onCloseStockModal={closeStockModal}
+                onFormChange={handleFormChange}
+                onTransactionChange={handleTransactionChange}
+                onTransactionTypeChange={setTransactionType}
+                onSaveForm={handleSaveForm}
+                onSaveTransaction={handleSaveTransaction}
+            />
         </div>
     );
 }

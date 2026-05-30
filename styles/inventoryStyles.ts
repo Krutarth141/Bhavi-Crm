@@ -1,0 +1,123 @@
+export const inventoryColors = {
+    primary: '#3b82f6',
+    primaryDark: '#2563eb',
+    primaryLight: '#eff6ff',
+    success: '#10b981',
+    danger: '#ef4444',
+    warning: '#f59e0b',
+    bg: '#f8fafc',
+    card: '#fff',
+    border: '#e2e8f0',
+    text: '#1f2937',
+    textMuted: '#64748b',
+    shadow: '0 1px 3px rgba(0,0,0,0.1)',
+};
+
+export const inventoryStyles = {
+    sectionHeader: {
+        display: 'flex' as const,
+        alignItems: 'center' as const,
+        justifyContent: 'space-between' as const,
+        marginBottom: '20px',
+    },
+    sectionTitle: {
+        fontSize: '24px',
+        fontWeight: 700,
+        color: inventoryColors.text,
+    },
+    filterBar: {
+        display: 'grid' as const,
+        gridTemplateColumns: '1fr 200px 200px auto',
+        gap: '12px',
+        marginBottom: '16px',
+    },
+    filterInput: {
+        border: `1px solid ${inventoryColors.border}`,
+        borderRadius: '6px',
+        padding: '10px 12px',
+        fontSize: '14px',
+        outline: 'none',
+        backgroundColor: inventoryColors.card,
+        color: inventoryColors.text,
+    },
+    filterSelect: {
+        border: `1px solid ${inventoryColors.border}`,
+        borderRadius: '6px',
+        padding: '10px 12px',
+        fontSize: '14px',
+        outline: 'none',
+        backgroundColor: inventoryColors.card,
+        color: inventoryColors.text,
+        cursor: 'pointer',
+    },
+    card: {
+        background: inventoryColors.card,
+        borderRadius: '8px',
+        boxShadow: inventoryColors.shadow,
+        overflow: 'auto',
+    },
+    table: {
+        width: '100%',
+        borderCollapse: 'collapse' as const,
+        fontSize: '13px',
+    },
+    tableHeader: {
+        background: '#f8fafc',
+        padding: '12px 14px',
+        textAlign: 'left' as const,
+        fontWeight: 600,
+        color: inventoryColors.textMuted,
+        borderBottom: `1px solid ${inventoryColors.border}`,
+        whiteSpace: 'nowrap' as const,
+    },
+    tableCell: {
+        padding: '12px 14px',
+        borderBottom: `1px solid ${inventoryColors.border}`,
+        color: inventoryColors.text,
+    },
+    tableRow: {
+        backgroundColor: inventoryColors.card,
+        transition: 'background 0.2s',
+    },
+    tableRowHover: {
+        backgroundColor: inventoryColors.bg,
+    },
+    btn: {
+        padding: '8px 16px',
+        borderRadius: '6px',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: '13px',
+        fontWeight: 600,
+        transition: 'all 0.2s',
+    },
+    btnPrimary: {
+        backgroundColor: inventoryColors.primary,
+        color: 'white',
+    },
+    btnPrimaryHover: {
+        backgroundColor: inventoryColors.primaryDark,
+    },
+    btnSm: {
+        padding: '6px 10px',
+        fontSize: '11px',
+    },
+    badge: {
+        display: 'inline-block',
+        padding: '4px 8px',
+        borderRadius: '4px',
+        fontSize: '11px',
+        fontWeight: 600,
+    },
+    loadingText: {
+        textAlign: 'center' as const,
+        padding: '20px',
+        color: inventoryColors.textMuted,
+    },
+    emptyMessage: {
+        textAlign: 'center' as const,
+        padding: '40px 20px',
+        color: inventoryColors.textMuted,
+        fontSize: '14px',
+    },
+};

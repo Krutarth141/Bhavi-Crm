@@ -1,15 +1,25 @@
 ﻿'use client';
 
 import { useState, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tickets';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
-import { createTicket, updateTicket, updateTicketRemarks } from '@/services/ticketService';
+import { useEngineers } from '@/hooks/useEngineers';
+import { createTicket, updateTicket, updateTicketRemarks, closeTicket } from '@/services/ticketService';
 import { printTicket, getBadgeStyle } from '@/utils/printTicket';
 
 export default function TicketsScreen() {
-  const { tickets, loading, fetchTickets } = useTickets();
+  const { data: session } = useSession();
+  const currentUserRole = (session?.user as any)?.roleType;
+  const currentUserId = (session?.user as any)?.id;
+
+  const { tickets, loading, fetchTickets } = useTickets({
+    userRole: currentUserRole,
+    userId: currentUserId,
+  });
+  const { engineers, loading: engineersLoading, error: engineersError, fetchEngineers: refetchEngineers } = useEngineers();
   const { formData, handleFormChange, setFormValues, resetForm } = useTicketForm();
 
   const [filterStatus, setFilterStatus] = useState('all');
@@ -17,6 +27,50 @@ export default function TicketsScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+
+  // Check if current user can edit this ticket
+  const canEditTicket = (ticket: Ticket) => {
+    if (currentUserRole === 'admin' || currentUserRole === 'work_controller') {
+      return true;
+    }
+    if (currentUserRole === 'engineer') {
+      return ticket.assigned_to === currentUserId;
+    }
+    return false;
+  };
+
+  // Handle engineer assignment - update both ID and name
+  const handleEngineerChange = (engineerId: string) => {
+    const selectedEngineer = engineers.find((e) => e.id === engineerId);
+    // Update assigned_to
+    handleFormChange({
+      target: {
+        name: 'assigned_to',
+        value: engineerId,
+      },
+    } as any);
+    // Update assigned_name
+    handleFormChange({
+      target: {
+        name: 'assigned_name',
+        value: selectedEngineer?.name || '',
+      },
+    } as any);
+  };
+
+  // Ensure assigned_name is set based on assigned_to before saving
+  const getFormDataWithEngineerName = () => {
+    let data = { ...formData };
+
+    if (data.assigned_to && !data.assigned_name) {
+      const engineer = engineers.find((e) => e.id === data.assigned_to);
+      if (engineer) {
+        data.assigned_name = engineer.name;
+      }
+    }
+
+    return data;
+  };
 
   const handleAddClick = () => {
     setModalMode('add');
@@ -38,6 +92,13 @@ export default function TicketsScreen() {
 
   const handleSaveRemarks = async () => {
     if (!selectedTicket) return;
+
+    // Check authorization
+    if (!canEditTicket(selectedTicket)) {
+      alert('❌ You can only edit tickets assigned to you');
+      return;
+    }
+
     try {
       const result = await updateTicketRemarks(selectedTicket.id, formData.remarks);
       if (result.success) {
@@ -49,18 +110,67 @@ export default function TicketsScreen() {
     }
   };
 
+  const handleCloseTicket = async () => {
+    if (!selectedTicket) return;
+
+    // Check authorization
+    if (!canEditTicket(selectedTicket)) {
+      alert('❌ You can only close tickets assigned to you');
+      return;
+    }
+
+    if (selectedTicket.status === 'Closed') {
+      alert('⚠️ This ticket is already closed');
+      return;
+    }
+
+    const confirmed = confirm(`Are you sure you want to close ticket ${selectedTicket.id}? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const result = await closeTicket(selectedTicket.id, formData.remarks);
+      if (result.success) {
+        alert('✅ Ticket closed!');
+        setModalOpen(false);
+        resetForm();
+        await fetchTickets();
+      } else {
+        alert('❌ Failed to close ticket: ' + result.error);
+      }
+    } catch (err) {
+      alert('❌ Error');
+    }
+  };
+
   const handleAddTicket = async () => {
     if (!formData.cname || !formData.mobile || !formData.serial) {
       alert('❌ Fill required fields');
       return;
     }
+
+    // Only admins and work controllers can assign tickets
+    if (currentUserRole === 'engineer') {
+      alert('❌ Engineers cannot create tickets');
+      return;
+    }
+
     try {
       if (modalMode === 'edit' && selectedTicket) {
-        const result = await updateTicket(selectedTicket.id, formData);
+        // Check authorization
+        if (!canEditTicket(selectedTicket)) {
+          alert('❌ You can only edit tickets assigned to you');
+          return;
+        }
+
+        const ticketData = getFormDataWithEngineerName();
+        console.log('Updating ticket with data:', { assigned_to: ticketData.assigned_to, assigned_name: ticketData.assigned_name, status: ticketData.status });
+        const result = await updateTicket(selectedTicket.id, ticketData);
         if (!result.success) throw new Error(result.error);
         alert('✅ Updated!');
       } else {
-        const result = await createTicket(formData);
+        const ticketData = getFormDataWithEngineerName();
+        console.log('Creating ticket with data:', { assigned_to: ticketData.assigned_to, assigned_name: ticketData.assigned_name, status: ticketData.status });
+        const result = await createTicket(ticketData);
         if (!result.success) throw new Error(result.error);
         alert('✅ Created! ID: ' + result.id);
       }
@@ -83,13 +193,17 @@ export default function TicketsScreen() {
     });
   }, [tickets, filterStatus, searchTerm]);
 
+  const screenTitle = currentUserRole === 'engineer' ? '🎫 My Tickets' : '🎫 All Tickets';
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
-        <h2 style={styles.sectionTitle}>🎫 All Tickets</h2>
-        <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
-          ➕ New Call
-        </button>
+        <h2 style={styles.sectionTitle}>{screenTitle}</h2>
+        {currentUserRole !== 'engineer' && (
+          <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
+            ➕ New Call
+          </button>
+        )}
       </div>
 
       <div style={styles.filterBar}>
@@ -189,12 +303,51 @@ export default function TicketsScreen() {
                 <div style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
                   <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={statusOptions} disabled={modalMode === 'view'} />
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
+                    <div style={{ ...styles.formGroup }}>
+                      <label style={styles.formLabel}>
+                        Assign to Engineer
+                        {engineersLoading && ' (loading...)'}
+                      </label>
+                      {engineersError ? (
+                        <div style={{ color: '#dc2626', fontSize: '12px', marginBottom: '8px' }}>
+                          ❌ {engineersError}
+                          <button
+                            type="button"
+                            onClick={refetchEngineers}
+                            style={{
+                              marginLeft: '8px',
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              background: '#dc2626',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : null}
+                      <FormSelectWithData
+                        label=""
+                        name="assigned_to"
+                        value={formData.assigned_to || ''}
+                        onChange={(e: any) => handleEngineerChange(e.target.value)}
+                        options={engineers}
+                        optionLabelKey="name"
+                        optionValueKey="id"
+                        disabled={modalMode === 'view' || engineersLoading || engineersError !== null}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>📝 Remarks</h3>
-                <textarea name="remarks" value={formData.remarks} onChange={handleFormChange} rows={3} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+                <textarea name="remarks" value={formData.remarks} onChange={handleFormChange} rows={3} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
               </div>
             </div>
 
@@ -203,9 +356,21 @@ export default function TicketsScreen() {
                 Cancel
               </button>
               {modalMode === 'view' ? (
-                <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
-                  💾 Save Remarks
-                </button>
+                <>
+                  {selectedTicket?.status !== 'Closed' && canEditTicket(selectedTicket!) && (
+                    <button
+                      style={{ ...styles.btn, background: '#dc2626', color: 'white' }}
+                      onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...styles.btn, background: '#b91c1c', color: 'white' })}
+                      onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...styles.btn, background: '#dc2626', color: 'white' })}
+                      onClick={handleCloseTicket}
+                    >
+                      🔒 Close Ticket
+                    </button>
+                  )}
+                  <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
+                    💾 Save Remarks
+                  </button>
+                </>
               ) : (
                 <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddTicket}>
                   💾 Save
@@ -233,7 +398,20 @@ function FormSelect({ label, name, value, onChange, options, disabled }: any) {
     <div style={{ ...styles.formGroup }}>
       <label style={styles.formLabel}>{label}</label>
       <select name={name} value={value || ''} onChange={onChange} disabled={disabled} style={{ ...styles.formInput, opacity: disabled ? 0.6 : 1 }}>
+        <option value="">-- Select --</option>
         {options.map((o: string) => (<option key={o} value={o}>{o}</option>))}
+      </select>
+    </div>
+  );
+}
+
+function FormSelectWithData({ label, name, value, onChange, options, optionLabelKey, optionValueKey, disabled }: any) {
+  return (
+    <div style={{ ...styles.formGroup }}>
+      <label style={styles.formLabel}>{label}</label>
+      <select name={name} value={value || ''} onChange={onChange} disabled={disabled} style={{ ...styles.formInput, opacity: disabled ? 0.6 : 1 }}>
+        <option value="">-- Select Engineer --</option>
+        {options.map((o: any) => (<option key={o[optionValueKey]} value={o[optionValueKey]}>{o[optionLabelKey]}</option>))}
       </select>
     </div>
   );

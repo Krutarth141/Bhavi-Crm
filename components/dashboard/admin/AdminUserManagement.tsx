@@ -8,7 +8,7 @@ interface User {
     name: string;
     role: string;
     role_type: string;
-    status: string;
+    is_active: boolean;
     created_at: string;
 }
 
@@ -16,6 +16,7 @@ export default function AdminUserManagement() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [showMigrationTool, setShowMigrationTool] = useState(false);
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -33,13 +34,15 @@ export default function AdminUserManagement() {
     const fetchUsers = async () => {
         try {
             setLoading(true);
-            // TODO: Create GET endpoint at /api/admin/users
-            // const response = await fetch('/api/admin/users');
-            // const data = await response.json();
-            // setUsers(data);
-            setUsers([]);
+            const response = await fetch('/api/admin/users');
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to fetch users');
+            }
+            const data = await response.json();
+            setUsers(data.users || []);
         } catch (err) {
-            setError('Failed to fetch users');
+            setError(err instanceof Error ? err.message : 'Failed to fetch users');
             console.error(err);
         } finally {
             setLoading(false);
@@ -158,8 +161,8 @@ export default function AdminUserManagement() {
                                         </span>
                                     </td>
                                     <td>
-                                        <span className="badge" style={{ background: user.status === 'active' ? '#10b981' : '#ef4444' }}>
-                                            {user.status}
+                                        <span className="badge" style={{ background: user.is_active ? '#10b981' : '#ef4444' }}>
+                                            {user.is_active ? 'Active' : 'Inactive'}
                                         </span>
                                     </td>
                                     <td>{new Date(user.created_at).toLocaleDateString()}</td>

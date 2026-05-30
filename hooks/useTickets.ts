@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Ticket } from '@/types/tickets';
-import { fetchAllTickets, fetchAutocompleteTicketData } from '@/services/ticketService';
+import { fetchAllTickets, fetchAutocompleteTicketData, fetchTicketsForUser } from '@/services/ticketService';
 
-export const useTickets = () => {
+interface UseTicketsProps {
+    userRole?: string;
+    userId?: string;
+}
+
+export const useTickets = ({ userRole, userId }: UseTicketsProps = {}) => {
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(true);
     const [autocompleteBrands, setAutocompleteBrands] = useState<string[]>([]);
@@ -11,7 +16,16 @@ export const useTickets = () => {
 
     const fetchTickets = async () => {
         setLoading(true);
-        const data = await fetchAllTickets();
+        let data: Ticket[] = [];
+
+        // If userRole and userId provided, fetch tickets based on role
+        if (userRole && userId) {
+            data = await fetchTicketsForUser(userRole, userId);
+        } else {
+            // Fallback to fetching all tickets (for admin)
+            data = await fetchAllTickets();
+        }
+
         setTickets(data);
         setLoading(false);
     };
@@ -23,7 +37,7 @@ export const useTickets = () => {
     useEffect(() => {
         fetchTickets();
         loadAutocompleteData();
-    }, []);
+    }, [userRole, userId]);
 
     return {
         tickets,
