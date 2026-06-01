@@ -1,325 +1,183 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import Modal from '@/components/Modal';
-
-interface Customer {
-    serial: string;
-    cname: string;
-    mobile: string;
-    alt_mobile: string | null;
-    city: string;
-    state: string;
-    address: string;
-    pin: string | null;
-    area: string | null;
-    model: string | null;
-    updated_at: string;
-}
+import { useCustomers } from '@/hooks/useCustomers';
+import CustomerTable from '@/components/screens/customers/CustomerTable';
+import { downloadCustomerTemplate, exportCustomers, importCustomersFromFile } from '@/services/customerService';
 
 export default function CustomersScreen() {
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [showViewModal, setShowViewModal] = useState(false);
-    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-    const [formData, setFormData] = useState({
-        serial: '',
-        cname: '',
-        mobile: '',
-        alt_mobile: '',
-        city: '',
-        state: '',
-        address: '',
-        pin: '',
-        area: '',
-        model: '',
-    });
-    const [submitting, setSubmitting] = useState(false);
+    const { customers, loading, error, refetch } = useCustomers();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [importing, setImporting] = useState(false);
+    const [displayedCustomers, setDisplayedCustomers] = useState(customers);
 
+    // Real-time filter as user types
     useEffect(() => {
-        fetchCustomers();
-    }, []);
-
-    const fetchCustomers = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('customers')
-                .select('*')
-                .order('updated_at', { ascending: false });
-
-            if (error) throw error;
-            setCustomers(data || []);
-        } catch (err) {
-            console.error('Failed to fetch customers:', err);
-        } finally {
-            setLoading(false);
+        if (!searchQuery.trim()) {
+            setDisplayedCustomers(customers);
+            return;
         }
-    };
 
-    const filteredCustomers = customers.filter((cust) =>
-        cust.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cust.mobile.includes(searchTerm)
-    );
+        const q = searchQuery.toLowerCase();
+        const filtered = customers.filter(c =>
+            [c.cname, c.mobile, c.serial, c.model, c.city, c.address].some(
+                v => (v || '').toLowerCase().includes(q)
+            )
+        );
+        setDisplayedCustomers(filtered);
+    }, [customers, searchQuery]);
 
-    const handleAddCustomer = () => {
-        setFormData({
-            serial: '',
-            cname: '',
-            mobile: '',
-            alt_mobile: '',
-            city: '',
-            state: '',
-            address: '',
-            pin: '',
-            area: '',
-            model: '',
-        });
-        setSelectedCustomer(null);
-        setShowAddForm(true);
-    };
+    // Handle import customers
+    const handleImportCustomers = async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xlsx,.xls,.csv';
+        input.onchange = async (e: any) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
 
-    const handleViewCustomer = (customer: Customer) => {
-        setSelectedCustomer(customer);
-        setShowViewModal(true);
-    };
-
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
-    };
-
-    const handleSubmitForm = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSubmitting(true);
-
-        try {
-            if (!formData.serial || !formData.cname || !formData.mobile) {
-                alert('Serial, Name, and Mobile are required');
-                setSubmitting(false);
-                return;
+            try {
+                setImporting(true);
+                const result = await importCustomersFromFile(file);
+                alert(`Imported: ${result.count} | Errors: ${result.errors}`);
+                refetch();
+            } catch (err) {
+                console.error('Error importing:', err);
+                alert('Failed to import customers');
+            } finally {
+                setImporting(false);
             }
-
-            const dataToSubmit = {
-                ...formData,
-                updated_at: new Date().toISOString(),
-            };
-
-            const { error } = await supabase
-                .from('customers')
-                .upsert([dataToSubmit], { onConflict: 'serial' });
-
-            if (error) throw error;
-
-            alert('✅ Customer saved successfully!');
-            setShowAddForm(false);
-            fetchCustomers();
-        } catch (err: any) {
-            alert('❌ Error: ' + (err.message || 'Failed to save customer'));
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleDeleteCustomer = async (serial: string) => {
-        if (!confirm('Are you sure you want to delete this customer?')) return;
-
-        try {
-            const { error } = await supabase
-                .from('customers')
-                .delete()
-                .eq('serial', serial);
-
-            if (error) throw error;
-
-            alert('✅ Customer deleted successfully!');
-            fetchCustomers();
-        } catch (err: any) {
-            alert('❌ Error: ' + (err.message || 'Failed to delete customer'));
-        }
+        };
+        input.click();
     };
 
     return (
-        <div className="content-section">
-            <div className="section-header">
-                <h2>👥 Customers</h2>
-                <button className="btn btn-primary" onClick={handleAddCustomer}>
-                    ➕ Add Customer
-                </button>
+        <div style={{ padding: '20px 24px' }}>
+            {/* Header */}
+            <div
+                style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '24px'
+                }}
+            >
+                <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 700 }}>
+                    Customers ({customers.length})
+                </h1>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        onClick={() => downloadCustomerTemplate()}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#f3f4f6',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                    >
+                        📄 Template
+                    </button>
+                    <button
+                        onClick={handleImportCustomers}
+                        disabled={importing}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#f3f4f6',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px',
+                            cursor: importing ? 'not-allowed' : 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            opacity: importing ? 0.6 : 1
+                        }}
+                    >
+                        📥 Import
+                    </button>
+                    <button
+                        onClick={() => exportCustomers(displayedCustomers)}
+                        style={{
+                            padding: '8px 16px',
+                            background: '#f3f4f6',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                    >
+                        📤 Export
+                    </button>
+                </div>
             </div>
 
-            <div className="filter-bar">
-                <input
-                    type="text"
-                    placeholder="Search by name or mobile..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ flex: 1 }}
-                />
-            </div>
-
-            {loading ? (
-                <p className="loading">Loading customers...</p>
-            ) : filteredCustomers.length === 0 ? (
-                <p className="empty-message">No customers found</p>
-            ) : (
-                <div className="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Serial</th>
-                                <th>Name</th>
-                                <th>Mobile</th>
-                                <th>Alt Mobile</th>
-                                <th>City</th>
-                                <th>State</th>
-                                <th>Area</th>
-                                <th>Address</th>
-                                <th>Updated</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredCustomers.map((customer) => (
-                                <tr key={customer.serial}>
-                                    <td>
-                                        <strong>{customer.serial}</strong>
-                                    </td>
-                                    <td>
-                                        <strong>{customer.cname || '—'}</strong>
-                                    </td>
-                                    <td>{customer.mobile || '—'}</td>
-                                    <td>{customer.alt_mobile || '—'}</td>
-                                    <td>{customer.city || '—'}</td>
-                                    <td>{customer.state || '—'}</td>
-                                    <td>{customer.area || '—'}</td>
-                                    <td style={{ fontSize: '12px', maxWidth: '200px' }}>
-                                        {customer.address || '—'}
-                                    </td>
-                                    <td style={{ fontSize: '12px' }}>
-                                        {customer.updated_at ? new Date(customer.updated_at).toLocaleDateString() : '—'}
-                                    </td>
-                                    <td style={{ whiteSpace: 'nowrap', gap: '4px', display: 'flex' }}>
-                                        <button
-                                            className="btn btn-sm btn-primary"
-                                            onClick={() => handleViewCustomer(customer)}
-                                        >
-                                            👁 View
-                                        </button>
-                                        <button
-                                            className="btn btn-sm btn-danger"
-                                            onClick={() => handleDeleteCustomer(customer.serial)}
-                                            style={{ background: '#f05252' }}
-                                        >
-                                            🗑 Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {/* Error Alert */}
+            {error && (
+                <div
+                    style={{
+                        padding: '12px 16px',
+                        background: '#fee2e2',
+                        color: '#dc2626',
+                        borderRadius: '6px',
+                        marginBottom: '16px',
+                        fontSize: '14px'
+                    }}
+                >
+                    Error: {error}
                 </div>
             )}
 
-            {/* Add/Edit Customer Modal */}
-            <Modal
-                isOpen={showAddForm}
-                title="Add Customer"
-                onClose={() => setShowAddForm(false)}
-                footer={
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-outline" onClick={() => setShowAddForm(false)}>
-                            Cancel
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleSubmitForm}
-                            disabled={submitting}
-                        >
-                            {submitting ? 'Saving...' : '💾 Save Customer'}
-                        </button>
-                    </div>
-                }
+            {/* Search Bar */}
+            <div
+                style={{
+                    marginBottom: '16px',
+                    display: 'flex',
+                    gap: '8px'
+                }}
             >
-                <form onSubmit={handleSubmitForm} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                    <div className="form-group">
-                        <label>Serial No. *</label>
-                        <input type="text" name="serial" value={formData.serial} onChange={handleFormChange} placeholder="SN001" required />
-                    </div>
-                    <div className="form-group">
-                        <label>Customer Name *</label>
-                        <input type="text" name="cname" value={formData.cname} onChange={handleFormChange} placeholder="Full name" required />
-                    </div>
-                    <div className="form-group">
-                        <label>Mobile *</label>
-                        <input type="tel" name="mobile" value={formData.mobile} onChange={handleFormChange} placeholder="10 digit" required />
-                    </div>
-                    <div className="form-group">
-                        <label>Alt Mobile</label>
-                        <input type="tel" name="alt_mobile" value={formData.alt_mobile} onChange={handleFormChange} placeholder="Alternate" />
-                    </div>
-                    <div className="form-group">
-                        <label>City</label>
-                        <input type="text" name="city" value={formData.city} onChange={handleFormChange} placeholder="City name" />
-                    </div>
-                    <div className="form-group">
-                        <label>State</label>
-                        <input type="text" name="state" value={formData.state} onChange={handleFormChange} placeholder="State" />
-                    </div>
-                    <div className="form-group">
-                        <label>Area</label>
-                        <input type="text" name="area" value={formData.area} onChange={handleFormChange} placeholder="Area/locality" />
-                    </div>
-                    <div className="form-group">
-                        <label>PIN</label>
-                        <input type="text" name="pin" value={formData.pin} onChange={handleFormChange} placeholder="PIN code" />
-                    </div>
-                    <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                        <label>Address</label>
-                        <textarea name="address" value={formData.address} onChange={handleFormChange} placeholder="Full address" rows={2} />
-                    </div>
-                    <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                        <label>Model</label>
-                        <input type="text" name="model" value={formData.model} onChange={handleFormChange} placeholder="Product model" />
-                    </div>
-                </form>
-            </Modal>
+                <input
+                    type="text"
+                    placeholder="Name, mobile, serial, city..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontFamily: 'inherit'
+                    }}
+                />
+            </div>
 
-            {/* View Customer Modal */}
-            <Modal
-                isOpen={showViewModal}
-                title="Customer Details"
-                onClose={() => setShowViewModal(false)}
-                footer={
-                    <button className="btn btn-outline" onClick={() => setShowViewModal(false)}>
-                        Close
-                    </button>
-                }
+            {/* Table Card */}
+            <div
+                style={{
+                    background: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    overflow: 'hidden'
+                }}
             >
-                {selectedCustomer && (
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                            <div><strong>Serial:</strong> {selectedCustomer.serial}</div>
-                            <div><strong>Name:</strong> {selectedCustomer.cname}</div>
-                            <div><strong>Mobile:</strong> {selectedCustomer.mobile}</div>
-                            <div><strong>Alt Mobile:</strong> {selectedCustomer.alt_mobile || '—'}</div>
-                            <div><strong>City:</strong> {selectedCustomer.city}</div>
-                            <div><strong>State:</strong> {selectedCustomer.state}</div>
-                            <div><strong>Area:</strong> {selectedCustomer.area || '—'}</div>
-                            <div><strong>PIN:</strong> {selectedCustomer.pin || '—'}</div>
-                        </div>
-                        <div><strong>Address:</strong> {selectedCustomer.address}</div>
-                        <div><strong>Model:</strong> {selectedCustomer.model || '—'}</div>
-                        <div><strong>Updated:</strong> {new Date(selectedCustomer.updated_at).toLocaleString()}</div>
-                    </div>
-                )}
-            </Modal>
+                <CustomerTable
+                    customers={displayedCustomers}
+                    loading={loading}
+                    showActions={false}
+                />
+            </div>
         </div>
     );
 }

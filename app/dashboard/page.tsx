@@ -1,7 +1,6 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import EngineerDashboard from '@/components/dashboard/engineer/EngineerDashboard';
 import WorkControllerDashboard from '@/components/dashboard/work-controller/WorkControllerDashboard';
@@ -15,7 +14,7 @@ export default function DashboardPage() {
     }
 
     if (!session) {
-        redirect('/login');
+        return <div style={{ padding: '20px', textAlign: 'center' }}>Not authenticated</div>;
     }
 
     const userRole = (session.user as any)?.roleType;
