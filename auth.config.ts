@@ -1,29 +1,46 @@
-import NextAuth, { NextAuthOptions } from 'next-auth';
+import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import bcrypt from 'bcryptjs';
 
-const authOptions: NextAuthOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
-        email: { label: 'User ID', type: 'text', placeholder: 'ADMIN' },
-        password: { label: 'Password', type: 'password' },
+        email: {
+          label: 'User ID',
+          type: 'text',
+          placeholder: 'ADMIN',
+        },
+        password: {
+          label: 'Password',
+          type: 'password',
+        },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
 
         const { data: user, error } = await supabaseAdmin
           .from('users')
           .select('id, user_id, password, name, role, role_type')
-          .eq('user_id', credentials.email as string)
+          .eq('user_id', credentials.email)
           .single();
 
-        if (error || !user) return null;
+        if (error || !user) {
+          return null;
+        }
 
-        const passwordMatch = await bcrypt.compare(credentials.password as string, user.password);
-        if (!passwordMatch) throw new Error('Invalid password');
+        const passwordMatch = await bcrypt.compare(
+          credentials.password,
+          user.password
+        );
+
+        if (!passwordMatch) {
+          return null;
+        }
 
         return {
           id: user.id,
@@ -35,10 +52,12 @@ const authOptions: NextAuthOptions = {
       },
     }),
   ],
+
   pages: {
     signIn: '/login',
     error: '/auth/error',
   },
+
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -47,8 +66,10 @@ const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         token.roleType = (user as any).roleType;
       }
+
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
@@ -56,15 +77,15 @@ const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).roleType = token.roleType;
       }
+
       return session;
     },
   },
+
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60,
   },
+
   secret: process.env.NEXTAUTH_SECRET,
 };
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST, authOptions };

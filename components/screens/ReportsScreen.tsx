@@ -1,17 +1,42 @@
 'use client';
 
-import { useReports, getTicketFinancials } from '@/hooks/useReports';
-import ReportsBarChart from '@/components/screens/reports/ReportsBarChart';
-import { SERVICE_TYPE_OPTIONS, CALL_TYPE_OPTIONS, STATUS_OPTIONS } from '@/types/reports';
+import { useReports } from '@/hooks/useReports';
+import { REPORT_TABS } from '@/types/reports';
+
+// Tab components
+import OverviewTab from '@/components/screens/reports/OverviewTab';
+import FilterDownloadTab from '@/components/screens/reports/FilterDownloadTab';
+import RevenueTab from '@/components/screens/reports/RevenueTab';
+import TasksTab from '@/components/screens/reports/TasksTab';
+import PunchLogsTab from '@/components/screens/reports/PunchLogsTab';
+import DailyReportsTab from '@/components/screens/reports/DailyReportsTab';
+import WCDailyReportsTab from '@/components/screens/reports/WCDailyReportsTab';
+import ImportCallsTab from '@/components/screens/reports/ImportCallsTab';
+
+// Replace with real session user in your app (e.g. from useSession / context)
+const CURRENT_USER_NAME = 'Admin';
 
 export default function ReportsScreen() {
   const {
-    loading,
+    // tab
+    activeTab, setActiveTab,
+    // tickets
+    ticketsLoading,
+    // punch logs
+    punchLogs, punchLoading, handleVerifyPunch,
+    // daily
+    dailyReports, dailyLoading,
+    // wc
+    wcReports, wcLoading,
+    // import
+    importProgress, importTotal, importRunning, importResult, handleImport,
+    // filter state
     period, setPeriod,
     customFrom, setCustomFrom,
     customTo, setCustomTo,
     filters, setFilters,
     reportType, setReportType,
+    // derived
     filtered,
     engineers,
     engData,
@@ -23,6 +48,8 @@ export default function ReportsScreen() {
     callTypeChartData,
     engineerChartData,
     revenueChartData,
+    getTrendData,
+    // actions
     handleDownload,
     handlePrint,
   } = useReports();
@@ -33,219 +60,128 @@ export default function ReportsScreen() {
       <div className="section-header">
         <h2>📈 Reports</h2>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-outline btn-sm" onClick={handleDownload}>📊 Download Excel</button>
+          <button className="btn btn-outline btn-sm" onClick={handleDownload}>📊 Excel</button>
           <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ Print</button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="filter-bar" style={{ flexWrap: 'wrap', gap: '8px' }}>
-        <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="year">This Year</option>
-          <option value="custom">Custom Range</option>
-          <option value="all">All Time</option>
-        </select>
-        {period === 'custom' && (
-          <>
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-          </>
-        )}
-        <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
-          <option value="">All Status</option>
-          {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select value={filters.calltype} onChange={(e) => setFilters((f) => ({ ...f, calltype: e.target.value }))}>
-          <option value="">All Call Types</option>
-          {CALL_TYPE_OPTIONS.map((c) => <option key={c}>{c}</option>)}
-        </select>
-        <select value={filters.service} onChange={(e) => setFilters((f) => ({ ...f, service: e.target.value }))}>
-          <option value="">All Service Types</option>
-          {SERVICE_TYPE_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-        </select>
-        <select value={filters.engineer} onChange={(e) => setFilters((f) => ({ ...f, engineer: e.target.value }))}>
-          <option value="">All Engineers</option>
-          {engineers.map((e) => <option key={e}>{e}</option>)}
-        </select>
-        <input
-          type="text"
-          placeholder="City..."
-          value={filters.city}
-          onChange={(e) => setFilters((f) => ({ ...f, city: e.target.value }))}
-          style={{ width: '100px' }}
-        />
+      {/* Tab Bar */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
+        {REPORT_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '8px 14px',
+              fontSize: '13px',
+              fontWeight: activeTab === tab.key ? 700 : 500,
+              border: 'none',
+              borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+              background: 'none',
+              color: activeTab === tab.key ? 'var(--primary)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s',
+              marginBottom: '-1px',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* KPI Cards */}
-      <div className="report-kpi" style={{ marginBottom: '18px' }}>
-        <div className="report-kpi-card">
-          <div className="val">{totalCalls}</div>
-          <div className="lbl">Total Calls</div>
-        </div>
-        <div className="report-kpi-card">
-          <div className="val">{totalClosed}</div>
-          <div className="lbl">Closed</div>
-        </div>
-        <div className="report-kpi-card">
-          <div className="val">₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-          <div className="lbl">Revenue</div>
-        </div>
-        <div className="report-kpi-card">
-          <div className="val">{closureRate}%</div>
-          <div className="lbl">Closure Rate</div>
-        </div>
-      </div>
-
-      {loading ? (
+      {/* Loading state for ticket-based tabs */}
+      {ticketsLoading && ['overview', 'filter', 'revenue', 'tasks'].includes(activeTab) ? (
         <p className="loading">Loading report data...</p>
       ) : (
         <>
-          {/* Chart Tabs */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-            {(['tickets', 'revenue', 'engineers', 'status'] as const).map((t) => (
-              <button
-                key={t}
-                className={`btn btn-sm ${reportType === t ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setReportType(t)}
-              >
-                {t === 'tickets' ? '📋 Call Types' : t === 'revenue' ? '💰 Revenue' : t === 'engineers' ? '👷 Engineers' : '📊 Status'}
-              </button>
-            ))}
-          </div>
-
-          {/* Charts */}
-          <div className="card" style={{ marginBottom: '18px' }}>
-            {reportType === 'tickets' && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Calls by Type</h3>
-                <ReportsBarChart data={callTypeChartData} />
-              </>
-            )}
-            {reportType === 'status' && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Calls by Status</h3>
-                <ReportsBarChart data={statusChartData} />
-              </>
-            )}
-            {reportType === 'revenue' && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Revenue by Month</h3>
-                {revenueChartData.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)' }}>No revenue data for selected period</p>
-                ) : (
-                  <ReportsBarChart data={revenueChartData} />
-                )}
-              </>
-            )}
-            {reportType === 'engineers' && (
-              <>
-                <h3 style={{ marginTop: 0 }}>Calls by Engineer</h3>
-                <ReportsBarChart data={engineerChartData} />
-              </>
-            )}
-          </div>
-
-          {/* Engineer Summary Table */}
-          {reportType === 'engineers' && engData.length > 0 && (
-            <div className="card" style={{ marginBottom: '18px' }}>
-              <h3 style={{ marginTop: 0 }}>Engineer Summary</h3>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Engineer</th>
-                      <th>Total Calls</th>
-                      <th>Closed</th>
-                      <th>Closure %</th>
-                      <th>Revenue ₹</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {engData.map(([name, d]) => (
-                      <tr key={name}>
-                        <td><strong>{name}</strong></td>
-                        <td>{d.calls}</td>
-                        <td>{d.closed}</td>
-                        <td>{d.calls > 0 ? Math.round((d.closed / d.calls) * 100) : 0}%</td>
-                        <td>₹{d.revenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          {activeTab === 'overview' && (
+            <OverviewTab
+              totalCalls={totalCalls}
+              totalClosed={totalClosed}
+              totalRevenue={totalRevenue}
+              closureRate={closureRate}
+              getTrendData={getTrendData}
+              callTypeChartData={callTypeChartData}
+              statusChartData={statusChartData}
+            />
           )}
 
-          {/* Detailed Ticket Table */}
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Ticket Details ({filtered.length} records)</h3>
-            {filtered.length === 0 ? (
-              <p className="empty-message">No tickets match selected filters</p>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Ticket</th>
-                      <th>Date</th>
-                      <th>Customer</th>
-                      <th>Mobile</th>
-                      <th>City</th>
-                      <th>Model</th>
-                      <th>Call Type</th>
-                      <th>Engineer</th>
-                      <th>Status</th>
-                      <th>Parts ₹</th>
-                      <th>Service ₹</th>
-                      <th>Total ₹</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((t) => {
-                      const { partsTotal, svc, grand } = getTicketFinancials(t);
-                      return (
-                        <tr key={t.id}>
-                          <td><strong>{t.id}</strong></td>
-                          <td style={{ fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString('en-IN')}</td>
-                          <td>{t.cname}</td>
-                          <td>{t.mobile}</td>
-                          <td>{t.city || '—'}</td>
-                          <td style={{ fontSize: '12px' }}>{t.brand_name} {t.model}</td>
-                          <td>{t.call_type}</td>
-                          <td>{t.assigned_name || '—'}</td>
-                          <td>
-                            <span className={`badge ${t.status === 'Closed' ? 'badge-approve' : t.status === 'Call Cancel' ? 'badge-cancel' : 'badge-open'}`}>
-                              {t.status}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>{partsTotal > 0 ? `₹${partsTotal.toFixed(0)}` : '—'}</td>
-                          <td style={{ textAlign: 'right' }}>{svc > 0 ? `₹${svc.toFixed(0)}` : '—'}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{grand > 0 ? `₹${grand.toFixed(0)}` : '—'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ background: 'var(--bg)', fontWeight: 700 }}>
-                      <td colSpan={9} style={{ textAlign: 'right' }}>TOTAL</td>
-                      <td style={{ textAlign: 'right' }}>
-                        ₹{filtered.reduce((a, t) => a + getTicketFinancials(t).partsTotal, 0).toFixed(0)}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        ₹{filtered.reduce((a, t) => a + getTicketFinancials(t).svc, 0).toFixed(0)}
-                      </td>
-                      <td style={{ textAlign: 'right', color: 'var(--primary)' }}>
-                        ₹{totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
+          {activeTab === 'filter' && (
+            <FilterDownloadTab
+              period={period}
+              setPeriod={setPeriod}
+              customFrom={customFrom}
+              setCustomFrom={setCustomFrom}
+              customTo={customTo}
+              setCustomTo={setCustomTo}
+              filters={filters}
+              setFilters={setFilters}
+              engineers={engineers}
+              filtered={filtered}
+              totalClosed={totalClosed}
+              totalRevenue={totalRevenue}
+              reportType={reportType}
+              setReportType={setReportType}
+              callTypeChartData={callTypeChartData}
+              statusChartData={statusChartData}
+              engineerChartData={engineerChartData}
+              revenueChartData={revenueChartData}
+              engData={engData}
+              handleDownload={handleDownload}
+              handlePrint={handlePrint}
+            />
+          )}
+
+          {activeTab === 'revenue' && (
+            <RevenueTab
+              filtered={filtered}
+              totalRevenue={totalRevenue}
+              revenueChartData={revenueChartData}
+              engData={engData}
+            />
+          )}
+
+          {activeTab === 'tasks' && (
+            <TasksTab
+              filtered={filtered}
+              engineers={engineers}
+            />
+          )}
+
+          {activeTab === 'punch' && (
+            <PunchLogsTab
+              logs={punchLogs}
+              loading={punchLoading}
+              onVerify={handleVerifyPunch}
+              currentUserName={CURRENT_USER_NAME}
+            />
+          )}
+
+          {activeTab === 'daily' && (
+            <DailyReportsTab
+              reports={dailyReports}
+              loading={dailyLoading}
+            />
+          )}
+
+          {activeTab === 'wcdaily' && (
+            <WCDailyReportsTab
+              reports={wcReports}
+              loading={wcLoading}
+            />
+          )}
+
+          {activeTab === 'import' && (
+            <ImportCallsTab
+              importRunning={importRunning}
+              importProgress={importProgress}
+              importTotal={importTotal}
+              importResult={importResult}
+              onImport={handleImport}
+              currentUserName={CURRENT_USER_NAME}
+            />
+          )}
         </>
       )}
     </div>

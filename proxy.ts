@@ -1,16 +1,16 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-type NextAuthRequest = NextRequest & { nextUrl: URL };
-
-export default async function middleware(req: NextAuthRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Public routes only
   const publicRoutes = ['/login', '/', '/auth/error'];
 
-  // Check session token server-side
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+
   const isAuthenticated = !!token;
 
   if (!isAuthenticated && !publicRoutes.includes(pathname)) {
@@ -25,5 +25,5 @@ export default async function middleware(req: NextAuthRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)']
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };

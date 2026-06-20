@@ -1,19 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchAllTickets } from '@/services/reportsService';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+    fetchAllTickets,
+    fetchPunchLogs,
+    fetchDailyReports,
+    fetchWCDailyReports,
+    verifyPunchLog as verifyPunchLogService,
+    importTickets,
+    ImportResult,
+} from '@/services/reportsService';
 import {
     Ticket,
+    PunchLog,
+    DailyReport,
+    WCDailyReport,
+    ImportRow,
     TicketFinancials,
     ReportFilters,
     EngineerStat,
     BarChartItem,
     ReportType,
+    ReportTab,
     STATUS_OPTIONS,
     CALL_TYPE_OPTIONS,
     STATUS_COLORS,
     CALL_TYPE_COLORS,
+    VALID_IMPORT_CALL_TYPES,
+    VALID_IMPORT_SERVICE_TYPES,
+    VALID_IMPORT_STATUSES,
+    ImportValidationError,
 } from '@/types/reports';
 
-// ─── Pure helpers ────────────────────────────────────────────────────────────
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 export function getTicketFinancials(t: Ticket): TicketFinancials {
     const spares = t.spares || [];
@@ -33,6 +50,7 @@ function getReportDates(period: string, customFrom: string, customTo: string) {
     const now = new Date();
     let from = new Date(0);
     let to = new Date();
+    to.setHours(23, 59, 59, 999);
 
     if (period === 'today') {
         from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -44,6 +62,8 @@ function getReportDates(period: string, customFrom: string, customTo: string) {
         from = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (period === 'year') {
         from = new Date(now.getFullYear(), 0, 1);
+    } else if (period === 'all') {
+        from = new Date('2020-01-01');
     } else if (period === 'custom' && customFrom && customTo) {
         from = new Date(customFrom);
         to = new Date(customTo);
@@ -72,11 +92,65 @@ function applyFilters(
     });
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
+// ─── Import validation (matches HTML source) ──────────────────────────────────
+
+const IMPORT_REQUIRED = ['call_type', 'service_type', 'status', 'brand_name', 'model', 'serial', 'cname', 'mobile', 'problem'];
+
+export function validateImportRows(rows: ImportRow[]): {
+    valid: ImportRow[];
+    errors: ImportValidationError[];
+} {
+    const valid: ImportRow[] = [];
+    const errors: ImportValidationError[] = [];
+
+    rows.forEach((row, i) => {
+        const rowNum = i + 4; // data starts row 4 in template
+        const rowErrors: string[] = [];
+
+        IMPORT_REQUIRED.forEach((f) => {
+            if (!row[f as keyof ImportRow]) rowErrors.push(`${f} missing`);
+        });
+
+        if (row.call_type && !VALID_IMPORT_CALL_TYPES.includes(row.call_type))
+            rowErrors.push(`call_type invalid: ${row.call_type}`);
+        if (row.service_type && !VALID_IMPORT_SERVICE_TYPES.includes(row.service_type))
+            rowErrors.push(`service_type invalid: ${row.service_type}`);
+        if (row.status && !VALID_IMPORT_STATUSES.includes(row.status))
+            rowErrors.push(`status invalid: ${row.status}`);
+
+        if (rowErrors.length) errors.push({ row: rowNum, errors: rowErrors });
+        else valid.push(row);
+    });
+
+    return { valid, errors };
+}
+
+// ─── Main hook ────────────────────────────────────────────────────────────────
 
 export function useReports() {
+    // ── Tab ──────────────────────────────────────────────────────────────────
+    const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+
+    // ── Tickets ──────────────────────────────────────────────────────────────
     const [allTickets, setAllTickets] = useState<Ticket[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [ticketsLoading, setTicketsLoading] = useState(true);
+
+    // ── Punch Logs ───────────────────────────────────────────────────────────
+    const [punchLogs, setPunchLogs] = useState<PunchLog[]>([]);
+    const [punchLoading, setPunchLoading] = useState(false);
+    const [punchLoaded, setPunchLoaded] = useState(false);
+
+    // ── Daily Reports ─────────────────────────────────────────────────────────
+    const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+    const [dailyLoading, setDailyLoading] = useState(false);
+    const [dailyLoaded, setDailyLoaded] = useState(false);
+
+    // ── WC Daily Reports ──────────────────────────────────────────────────────
+    const [wcReports, setWcReports] = useState<WCDailyReport[]>([]);
+    const [wcLoading, setWcLoading] = useState(false);
+    const [wcLoaded, setWcLoaded] = useState(false);
+
+    // ── Filter & Download state ───────────────────────────────────────────────
     const [period, setPeriod] = useState('month');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
@@ -89,29 +163,63 @@ export function useReports() {
     });
     const [reportType, setReportType] = useState<ReportType>('tickets');
 
+    // ── Import state ──────────────────────────────────────────────────────────
+    const [importProgress, setImportProgress] = useState(0);
+    const [importTotal, setImportTotal] = useState(0);
+    const [importRunning, setImportRunning] = useState(false);
+    const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+    // ── Load tickets on mount ─────────────────────────────────────────────────
     useEffect(() => {
         (async () => {
             try {
-                setLoading(true);
+                setTicketsLoading(true);
                 const data = await fetchAllTickets();
                 setAllTickets(data);
             } catch (err) {
                 console.error('Failed to fetch tickets:', err);
             } finally {
-                setLoading(false);
+                setTicketsLoading(false);
             }
         })();
     }, []);
 
-    const filtered = applyFilters(allTickets, period, customFrom, customTo, filters);
+    // ── Lazy-load tab data ────────────────────────────────────────────────────
+    useEffect(() => {
+        if (activeTab === 'punch' && !punchLoaded) {
+            setPunchLoading(true);
+            fetchPunchLogs()
+                .then((d) => { setPunchLogs(d); setPunchLoaded(true); })
+                .catch(console.error)
+                .finally(() => setPunchLoading(false));
+        }
+        if (activeTab === 'daily' && !dailyLoaded) {
+            setDailyLoading(true);
+            fetchDailyReports()
+                .then((d) => { setDailyReports(d); setDailyLoaded(true); })
+                .catch(console.error)
+                .finally(() => setDailyLoading(false));
+        }
+        if (activeTab === 'wcdaily' && !wcLoaded) {
+            setWcLoading(true);
+            fetchWCDailyReports()
+                .then((d) => { setWcReports(d); setWcLoaded(true); })
+                .catch(console.error)
+                .finally(() => setWcLoading(false));
+        }
+    }, [activeTab]);
 
-    // KPIs
+    // ── Derived ticket data ───────────────────────────────────────────────────
+    const filtered = useMemo(
+        () => applyFilters(allTickets, period, customFrom, customTo, filters),
+        [allTickets, period, customFrom, customTo, filters]
+    );
+
     const totalCalls = filtered.length;
     const totalClosed = filtered.filter((t) => t.status === 'Closed').length;
     const totalRevenue = filtered.reduce((a, t) => a + getTicketFinancials(t).grand, 0);
     const closureRate = totalCalls > 0 ? Math.round((totalClosed / totalCalls) * 100) : 0;
 
-    // Chart data
     const statusChartData: BarChartItem[] = STATUS_OPTIONS.map((s) => ({
         label: s,
         value: filtered.filter((t) => t.status === s).length,
@@ -124,7 +232,6 @@ export function useReports() {
         color: CALL_TYPE_COLORS[c] || '#ff9800',
     }));
 
-    // Engineer-wise
     const engMap: Record<string, EngineerStat> = {};
     filtered.forEach((t) => {
         const name = t.assigned_name || 'Unassigned';
@@ -141,21 +248,76 @@ export function useReports() {
         color: '#7c3aed',
     }));
 
-    // Monthly revenue (last 6 months)
     const monthlyRevenue: Record<string, number> = {};
     filtered.forEach((t) => {
+        if (!t.created_at) return;
         const d = new Date(t.created_at);
-        const key = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+        const key = d.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
         monthlyRevenue[key] = (monthlyRevenue[key] || 0) + getTicketFinancials(t).grand;
     });
     const revenueChartData: BarChartItem[] = Object.entries(monthlyRevenue)
         .slice(-6)
         .map(([label, value]) => ({ label, value: Math.round(value), color: '#1a56db' }));
 
-    // Unique engineers for filter dropdown
-    const engineers = [...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean))] as string[];
+    // Trend chart data (monthly + yearly — matches setTrendView in HTML)
+    function getTrendData(view: 'monthly' | 'yearly') {
+        const grp: Record<string, { w: number; nw: number; closed: number; total: number }> = {};
+        allTickets.forEach((t) => {
+            if (!t.created_at) return;
+            const d = new Date(t.created_at);
+            const k =
+                view === 'monthly'
+                    ? d.toLocaleString('en-IN', { month: 'short', year: '2-digit' })
+                    : d.getFullYear().toString();
+            if (!grp[k]) grp[k] = { w: 0, nw: 0, closed: 0, total: 0 };
+            grp[k].total++;
+            if (['Warranty', 'Warranty Repeat', 'AMC'].includes(t.call_type)) grp[k].w++;
+            else grp[k].nw++;
+            if (t.status === 'Closed') grp[k].closed++;
+        });
+        return Object.entries(grp).slice(view === 'monthly' ? -6 : -20);
+    }
 
-    // ── Download Excel ──────────────────────────────────────────────────────────
+    const engineers = [
+        ...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean)),
+    ] as string[];
+
+    // ── Verify punch log ──────────────────────────────────────────────────────
+    const handleVerifyPunch = useCallback(
+        async (id: string, adminRemark: string, verifiedBy: string) => {
+            await verifyPunchLogService(id, adminRemark, verifiedBy);
+            // Refresh punch logs
+            const updated = await fetchPunchLogs();
+            setPunchLogs(updated);
+        },
+        []
+    );
+
+    // ── Import handler ────────────────────────────────────────────────────────
+    const handleImport = useCallback(
+        async (rows: ImportRow[], importedBy: string) => {
+            setImportRunning(true);
+            setImportTotal(rows.length);
+            setImportProgress(0);
+            setImportResult(null);
+
+            const result = await importTickets(rows, importedBy, (done) => {
+                setImportProgress(done);
+            });
+
+            setImportResult(result);
+            setImportRunning(false);
+
+            // Refresh tickets after import
+            if (result.success > 0) {
+                const fresh = await fetchAllTickets().catch(() => allTickets);
+                setAllTickets(fresh);
+            }
+        },
+        [allTickets]
+    );
+
+    // ── Download Excel ────────────────────────────────────────────────────────
     const handleDownload = useCallback(async () => {
         if (!filtered.length) { alert('No data for selected filters'); return; }
         const XLSX = await import('xlsx');
@@ -205,7 +367,7 @@ export function useReports() {
         XLSX.writeFile(wb, `BhaviCRM_Report_${period}_${dateStr}.xlsx`);
     }, [filtered, period]);
 
-    // ── Print ───────────────────────────────────────────────────────────────────
+    // ── Print ─────────────────────────────────────────────────────────────────
     const handlePrint = useCallback(() => {
         if (!filtered.length) { alert('No data for selected filters'); return; }
         const totalParts = filtered.reduce((a, t) => a + getTicketFinancials(t).partsTotal, 0);
@@ -251,10 +413,8 @@ export function useReports() {
         .tfoot td{background:#f0f4ff;font-weight:700;}
       </style></head><body>
       <div class="header">
-        <div>
-          <div class="co">Bhavi Electronics & Automation</div>
-          <div style="font-size:11px;color:#555;">Service CRM Report — Generated: ${new Date().toLocaleString('en-IN')}</div>
-        </div>
+        <div><div class="co">Bhavi Electronics & Automation</div>
+        <div style="font-size:11px;color:#555;">Service CRM Report — Generated: ${new Date().toLocaleString('en-IN')}</div></div>
         <div style="text-align:right;font-size:11px;">Period: ${period} | Total: ${filtered.length} records</div>
       </div>
       <div class="summary">
@@ -282,18 +442,26 @@ export function useReports() {
     }, [filtered, period, totalClosed]);
 
     return {
-        // state
-        loading,
-        period,
-        setPeriod,
-        customFrom,
-        setCustomFrom,
-        customTo,
-        setCustomTo,
-        filters,
-        setFilters,
-        reportType,
-        setReportType,
+        // tab
+        activeTab, setActiveTab,
+        // tickets
+        allTickets, ticketsLoading,
+        // punch logs
+        punchLogs, punchLoading, handleVerifyPunch,
+        // daily reports
+        dailyReports, dailyLoading,
+        // wc reports
+        wcReports, wcLoading,
+        // import
+        importProgress, importTotal, importRunning, importResult,
+        handleImport,
+        // filter state
+        period, setPeriod,
+        customFrom, setCustomFrom,
+        customTo, setCustomTo,
+        filters, setFilters,
+        reportType, setReportType,
+        // derived
         filtered,
         engineers,
         engData,
@@ -305,6 +473,8 @@ export function useReports() {
         callTypeChartData,
         engineerChartData,
         revenueChartData,
+        getTrendData,
+        // actions
         handleDownload,
         handlePrint,
     };
