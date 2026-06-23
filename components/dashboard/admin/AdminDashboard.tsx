@@ -10,9 +10,10 @@ import CustomersScreen from '@/components/screens/CustomersScreen';
 import ReportsScreen from '@/components/screens/ReportsScreen';
 import MasterDataScreen from '@/components/screens/MasterDataScreen';
 import SettingsScreen from '@/components/screens/SettingsScreen';
+import WorkLogScreen from '@/components/screens/WorkLogScreen';
 import '@/styles/dashboard.css';
 
-type AdminTab = 'overview' | 'tickets' | 'inventory' | 'tasks' | 'customers' | 'reports' | 'master' | 'users' | 'settings';
+type AdminTab = 'overview' | 'tickets' | 'inventory' | 'tasks' | 'customers' | 'reports' | 'master' | 'users' | 'settings' | 'worklogs';
 
 export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -73,6 +74,14 @@ export default function AdminDashboard() {
                         </li>
                         <li>
                             <button
+                                className={activeTab === 'worklogs' ? 'active' : ''}
+                                onClick={() => setActiveTab('worklogs')}
+                            >
+                                🕒 Work Logs
+                            </button>
+                        </li>
+                        <li>
+                            <button
                                 className={activeTab === 'master' ? 'active' : ''}
                                 onClick={() => setActiveTab('master')}
                             >
@@ -106,6 +115,7 @@ export default function AdminDashboard() {
                 {activeTab === 'tasks' && <TasksScreen />}
                 {activeTab === 'customers' && <CustomersScreen />}
                 {activeTab === 'reports' && <ReportsScreen />}
+                {activeTab === 'worklogs' && <WorkLogScreen />}
                 {activeTab === 'master' && <MasterDataScreen />}
                 {activeTab === 'users' && <AdminUserManagement />}
                 {activeTab === 'settings' && <SettingsScreen />}
