@@ -1,188 +1,174 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState } from 'react';
+import { MasterTabId, BrandForm, SubCategoryForm, ModelForm, emptyBrandForm, emptySubCategoryForm, emptyModelForm } from '@/types/masters';
+import { useMasters } from '@/hooks/useMasters';
+import MasterFormRow from './masters/MasterFormRow';
+import MasterTable from './masters/MasterTable';
 
-interface MasterItem {
-    type: string;
-    name: string;
-    code?: string;
-    description?: string;
-}
+const tabs: { id: MasterTabId; label: string }[] = [
+    { id: 'brands', label: '🏢 Brands' },
+    { id: 'subcategories', label: '📋 Sub-Categories' },
+    { id: 'models', label: '📱 Models' },
+];
 
 export default function MasterDataScreen() {
-    const [activeTab, setActiveTab] = useState('brands');
-    const [items, setItems] = useState<MasterItem[]>([]);
-    const [newItem, setNewItem] = useState({ name: '', code: '', description: '' });
-    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<MasterTabId>('brands');
+    const [editingId, setEditingId] = useState<string | null>(null);
 
-    useEffect(() => {
-        fetchMasterData();
-    }, [activeTab]);
+    // Per-tab form state
+    const [brandForm, setBrandForm] = useState<BrandForm>(emptyBrandForm);
+    const [subCategoryForm, setSubCategoryForm] = useState<SubCategoryForm>(emptySubCategoryForm);
+    const [modelForm, setModelForm] = useState<ModelForm>(emptyModelForm);
 
-    const fetchMasterData = async () => {
-        try {
-            setLoading(true);
-            const tableName = activeTab === 'subcategories' ? 'subcategories' : activeTab;
-            const { data, error } = await supabase
-                .from(tableName)
-                .select('*')
-                .order('name', { ascending: true });
+    const {
+        brands, subcategories, models,
+        loading, error,
+        saveBrand, removeBrand,
+        saveSubCategory, removeSubCategory,
+        saveModel, removeModel,
+    } = useMasters();
 
-            if (error) throw error;
-            setItems(
-                (data || []).map((item: any) => ({
-                    type: activeTab,
-                    name: item.name,
-                    code: item.code || '',
-                    description: item.description || '',
-                }))
-            );
-        } catch (err) {
-            console.error('Failed to fetch master data:', err);
-        } finally {
-            setLoading(false);
+    // ── Reset ──────────────────────────────────────────────────────────────────
+
+    const resetForm = () => {
+        setBrandForm(emptyBrandForm);
+        setSubCategoryForm(emptySubCategoryForm);
+        setModelForm(emptyModelForm);
+        setEditingId(null);
+    };
+
+    const handleTabChange = (tab: MasterTabId) => {
+        setActiveTab(tab);
+        resetForm();
+    };
+
+    // ── Edit populate ──────────────────────────────────────────────────────────
+
+    const handleEdit = (item: any) => {
+        setEditingId(item.id);
+        if (activeTab === 'brands') {
+            setBrandForm({ name: item.name });
+        } else if (activeTab === 'subcategories') {
+            setSubCategoryForm({ name: item.name, brand_id: item.brand_id || '' });
+        } else if (activeTab === 'models') {
+            setModelForm({
+                model_no: item.model_no,
+                model_name: item.model_name || '',
+                brand_id: item.brand_id || '',
+                subcategory_id: item.subcategory_id || '',
+                sale_price: item.sale_price?.toString() || '',
+                printer_type: item.printer_type || '',
+                brochure_url: item.brochure_url || '',
+            });
         }
     };
 
-    const tabs = [
-        { id: 'brands', label: '🏢 Brands' },
-        { id: 'categories', label: '📂 Categories' },
-        { id: 'subcategories', label: '📋 Sub-Categories' },
-        { id: 'models', label: '📱 Models' },
-        { id: 'problems', label: '🔧 Problem Types' },
-    ];
+    // ── Save ───────────────────────────────────────────────────────────────────
 
-    const handleAddItem = async () => {
-        if (!newItem.name.trim()) {
-            alert('Please enter a name');
-            return;
-        }
-
+    const handleSave = async () => {
         try {
-            const tableName = activeTab === 'subcategories' ? 'subcategories' : activeTab;
-            const insertData: any = { name: newItem.name };
-            if (newItem.code) insertData.code = newItem.code;
-            if (newItem.description) insertData.description = newItem.description;
-
-            const { error } = await supabase
-                .from(tableName)
-                .insert([insertData]);
-
-            if (error) {
-                alert('❌ Error: ' + error.message);
-                return;
+            if (activeTab === 'brands') {
+                if (!brandForm.name.trim()) { alert('Brand name is required'); return; }
+                await saveBrand(brandForm, editingId ?? undefined);
+            } else if (activeTab === 'subcategories') {
+                if (!subCategoryForm.name.trim()) { alert('Sub-category name is required'); return; }
+                await saveSubCategory(subCategoryForm, editingId ?? undefined);
+            } else if (activeTab === 'models') {
+                if (!modelForm.model_no.trim()) { alert('Model No. is required'); return; }
+                await saveModel(modelForm, editingId ?? undefined);
             }
-
-            alert('✅ Added successfully!');
-            setNewItem({ name: '', code: '', description: '' });
-            await fetchMasterData();
+            resetForm();
         } catch (err: any) {
-            alert('❌ Failed: ' + (err.message || 'Unknown error'));
+            alert('Error: ' + (err.message || 'Save failed'));
         }
     };
 
-    const handleDeleteItem = async (index: number) => {
+    // ── Delete ─────────────────────────────────────────────────────────────────
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Delete this item? This cannot be undone.')) return;
         try {
-            const item = items[index];
-            const tableName = activeTab === 'subcategories' ? 'subcategories' : activeTab;
-            const { error } = await supabase
-                .from(tableName)
-                .delete()
-                .eq('name', item.name);
-
-            if (error) throw error;
-            await fetchMasterData();
-        } catch (err) {
-            console.error('Failed to delete item:', err);
+            if (activeTab === 'brands') await removeBrand(id);
+            if (activeTab === 'subcategories') await removeSubCategory(id);
+            if (activeTab === 'models') await removeModel(id);
+        } catch (err: any) {
+            alert('Error: ' + (err.message || 'Delete failed'));
         }
     };
+
+    // ── Count ──────────────────────────────────────────────────────────────────
+
+    const countMap: Record<MasterTabId, number> = {
+        brands: brands.length,
+        subcategories: subcategories.length,
+        models: models.length,
+    };
+
+    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
-        <div className="content-section">
-            <h2>🗂️ Master Data Management</h2>
+        <div className="screen-container">
+            <h2>⚙️ Master Data Management</h2>
 
+            {error && (
+                <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>
+            )}
+
+            {/* Tabs */}
             <div className="tabs" style={{ marginBottom: '18px' }}>
-                {tabs.map((tab) => (
+                {tabs.map(tab => (
                     <button
                         key={tab.id}
                         className={`tab ${activeTab === tab.id ? 'active' : ''}`}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => handleTabChange(tab.id)}
                     >
                         {tab.label}
                     </button>
                 ))}
             </div>
 
+            {/* Form */}
             <div className="card">
-                <h3 style={{ marginTop: 0 }}>Add New {activeTab}</h3>
-                <div className="master-add-row">
-                    <input
-                        type="text"
-                        placeholder="Name"
-                        value={newItem.name}
-                        onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    />
-                    {activeTab !== 'problems' && (
-                        <input
-                            type="text"
-                            placeholder="Code (optional)"
-                            value={newItem.code}
-                            onChange={(e) => setNewItem({ ...newItem, code: e.target.value })}
-                        />
-                    )}
-                    <input
-                        type="text"
-                        placeholder="Description (optional)"
-                        value={newItem.description}
-                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    />
-                    <button className="btn btn-primary" onClick={handleAddItem}>
-                        ➕ Add
-                    </button>
-                </div>
+                <h3 style={{ marginTop: 0 }}>
+                    {editingId ? `✏️ Edit ${activeTab}` : `➕ Add New ${activeTab}`}
+                </h3>
+                <MasterFormRow
+                    activeTab={activeTab}
+                    editingId={editingId}
+                    brands={brands}
+                    subcategories={subcategories}
+                    brandForm={brandForm} setBrandForm={setBrandForm}
+                    subCategoryForm={subCategoryForm} setSubCategoryForm={setSubCategoryForm}
+                    modelForm={modelForm} setModelForm={setModelForm}
+                    onSave={handleSave}
+                    onCancel={resetForm}
+                />
             </div>
 
+            {/* List */}
             <div className="card" style={{ marginTop: '14px' }}>
-                <h3 style={{ marginTop: 0 }}>List of {activeTab}</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h3 style={{ margin: 0 }}>
+                        📋 {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} List
+                    </h3>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        Total: <strong>{countMap[activeTab]}</strong>
+                    </span>
+                </div>
+
                 {loading ? (
                     <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Loading...</p>
-                ) : items.filter((item) => item.type === activeTab).length === 0 ? (
-                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                        No items added yet
-                    </p>
                 ) : (
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                {activeTab !== 'problems' && <th>Code</th>}
-                                <th>Description</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {items
-                                .filter((item) => item.type === activeTab)
-                                .map((item, index) => (
-                                    <tr key={index}>
-                                        <td>
-                                            <strong>{item.name}</strong>
-                                        </td>
-                                        {activeTab !== 'problems' && <td>{item.code || '—'}</td>}
-                                        <td>{item.description || '—'}</td>
-                                        <td>
-                                            <button
-                                                className="btn btn-sm btn-danger"
-                                                onClick={() => handleDeleteItem(index)}
-                                            >
-                                                Delete
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                        </tbody>
-                    </table>
+                    <MasterTable
+                        activeTab={activeTab}
+                        brands={brands}
+                        subcategories={subcategories}
+                        models={models}
+                        editingId={editingId}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                    />
                 )}
             </div>
         </div>
