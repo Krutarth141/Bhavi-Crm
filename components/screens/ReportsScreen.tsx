@@ -1,5 +1,6 @@
 'use client';
 
+import { useSession } from 'next-auth/react';
 import { useReports } from '@/hooks/useReports';
 import { REPORT_TABS } from '@/types/reports';
 
@@ -13,10 +14,10 @@ import DailyReportsTab from '@/components/screens/reports/DailyReportsTab';
 import WCDailyReportsTab from '@/components/screens/reports/WCDailyReportsTab';
 import ImportCallsTab from '@/components/screens/reports/ImportCallsTab';
 
-// Replace with real session user in your app (e.g. from useSession / context)
-const CURRENT_USER_NAME = 'Admin';
-
 export default function ReportsScreen() {
+  const { data: session } = useSession();
+  const currentUserName = (session?.user as any)?.name ?? 'Admin';
+
   const {
     // tab
     activeTab, setActiveTab,
@@ -154,7 +155,7 @@ export default function ReportsScreen() {
               logs={punchLogs}
               loading={punchLoading}
               onVerify={handleVerifyPunch}
-              currentUserName={CURRENT_USER_NAME}
+              currentUserName={currentUserName}
             />
           )}
 
@@ -179,7 +180,7 @@ export default function ReportsScreen() {
               importTotal={importTotal}
               importResult={importResult}
               onImport={handleImport}
-              currentUserName={CURRENT_USER_NAME}
+              currentUserName={currentUserName}
             />
           )}
         </>

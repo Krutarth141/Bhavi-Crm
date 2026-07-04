@@ -1,15 +1,39 @@
 'use client';
 
 import { useState } from 'react';
-import TicketsScreen from '@/components/screens/TicketsScreen';
+
+// Existing screens
 import TasksScreen from '@/components/screens/TasksScreen';
+import TicketsScreen from '@/components/screens/TicketsScreen';
 import ReportsScreen from '@/components/screens/ReportsScreen';
 
-type EngineerTab = 'tasks' | 'tickets' | 'reports' | 'performance';
+// New screens
+import MyCallsScreen from '@/components/screens/MyCallsScreen';
+import EngPartsScreen from '@/components/screens/EngPartsScreen';
+
+type EngineerTab = 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports';
+
+const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
+    { id: 'my-calls', label: '📞 My Calls' },
+    { id: 'tasks', label: '📋 My Tasks' },
+    { id: 'tickets', label: '🎫 My Tickets' },
+    { id: 'eng-parts', label: '🔩 Eng. Parts' },
+    { id: 'reports', label: '📈 My Reports' },
+];
 
 export default function EngineerDashboard() {
-    const [activeTab, setActiveTab] = useState<EngineerTab>('tasks');
+    const [activeTab, setActiveTab] = useState<EngineerTab>('my-calls');
 
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'my-calls': return <MyCallsScreen />;
+            case 'tasks': return <TasksScreen />;
+            case 'tickets': return <TicketsScreen />;
+            case 'eng-parts': return <EngPartsScreen />;
+            case 'reports': return <ReportsScreen />;
+            default: return null;
+        }
+    };
 
     return (
         <div className="engineer-dashboard">
@@ -17,38 +41,22 @@ export default function EngineerDashboard() {
                 <nav className="dashboard-nav">
                     <h2>Engineer Menu</h2>
                     <ul>
-                        <li>
-                            <button
-                                className={activeTab === 'tasks' ? 'active' : ''}
-                                onClick={() => setActiveTab('tasks')}
-                            >
-                                📋 My Tasks
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                className={activeTab === 'tickets' ? 'active' : ''}
-                                onClick={() => setActiveTab('tickets')}
-                            >
-                                🎫 My Tickets
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                className={activeTab === 'reports' ? 'active' : ''}
-                                onClick={() => setActiveTab('reports')}
-                            >
-                                📈 My Reports
-                            </button>
-                        </li>
+                        {NAV_ITEMS.map(item => (
+                            <li key={item.id}>
+                                <button
+                                    className={activeTab === item.id ? 'active' : ''}
+                                    onClick={() => setActiveTab(item.id)}
+                                >
+                                    {item.label}
+                                </button>
+                            </li>
+                        ))}
                     </ul>
                 </nav>
             </div>
 
             <div className="dashboard-content">
-                {activeTab === 'tasks' && <TasksScreen />}
-                {activeTab === 'tickets' && <TicketsScreen />}
-                {activeTab === 'reports' && <ReportsScreen />}
+                {renderContent()}
             </div>
         </div>
     );

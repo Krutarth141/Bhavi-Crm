@@ -1,111 +1,91 @@
 'use client';
 
 import { useState } from 'react';
-import { MasterTabId, BrandForm, SubCategoryForm, ModelForm, emptyBrandForm, emptySubCategoryForm, emptyModelForm } from '@/types/masters';
+import { MasterTabId } from '@/types/masters';
 import { useMasters } from '@/hooks/useMasters';
-import MasterFormRow from './masters/MasterFormRow';
-import MasterTable from './masters/MasterTable';
+import BrandsTab from './masters/BrandsTab';
+import SubCategoriesTab from './masters/SubCategoriesTab';
+import ModelsTab from './masters/ModelsTab';
+import ProblemTypesTab from './masters/ProblemTypesTab';
+import InventoryMasterTab from './masters/InventoryMasterTab';
 
 const tabs: { id: MasterTabId; label: string }[] = [
-    { id: 'brands', label: '🏢 Brands' },
-    { id: 'subcategories', label: '📋 Sub-Categories' },
+    { id: 'brands', label: '🏷️ Brands' },
+    { id: 'subcategories', label: '📂 Sub-Categories' },
     { id: 'models', label: '📱 Models' },
+    { id: 'problems', label: '🔧 Problem Types' },
+    { id: 'inventory', label: '📦 Inventory' },
 ];
 
 export default function MasterDataScreen() {
     const [activeTab, setActiveTab] = useState<MasterTabId>('brands');
-    const [editingId, setEditingId] = useState<string | null>(null);
-
-    // Per-tab form state
-    const [brandForm, setBrandForm] = useState<BrandForm>(emptyBrandForm);
-    const [subCategoryForm, setSubCategoryForm] = useState<SubCategoryForm>(emptySubCategoryForm);
-    const [modelForm, setModelForm] = useState<ModelForm>(emptyModelForm);
 
     const {
-        brands, subcategories, models,
-        loading, error,
+        brands, subcategories, models, problemTypes,
+        loading, error, fetchAll,
         saveBrand, removeBrand,
         saveSubCategory, removeSubCategory,
         saveModel, removeModel,
+        saveProblemType, toggleProblem, removeProblemType,
     } = useMasters();
 
-    // ── Reset ──────────────────────────────────────────────────────────────────
+    const renderTab = () => {
+        if (loading && activeTab !== 'inventory') {
+            return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 30 }}>Loading...</p>;
+        }
 
-    const resetForm = () => {
-        setBrandForm(emptyBrandForm);
-        setSubCategoryForm(emptySubCategoryForm);
-        setModelForm(emptyModelForm);
-        setEditingId(null);
-    };
+        switch (activeTab) {
+            case 'brands':
+                return (
+                    <BrandsTab
+                        brands={brands}
+                        onAdd={saveBrand}
+                        onDelete={removeBrand}
+                        onRefresh={fetchAll}
+                    />
+                );
 
-    const handleTabChange = (tab: MasterTabId) => {
-        setActiveTab(tab);
-        resetForm();
-    };
+            case 'subcategories':
+                return (
+                    <SubCategoriesTab
+                        brands={brands}
+                        subcategories={subcategories}
+                        onAdd={saveSubCategory}
+                        onDelete={removeSubCategory}
+                        onRefresh={fetchAll}
+                    />
+                );
 
-    // ── Edit populate ──────────────────────────────────────────────────────────
+            case 'models':
+                return (
+                    <ModelsTab
+                        brands={brands}
+                        subcategories={subcategories}
+                        models={models}
+                        onAdd={saveModel}
+                        onDelete={removeModel}
+                        onRefresh={fetchAll}
+                    />
+                );
 
-    const handleEdit = (item: any) => {
-        setEditingId(item.id);
-        if (activeTab === 'brands') {
-            setBrandForm({ name: item.name });
-        } else if (activeTab === 'subcategories') {
-            setSubCategoryForm({ name: item.name, brand_id: item.brand_id || '' });
-        } else if (activeTab === 'models') {
-            setModelForm({
-                model_no: item.model_no,
-                model_name: item.model_name || '',
-                brand_id: item.brand_id || '',
-                subcategory_id: item.subcategory_id || '',
-                sale_price: item.sale_price?.toString() || '',
-                printer_type: item.printer_type || '',
-                brochure_url: item.brochure_url || '',
-            });
+            case 'problems':
+                return (
+                    <ProblemTypesTab
+                        brands={brands}
+                        problemTypes={problemTypes}
+                        onAdd={saveProblemType}
+                        onToggle={toggleProblem}
+                        onDelete={removeProblemType}
+                    />
+                );
+
+            case 'inventory':
+                return <InventoryMasterTab />;
+
+            default:
+                return null;
         }
     };
-
-    // ── Save ───────────────────────────────────────────────────────────────────
-
-    const handleSave = async () => {
-        try {
-            if (activeTab === 'brands') {
-                if (!brandForm.name.trim()) { alert('Brand name is required'); return; }
-                await saveBrand(brandForm, editingId ?? undefined);
-            } else if (activeTab === 'subcategories') {
-                if (!subCategoryForm.name.trim()) { alert('Sub-category name is required'); return; }
-                await saveSubCategory(subCategoryForm, editingId ?? undefined);
-            } else if (activeTab === 'models') {
-                if (!modelForm.model_no.trim()) { alert('Model No. is required'); return; }
-                await saveModel(modelForm, editingId ?? undefined);
-            }
-            resetForm();
-        } catch (err: any) {
-            alert('Error: ' + (err.message || 'Save failed'));
-        }
-    };
-
-    // ── Delete ─────────────────────────────────────────────────────────────────
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this item? This cannot be undone.')) return;
-        try {
-            if (activeTab === 'brands') await removeBrand(id);
-            if (activeTab === 'subcategories') await removeSubCategory(id);
-            if (activeTab === 'models') await removeModel(id);
-        } catch (err: any) {
-            alert('Error: ' + (err.message || 'Delete failed'));
-        }
-    };
-
-    // ── Count ──────────────────────────────────────────────────────────────────
-
-    const countMap: Record<MasterTabId, number> = {
-        brands: brands.length,
-        subcategories: subcategories.length,
-        models: models.length,
-    };
-
-    // ── Render ─────────────────────────────────────────────────────────────────
 
     return (
         <div className="screen-container">
@@ -116,61 +96,20 @@ export default function MasterDataScreen() {
             )}
 
             {/* Tabs */}
-            <div className="tabs" style={{ marginBottom: '18px' }}>
+            <div className="tabs" style={{ marginBottom: 18 }}>
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
                         className={`tab ${activeTab === tab.id ? 'active' : ''}`}
-                        onClick={() => handleTabChange(tab.id)}
+                        onClick={() => setActiveTab(tab.id)}
                     >
                         {tab.label}
                     </button>
                 ))}
             </div>
 
-            {/* Form */}
-            <div className="card">
-                <h3 style={{ marginTop: 0 }}>
-                    {editingId ? `✏️ Edit ${activeTab}` : `➕ Add New ${activeTab}`}
-                </h3>
-                <MasterFormRow
-                    activeTab={activeTab}
-                    editingId={editingId}
-                    brands={brands}
-                    subcategories={subcategories}
-                    brandForm={brandForm} setBrandForm={setBrandForm}
-                    subCategoryForm={subCategoryForm} setSubCategoryForm={setSubCategoryForm}
-                    modelForm={modelForm} setModelForm={setModelForm}
-                    onSave={handleSave}
-                    onCancel={resetForm}
-                />
-            </div>
-
-            {/* List */}
-            <div className="card" style={{ marginTop: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h3 style={{ margin: 0 }}>
-                        📋 {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} List
-                    </h3>
-                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                        Total: <strong>{countMap[activeTab]}</strong>
-                    </span>
-                </div>
-
-                {loading ? (
-                    <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Loading...</p>
-                ) : (
-                    <MasterTable
-                        activeTab={activeTab}
-                        brands={brands}
-                        subcategories={subcategories}
-                        models={models}
-                        editingId={editingId}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                    />
-                )}
-            </div>
+            {/* Tab content */}
+            {renderTab()}
         </div>
     );
 }

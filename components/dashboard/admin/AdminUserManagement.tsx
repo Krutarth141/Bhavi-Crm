@@ -1,190 +1,161 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { AppUser, UserFormData } from '@/types/users';
+import { useUsers } from '@/hooks/useUsers';
 
-interface User {
-    id: string;
-    user_id: string;
-    name: string;
-    role: string;
-    role_type: string;
-    is_active: boolean;
-    created_at: string;
-}
+// User management sub-components
+import EngineersTab from './user-management/EngineersTab';
+import WorkControllersTab from './user-management/WorkControllersTab';
+import AdminProfileTab from './user-management/AdminProfileTab';
+import LogoTab from './user-management/LogoTab';
+import UserFormModal from './user-management/UserFormModal';
+
+// New settings tabs
+import ShiftSettingsCard from './user-management/ShiftSettingsCard';
+import MSCCentersTab from './user-management/MSCCentersTab';
+import PortalServicesTab from './user-management/PortalServicesTab';
+import TelegramTab from './user-management/TelegramTab';
+
+type TabId = 'engineers' | 'wc' | 'admin' | 'logo' | 'company' | 'portal' | 'msc' | 'telegram';
+
+const TABS: { id: TabId; label: string }[] = [
+    { id: 'engineers', label: '👷 Engineers' },
+    { id: 'wc', label: '🎯 Work Controllers' },
+    { id: 'admin', label: '👑 Admin Profile' },
+    { id: 'logo', label: '🖼️ Logo' },
+    { id: 'company', label: '🏢 Company Info' },
+    { id: 'portal', label: '🌐 Portal Services' },
+    { id: 'msc', label: '📊 MSC Centers' },
+    { id: 'telegram', label: '📱 Telegram' },
+];
 
 export default function AdminUserManagement() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [showMigrationTool, setShowMigrationTool] = useState(false);
-    const [formData, setFormData] = useState({
-        email: '',
-        password: '',
-        name: '',
-        role: 'engineer',
-        role_type: 'engineer',
-    });
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const { data: session } = useSession();
+    const currentUserId = (session?.user as any)?.id;
+    const currentUserName = (session?.user as any)?.name ?? '';
 
-    useEffect(() => {
-        fetchUsers();
-    }, []);
+    const {
+        engineers, workControllers,
+        loading, error,
+        addUser, editUser, toggleActive, removeUser, updatePassword,
+    } = useUsers();
 
-    const fetchUsers = async () => {
-        try {
-            setLoading(true);
-            const response = await fetch('/api/admin/users');
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error || 'Failed to fetch users');
-            }
-            const data = await response.json();
-            setUsers(data.users || []);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch users');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+    const [activeTab, setActiveTab] = useState<TabId>('engineers');
+    const [modalOpen, setModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+    const [modalType, setModalType] = useState<'engineer' | 'wc'>('engineer');
+    const [feedback, setFeedback] = useState('');
+
+    const showFeedback = (msg: string) => {
+        setFeedback(msg);
+        setTimeout(() => setFeedback(''), 3000);
     };
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+    const openAdd = (type: 'engineer' | 'wc') => {
+        setModalType(type);
+        setEditingUser(null);
+        setModalOpen(true);
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setSuccess('');
+    const openEdit = (user: AppUser) => {
+        setModalType(user.role_type === 'work_controller' ? 'wc' : 'engineer');
+        setEditingUser(user);
+        setModalOpen(true);
+    };
 
-        try {
-            const response = await fetch('/api/admin/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData),
-            });
+    const handleSave = async (form: UserFormData, id?: number) => {
+        if (id) await editUser(id, form);
+        else await addUser(form);
+        showFeedback(id ? 'Updated successfully!' : 'Created successfully!');
+    };
 
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.error || 'Failed to create user');
-            }
+    const handleToggle = async (user: AppUser) => {
+        const action = user.is_active ? 'Deactivate' : 'Activate';
+        if (!confirm(`${action} "${user.name}"?`)) return;
+        try { await toggleActive(user.id, !user.is_active); }
+        catch (e: any) { alert(e.message); }
+    };
 
-            setSuccess('User created successfully!');
-            setFormData({ email: '', password: '', name: '', role: 'engineer', role_type: 'engineer' });
-            setShowForm(false);
-            fetchUsers();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+    const handleDelete = async (user: AppUser) => {
+        if (!confirm(`Delete "${user.name}"? This cannot be undone.`)) return;
+        try { await removeUser(user.id); showFeedback('Deleted!'); }
+        catch (e: any) { alert(e.message); }
+    };
+
+    const handlePasswordChange = async (password: string) => {
+        await updatePassword(currentUserId, password);
+    };
+
+    const renderTab = () => {
+        switch (activeTab) {
+            case 'engineers':
+                return (
+                    <EngineersTab
+                        engineers={engineers} loading={loading}
+                        onAdd={() => openAdd('engineer')}
+                        onEdit={openEdit} onToggle={handleToggle} onDelete={handleDelete}
+                    />
+                );
+            case 'wc':
+                return (
+                    <WorkControllersTab
+                        workControllers={workControllers} loading={loading}
+                        onAdd={() => openAdd('wc')}
+                        onEdit={openEdit} onToggle={handleToggle} onDelete={handleDelete}
+                    />
+                );
+            case 'admin':
+                return <AdminProfileTab currentUserName={currentUserName} onChangePassword={handlePasswordChange} />;
+            case 'logo':
+            case 'company':
+                return <LogoTab />;
+            case 'portal':
+                return <PortalServicesTab />;
+            case 'msc':
+                return <MSCCentersTab />;
+            case 'telegram':
+                return <TelegramTab />;
+            default:
+                return null;
         }
     };
 
     return (
-        <div className="content-section">
-            <div className="section-header">
-                <h2>User Management</h2>
-                <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-                    {showForm ? '✖ Cancel' : '➕ Add User'}
-                </button>
-            </div>
+        <div className="screen-container">
+            <h2 style={{ margin: '0 0 18px' }}>⚙️ Settings</h2>
 
-            {error && <div className="alert alert-error">{error}</div>}
-            {success && <div className="alert alert-success">{success}</div>}
+            {/* Shift Settings Card — always on top */}
+            <ShiftSettingsCard />
 
-            {showForm && (
-                <form className="user-form" onSubmit={handleSubmit}>
-                    <div className="form-row">
-                        <input
-                            type="email"
-                            name="email"
-                            placeholder="Email"
-                            required
-                            value={formData.email}
-                            onChange={handleInputChange}
-                        />
-                        <input
-                            type="password"
-                            name="password"
-                            placeholder="Password"
-                            required
-                            value={formData.password}
-                            onChange={handleInputChange}
-                        />
-                    </div>
-                    <div className="form-row">
-                        <input
-                            type="text"
-                            name="name"
-                            placeholder="Full Name"
-                            required
-                            value={formData.name}
-                            onChange={handleInputChange}
-                        />
-                        <select name="role" value={formData.role} onChange={handleInputChange}>
-                            <option value="admin">Admin</option>
-                            <option value="engineer">Engineer</option>
-                            <option value="work_controller">Work Controller</option>
-                        </select>
-                    </div>
-                    <button type="submit" className="btn-primary">
-                        Create User
+            {error && <div style={{ background: '#fee2e2', color: '#dc2626', padding: '10px 14px', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+            {feedback && <div style={{ background: '#d1fae5', color: '#065f46', padding: '10px 14px', borderRadius: 6, marginBottom: 12, fontSize: 13 }}>{feedback}</div>}
+
+            {/* Tabs */}
+            <div className="tabs" style={{ marginBottom: 18, flexWrap: 'wrap' }}>
+                {TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+                        onClick={() => setActiveTab(tab.id)}
+                    >
+                        {tab.label}
                     </button>
-                </form>
-            )}
-
-            <div className="users-table-container">
-                {loading ? (
-                    <p>Loading users...</p>
-                ) : users.length === 0 ? (
-                    <p className="empty-message">No users found. Create one to get started!</p>
-                ) : (
-                    <table className="users-table">
-                        <thead>
-                            <tr>
-                                <th>User ID</th>
-                                <th>Name</th>
-                                <th>Role</th>
-                                <th>Status</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users.map((user) => (
-                                <tr key={user.id}>
-                                    <td>{user.user_id}</td>
-                                    <td>{user.name}</td>
-                                    <td>
-                                        <span className="badge" style={{ background: getUserRoleColor(user.role) }}>
-                                            {user.role}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className="badge" style={{ background: user.is_active ? '#10b981' : '#ef4444' }}>
-                                            {user.is_active ? 'Active' : 'Inactive'}
-                                        </span>
-                                    </td>
-                                    <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                                    <td>
-                                        <button className="btn-small">Edit</button>
-                                        <button className="btn-small btn-danger">Delete</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
+                ))}
             </div>
+
+            {/* Tab content */}
+            {renderTab()}
+
+            {/* Add/Edit Modal */}
+            <UserFormModal
+                isOpen={modalOpen}
+                editingUser={editingUser}
+                modalType={modalType}
+                onClose={() => setModalOpen(false)}
+                onSave={handleSave}
+            />
         </div>
     );
-}
-
-function getUserRoleColor(role: string): string {
-    const colors: Record<string, string> = {
-        admin: '#3b82f6',
-        engineer: '#10b981',
-        work_controller: '#f59e0b',
-    };
-    return colors[role] || '#6b7280';
 }

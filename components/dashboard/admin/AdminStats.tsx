@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
+import { useTasks } from '@/hooks/useTasks';
+import { useUsers } from '@/hooks/useUsers';
 
 interface StatCard {
   title: string;
@@ -10,32 +12,19 @@ interface StatCard {
 }
 
 export default function AdminStats() {
-  const [stats, setStats] = useState<StatCard[]>([
-    { title: 'Total Users', value: 0, icon: '👥', color: '#3b82f6' },
-    { title: 'Active Engineers', value: 0, icon: '🔧', color: '#10b981' },
-    { title: 'Work Controllers', value: 0, icon: '📋', color: '#f59e0b' },
-    { title: 'Active Tasks', value: 0, icon: '✅', color: '#8b5cf6' },
-  ]);
+  const { allUsers, engineers, workControllers } = useUsers();
+  const { tasks } = useTasks();
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  const stats = useMemo<StatCard[]>(() => {
+    const activeTasks = tasks.filter((task) => task.status !== 'Closed').length;
 
-  const fetchStats = async () => {
-    try {
-      // TODO: Fetch real stats from your API
-      // const response = await fetch('/api/admin/stats');
-      // const data = await response.json();
-      setStats([
-        { title: 'Total Users', value: 12, icon: '👥', color: '#3b82f6' },
-        { title: 'Active Engineers', value: 8, icon: '🔧', color: '#10b981' },
-        { title: 'Work Controllers', value: 2, icon: '📋', color: '#f59e0b' },
-        { title: 'Active Tasks', value: 24, icon: '✅', color: '#8b5cf6' },
-      ]);
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
-    }
-  };
+    return [
+      { title: 'Total Users', value: allUsers.length, icon: '👥', color: '#3b82f6' },
+      { title: 'Active Engineers', value: engineers.length, icon: '🔧', color: '#10b981' },
+      { title: 'Work Controllers', value: workControllers.length, icon: '📋', color: '#f59e0b' },
+      { title: 'Active Tasks', value: activeTasks, icon: '✅', color: '#8b5cf6' },
+    ];
+  }, [allUsers.length, engineers.length, workControllers.length, tasks]);
 
   return (
     <div className="content-section">

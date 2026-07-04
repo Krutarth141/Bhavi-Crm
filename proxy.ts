@@ -4,7 +4,7 @@ import { getToken } from 'next-auth/jwt';
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const publicRoutes = ['/login', '/', '/auth/error'];
+  const publicRoutes = ['/login', '/', '/auth/error', '/service-request', '/walk-in', '/account', '/my-orders'];
 
   const token = await getToken({
     req,
@@ -13,7 +13,9 @@ export default async function proxy(req: NextRequest) {
 
   const isAuthenticated = !!token;
 
-  if (!isAuthenticated && !publicRoutes.includes(pathname)) {
+  const isPublicRoute = publicRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+
+  if (!isAuthenticated && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
