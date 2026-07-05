@@ -1,4 +1,6 @@
-// Table: engineer_locations
+// Exact schema: engineer_locations
+// id, eng_id, eng_name, lat, lng, accuracy,
+// event_type, ticket_id, session_date, recorded_at
 
 export interface LiveLocation {
     id: string;
@@ -6,12 +8,11 @@ export interface LiveLocation {
     eng_name?: string;
     lat?: number;
     lng?: number;
-    address?: string;
-    battery?: number;
-    speed?: number;
     accuracy?: number;
-    timestamp?: string;
-    created_at?: string;
+    event_type?: string;    // e.g. 'punch_in', 'punch_out', 'visit'
+    ticket_id?: string;
+    session_date?: string;
+    recorded_at?: string;   // was 'timestamp' — actual column name
 }
 
 export const timeAgo = (ts?: string): string => {

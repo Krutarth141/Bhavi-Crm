@@ -8,18 +8,22 @@ export const fetchEngineerTickets = async (
     try {
         let query = supabase
             .from('tickets')
-            .select('id, js_no, cname, mobile, model, serial, brand_name, problem, call_type, service_type, assigned_name, status, service_charges, labor, address, pin, timeline, created_at, updated_at')
-            .order('updated_at', { ascending: false });
+            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, call_type, service_type, assigned_name, status, service_charges, labor, address, pin, timeline, created_at, updated_at')
+            .order('updated_at', { ascending: false })
+            .limit(100);
 
         if (engineerName) query = query.eq('assigned_name', engineerName);
 
         if (statusFilter === 'active') {
-            query = query.not('status', 'in', '("Closed","Call Cancel","Customer Reject")');
+            query = query
+                .neq('status', 'Closed')
+                .neq('status', 'Call Cancel')
+                .neq('status', 'Customer Reject');
         } else if (statusFilter === 'closed') {
             query = query.in('status', ['Closed', 'Call Cancel', 'Customer Reject']);
         }
 
-        const { data, error } = await query.limit(100);
+        const { data, error } = await query;
         if (error) throw error;
         return data || [];
     } catch (err) {
@@ -48,9 +52,7 @@ export const updateTicketStatus = async (
                 note: note || undefined,
             }],
         };
-        if (labour && newStatus === 'Closed') {
-            updateData.labor = Number(labour);
-        }
+        if (labour && newStatus === 'Closed') updateData.labor = Number(labour);
         if (note) updateData.eng_remarks = note;
 
         const { error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id);

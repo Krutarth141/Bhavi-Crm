@@ -18,21 +18,20 @@ export const useLiveMap = () => {
 
     useEffect(() => {
         load();
-        // Auto-refresh every 2 minutes
         const interval = setInterval(load, 2 * 60 * 1000);
         return () => clearInterval(interval);
     }, [load]);
 
-    // Latest location per engineer
+    // Latest location per engineer (using recorded_at)
     const latestByEng: Record<string, LiveLocation> = {};
     locations.forEach(l => {
-        if (l.eng_name && (!latestByEng[l.eng_name] || (l.timestamp || '') > (latestByEng[l.eng_name]?.timestamp || ''))) {
+        if (l.eng_name && (!latestByEng[l.eng_name] || (l.recorded_at || '') > (latestByEng[l.eng_name]?.recorded_at || ''))) {
             latestByEng[l.eng_name] = l;
         }
     });
 
     const engineers = Object.values(latestByEng).sort((a, b) => (a.eng_name || '').localeCompare(b.eng_name || ''));
-    const onlineCount = engineers.filter(e => isOnline(e.timestamp)).length;
+    const onlineCount = engineers.filter(e => isOnline(e.recorded_at)).length;
 
     return { locations, engineers, latestByEng, loading, lastRefresh, onlineCount, refetch: load };
 };

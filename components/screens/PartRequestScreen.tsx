@@ -10,7 +10,8 @@ export default function PartRequestScreen() {
     const [processing, setProcessing] = useState<string | null>(null);
 
     const handleApprove = async (req: PartRequest) => {
-        if (!confirm(`Approve ${req.qty} × ${req.part_name} for ${req.eng_name}?`)) return;
+        const partNames = (req.parts || []).map(p => `${p.qty}×${p.part_name || p.part_id}`).join(', ');
+        if (!confirm(`Approve request for ${req.engineer_name}?\nParts: ${partNames || 'see request'}`)) return;
         setProcessing(req.id);
         const r = await approve(req);
         if (!r.success) alert('Error: ' + r.error);
@@ -72,7 +73,7 @@ export default function PartRequestScreen() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                                     <thead>
                                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['Engineer', 'Part', 'Qty', 'Ticket', 'Note', 'Requested', 'Status', 'Action'].map(h => (
+                                            {['Engineer', 'Type', 'Parts Requested', 'Notes', 'Requested On', 'Approved By', 'Status', 'Action'].map(h => (
                                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>
@@ -81,24 +82,35 @@ export default function PartRequestScreen() {
                                         {requests.map(r => {
                                             const isPending = r.status === 'pending';
                                             const isProcessing = processing === r.id;
+                                            const partsList = (r.parts || []).map(p => `${p.qty || 1}× ${p.part_name || p.part_id || '?'}`).join(', ');
                                             return (
                                                 <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6', background: isPending ? '#fffbeb' : 'white' }}>
-                                                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{r.eng_name}</td>
-                                                    <td style={{ padding: '10px 12px' }}>{r.part_name || r.part_id || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{r.qty || 1}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'monospace' }}>{r.ticket_id || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12, color: '#6b7280' }}>{r.note || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{r.engineer_name}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{r.type || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 220 }}>{partsList || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, color: '#6b7280' }}>{r.notes || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                                                        {r.created_at ? new Date(r.created_at).toLocaleDateString('en-IN') : '—'}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{r.approved_by || '—'}</td>
                                                     <td style={{ padding: '10px 12px' }}>
-                                                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.status === 'pending' ? '#fef3c7' : r.status === 'approved' ? '#d1fae5' : '#fee2e2', color: r.status === 'pending' ? '#92400e' : r.status === 'approved' ? '#065f46' : '#991b1b' }}>
+                                                        <span style={{
+                                                            padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                                            background: r.status === 'pending' ? '#fef3c7' : r.status === 'approved' ? '#d1fae5' : '#fee2e2',
+                                                            color: r.status === 'pending' ? '#92400e' : r.status === 'approved' ? '#065f46' : '#991b1b',
+                                                        }}>
                                                             {r.status}
                                                         </span>
                                                     </td>
                                                     <td style={{ padding: '10px 12px' }}>
                                                         {isPending ? (
                                                             <div style={{ display: 'flex', gap: 6 }}>
-                                                                <button onClick={() => handleApprove(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>✅ Approve</button>
-                                                                <button onClick={() => handleReject(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>❌ Reject</button>
+                                                                <button onClick={() => handleApprove(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
+                                                                    ✅ Approve
+                                                                </button>
+                                                                <button onClick={() => handleReject(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
+                                                                    ❌ Reject
+                                                                </button>
                                                             </div>
                                                         ) : '—'}
                                                     </td>

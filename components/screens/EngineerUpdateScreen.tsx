@@ -97,7 +97,7 @@ export default function EngineerUpdateScreen() {
                                                 <div style={{ fontSize: 12, color: '#6b7280' }}>{t.mobile} | {t.brand_name} {t.model} | {t.serial}</div>
                                                 <div style={{ fontSize: 12, color: '#374151', marginTop: 2 }}>{t.problem}</div>
                                                 {t.address && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>📍 {t.address} {t.pin ? `(${t.pin})` : ''}</div>}
-                                                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{t.call_type} | {t.service_type} | JS: {t.js_no || '—'}</div>
+                                                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{t.call_type} | {t.service_type} | JS: {t.job_sheet || '—'}</div>
                                             </div>
                                             {canUpdate && (
                                                 <button onClick={() => openUpdate(t)} style={{ marginLeft: 12, padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
