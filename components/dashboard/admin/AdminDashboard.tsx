@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import AdminStats from './AdminStats';
 import AdminUserManagement from './AdminUserManagement';
-import LegacySurfaceScreen from '@/components/screens/LegacySurfaceScreen';
 
 // Existing screens
 import TicketsScreen from '@/components/screens/TicketsScreen';
@@ -36,6 +35,13 @@ import ProfitScreen from '@/components/screens/ProfitScreen';
 import WeeklyReportScreen from '@/components/screens/WeeklyReportScreen';
 import AutoVisitsReportScreen from '@/components/screens/AutoVisitsReportScreen';
 import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
+import LiveMapScreen from '@/components/screens/LiveMapScreen';
+import CustomerApprovalScreen from '@/components/screens/CustomerApprovalScreen';
+import EngineerUpdateScreen from '@/components/screens/EngineerUpdateScreen';
+import PartRequestScreen from '@/components/screens/PartRequestScreen';
+import ReportEditScreen from '@/components/screens/ReportEditScreen';
+import AIAgentScreen from '@/components/screens/AIAgentScreen';
+import AIAnalysisScreen from '@/components/screens/AIAnalysisScreen';
 
 import '@/styles/dashboard.css';
 
@@ -139,7 +145,8 @@ export default function AdminDashboard() {
             case 'engineers': return <EngineersScreen />;
             case 'master': return <MasterDataScreen />;
             case 'settings': return <AdminUserManagement />;
-            case 'live-map': return <LegacySurfaceScreen eyebrow="Operations" title="Live Map" subtitle="The live field map surface from the reference CRM is now exposed in the dashboard." points={['Track active field coverage and technician movement.', 'Keep the route visible behind authenticated access.', 'Use this as the dashboard entry point for field visibility.']} />;
+            case 'live-map': return <LiveMapScreen />;
+            case 'inquiries': return <InquiriesScreen />;
             case 'attendance': return <AttendanceScreen />;
             case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
@@ -153,12 +160,12 @@ export default function AdminDashboard() {
             case 'auto-inventory': return <AutoInventoryScreen />;
             case 'auto-sites': return <AutoSitesScreen />;
             case 'auto-visits-report': return <AutoVisitsReportScreen />;
-            case 'ai-agent': return <LegacySurfaceScreen eyebrow="AI Agent" title="Virtual AI Agent" subtitle="The AI agent entry point is now visible inside the dashboard." points={['Reserve the agent workspace route.', 'Keep it behind the current auth/session flow.', 'Use it as the integration point for future agent work.']} />;
-            case 'ai-analysis': return <LegacySurfaceScreen eyebrow="AI Agent" title="AI Analysis" subtitle="The AI analysis surface remains available as a dashboard route." points={['Show AI-generated summaries and insights.', 'Keep it behind authenticated access.', 'Mirror the reference app’s navigation item.']} />;
-            case 'report-edit': return <LegacySurfaceScreen eyebrow="Workflow" title="Report Edit" subtitle="The report edit workflow from the reference app is now surfaced as a dedicated route." points={['Capture edits before approval.', 'Keep the workflow tied to report management.', 'Use the existing CRM shell and auth flow.']} />;
-            case 'customer-approval': return <LegacySurfaceScreen eyebrow="Workflow" title="Customer Approval" subtitle="The approval workflow is now represented as a visible route." points={['Review estimate and approval decisions.', 'Keep the route anchored to ticket management.', 'Preserve the original CRM entry point.']} />;
-            case 'engineer-update': return <LegacySurfaceScreen eyebrow="Workflow" title="Engineer Update" subtitle="Engineer update actions remain visible in the dashboard." points={['Track status updates and notes from technicians.', 'Keep the route available to authenticated staff.', 'Mirror the original action entry point.']} />;
-            case 'part-request': return <LegacySurfaceScreen eyebrow="Workflow" title="Part Request" subtitle="Part requests are now surfaced as a first-class dashboard route." points={['Request and review parts usage.', 'Keep it tied to inventory and engineering flows.', 'Match the legacy workflow location.']} />;
+            case 'ai-agent': return <AIAgentScreen />;
+            case 'ai-analysis': return <AIAnalysisScreen />;
+            case 'report-edit': return <ReportEditScreen />;
+            case 'customer-approval': return <CustomerApprovalScreen />;
+            case 'engineer-update': return <EngineerUpdateScreen />;
+            case 'part-request': return <PartRequestScreen />;
             default: return null;
         }
     };
