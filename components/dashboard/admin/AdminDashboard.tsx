@@ -27,6 +27,11 @@ import AMCScreen from '@/components/screens/AMCScreen';
 import FeedbackScreen from '@/components/screens/FeedbackScreen';
 import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
 import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
+import TargetsScreen from '@/components/screens/TargetsScreen';
+import SalesScreen from '@/components/screens/SalesScreen';
+import InquiriesScreen from '@/components/screens/InquiriesScreen';
+import AutoSitesScreen from '@/components/screens/AutoSitesScreen';
+import AutoInventoryScreen from '@/components/screens/AutoInventoryScreen';
 
 import '@/styles/dashboard.css';
 
@@ -129,21 +134,21 @@ export default function AdminDashboard() {
             case 'worklogs': return <WorkLogScreen />;
             case 'engineers': return <EngineersScreen />;
             case 'master': return <MasterDataScreen />;
-            case 'settings': return <AdminUserManagement />;  // ← handles both
+            case 'settings': return <AdminUserManagement />;
             case 'live-map': return <LegacySurfaceScreen eyebrow="Operations" title="Live Map" subtitle="The live field map surface from the reference CRM is now exposed in the dashboard." points={['Track active field coverage and technician movement.', 'Keep the route visible behind authenticated access.', 'Use this as the dashboard entry point for field visibility.']} />;
             case 'attendance': return <AttendanceScreen />;
-            case 'targets': return <LegacySurfaceScreen eyebrow="Management" title="Targets" subtitle="Target tracking stays visible as its own admin screen." points={['Monitor goal progress and closure performance.', 'Keep the view tied to reporting data.', 'Expose the route directly in the admin menu.']} />;
+            case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
             case 'feedback': return <FeedbackScreen />;
             case 'profit': return <LegacySurfaceScreen eyebrow="Reports" title="Profit" subtitle="Profit analysis is available as a dashboard route." points={['Review revenue and cost summaries.', 'Keep it within the authenticated reporting stack.', 'Mirror the original navigation item.']} />;
             case 'weekly-report': return <LegacySurfaceScreen eyebrow="Reports" title="Weekly Report" subtitle="Weekly reporting is now visible in the dashboard menu." points={['Summarize weekly operational activity.', 'Stay aligned with the legacy admin sidebar.', 'Use the same session and role checks.']} />;
-            case 'sales': return <LegacySurfaceScreen eyebrow="Management" title="Sales" subtitle="Sales tracking remains an admin-only entry point." points={['Review sales-related service totals.', 'Keep the route available under the CRM shell.', 'Match the reference dashboard navigation.']} />;
+            case 'sales': return <SalesScreen />;
             case 'parts-catalog': return <PartsCatalogScreen />;
             case 'fault-finder': return <FaultFinderScreen />;
             case 'route-planning': return <LegacySurfaceScreen eyebrow="Operations" title="Route Planning" subtitle="Route planning stays available as a standalone dashboard surface." points={['Plan the day’s field visit order.', 'Keep it aligned with tickets and courier work.', 'Preserve the original route entry point.']} />;
-            case 'inquiries': return <LegacySurfaceScreen eyebrow="Operations" title="Inquiries" subtitle="Inquiry handling remains accessible from the admin shell." points={['Review public questions and request leads.', 'Tie the data back to the service flow.', 'Use the same CRM authentication.']} />;
-            case 'auto-inventory': return <LegacySurfaceScreen eyebrow="Automation" title="Auto Inventory" subtitle="Automated inventory surfacing is preserved as an admin route." points={['Show automation-driven inventory signals.', 'Keep it under admin-only access.', 'Mirror the legacy automation menu item.']} />;
-            case 'auto-sites': return <LegacySurfaceScreen eyebrow="Automation" title="Auto Sites" subtitle="Automated site monitoring is visible again in the dashboard." points={['Review automated site-related outputs.', 'Keep the route attached to the CRM session.', 'Expose the same reference navigation item.']} />;
+            case 'inquiries': return <InquiriesScreen />;
+            case 'auto-inventory': return <AutoInventoryScreen />;
+            case 'auto-sites': return <AutoSitesScreen />;
             case 'auto-visits-report': return <LegacySurfaceScreen eyebrow="Automation" title="Visit Report" subtitle="Automated visit reporting is available from the admin menu." points={['Review visit summaries and automation results.', 'Keep the route aligned to the legacy sidebar.', 'Treat it as a management report surface.']} />;
             case 'ai-agent': return <LegacySurfaceScreen eyebrow="AI Agent" title="Virtual AI Agent" subtitle="The AI agent entry point is now visible inside the dashboard." points={['Reserve the agent workspace route.', 'Keep it behind the current auth/session flow.', 'Use it as the integration point for future agent work.']} />;
             case 'ai-analysis': return <LegacySurfaceScreen eyebrow="AI Agent" title="AI Analysis" subtitle="The AI analysis surface remains available as a dashboard route." points={['Show AI-generated summaries and insights.', 'Keep it behind authenticated access.', 'Mirror the reference app’s navigation item.']} />;
