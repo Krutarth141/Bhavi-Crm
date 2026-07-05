@@ -145,7 +145,7 @@ export default function EngPartsEngineer({ engName, inventory, engStockLog, onRe
                       return (
                         <tr key={log.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
-                            {new Date(log.created_at).toLocaleDateString()}
+                            {log.created_at ? new Date(log.created_at).toLocaleDateString() : '—'}
                           </td>
                           <td style={styles.tableCell}>
                             <span style={actionBadgeStyle(log.action)}>{log.action}</span>

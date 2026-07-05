@@ -22,6 +22,11 @@ import WalkInScreen from '@/components/screens/WalkInScreen';
 import WalkInReportScreen from '@/components/screens/WalkInReportScreen';
 import PendingListScreen from '@/components/screens/PendingListScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
+import AttendanceScreen from '@/components/screens/AttendanceScreen';
+import AMCScreen from '@/components/screens/AMCScreen';
+import FeedbackScreen from '@/components/screens/FeedbackScreen';
+import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
+import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
 
 import '@/styles/dashboard.css';
 
@@ -126,15 +131,15 @@ export default function AdminDashboard() {
             case 'master': return <MasterDataScreen />;
             case 'settings': return <AdminUserManagement />;  // ← handles both
             case 'live-map': return <LegacySurfaceScreen eyebrow="Operations" title="Live Map" subtitle="The live field map surface from the reference CRM is now exposed in the dashboard." points={['Track active field coverage and technician movement.', 'Keep the route visible behind authenticated access.', 'Use this as the dashboard entry point for field visibility.']} />;
-            case 'attendance': return <LegacySurfaceScreen eyebrow="Operations" title="Attendance" subtitle="Attendance and shift coverage remain accessible from the admin shell." points={['Review punch history and availability.', 'Keep shift visibility aligned with dashboard settings.', 'Use the same authenticated session as the CRM.']} />;
+            case 'attendance': return <AttendanceScreen />;
             case 'targets': return <LegacySurfaceScreen eyebrow="Management" title="Targets" subtitle="Target tracking stays visible as its own admin screen." points={['Monitor goal progress and closure performance.', 'Keep the view tied to reporting data.', 'Expose the route directly in the admin menu.']} />;
-            case 'amc': return <LegacySurfaceScreen eyebrow="Service" title="AMC" subtitle="AMC tracking is preserved as a dashboard entry." points={['Manage maintenance contracts and renewals.', 'Link AMC work to ticket and customer history.', 'Keep the same admin access rules.']} />;
-            case 'feedback': return <LegacySurfaceScreen eyebrow="Management" title="Feedback" subtitle="Customer feedback now has a dedicated route in the app." points={['Review service comments and satisfaction notes.', 'Tie feedback back to tickets and orders.', 'Use it as a management review surface.']} />;
+            case 'amc': return <AMCScreen />;
+            case 'feedback': return <FeedbackScreen />;
             case 'profit': return <LegacySurfaceScreen eyebrow="Reports" title="Profit" subtitle="Profit analysis is available as a dashboard route." points={['Review revenue and cost summaries.', 'Keep it within the authenticated reporting stack.', 'Mirror the original navigation item.']} />;
             case 'weekly-report': return <LegacySurfaceScreen eyebrow="Reports" title="Weekly Report" subtitle="Weekly reporting is now visible in the dashboard menu." points={['Summarize weekly operational activity.', 'Stay aligned with the legacy admin sidebar.', 'Use the same session and role checks.']} />;
             case 'sales': return <LegacySurfaceScreen eyebrow="Management" title="Sales" subtitle="Sales tracking remains an admin-only entry point." points={['Review sales-related service totals.', 'Keep the route available under the CRM shell.', 'Match the reference dashboard navigation.']} />;
-            case 'parts-catalog': return <LegacySurfaceScreen eyebrow="Inventory" title="Parts Catalog" subtitle="Parts catalog access is surfaced alongside inventory and engineer parts." points={['Review part references and stock identifiers.', 'Keep it tied to the same inventory data layer.', 'Expose the catalog as a first-class dashboard item.']} />;
-            case 'fault-finder': return <LegacySurfaceScreen eyebrow="Tools" title="Fault Finder" subtitle="Troubleshooting support is preserved as a utility screen." points={['Help agents narrow device faults quickly.', 'Keep the route under authenticated access.', 'Mirror the legacy utility entry point.']} />;
+            case 'parts-catalog': return <PartsCatalogScreen />;
+            case 'fault-finder': return <FaultFinderScreen />;
             case 'route-planning': return <LegacySurfaceScreen eyebrow="Operations" title="Route Planning" subtitle="Route planning stays available as a standalone dashboard surface." points={['Plan the day’s field visit order.', 'Keep it aligned with tickets and courier work.', 'Preserve the original route entry point.']} />;
             case 'inquiries': return <LegacySurfaceScreen eyebrow="Operations" title="Inquiries" subtitle="Inquiry handling remains accessible from the admin shell." points={['Review public questions and request leads.', 'Tie the data back to the service flow.', 'Use the same CRM authentication.']} />;
             case 'auto-inventory': return <LegacySurfaceScreen eyebrow="Automation" title="Auto Inventory" subtitle="Automated inventory surfacing is preserved as an admin route." points={['Show automation-driven inventory signals.', 'Keep it under admin-only access.', 'Mirror the legacy automation menu item.']} />;
