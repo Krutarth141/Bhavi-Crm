@@ -32,6 +32,10 @@ import SalesScreen from '@/components/screens/SalesScreen';
 import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import AutoSitesScreen from '@/components/screens/AutoSitesScreen';
 import AutoInventoryScreen from '@/components/screens/AutoInventoryScreen';
+import ProfitScreen from '@/components/screens/ProfitScreen';
+import WeeklyReportScreen from '@/components/screens/WeeklyReportScreen';
+import AutoVisitsReportScreen from '@/components/screens/AutoVisitsReportScreen';
+import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
 
 import '@/styles/dashboard.css';
 
@@ -90,7 +94,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'worklogs', label: '🕒 Work Logs' },
     { id: 'engineers', label: '👷 Engineers' },
     { id: 'master', label: '🗂️ Master Data' },
-    { id: 'settings', label: '⚙️ Settings' },  // ← was separate User Mgmt + Settings
+    { id: 'settings', label: '⚙️ Settings' },
     { id: 'live-map', label: '📍 Live Map' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'targets', label: '🎯 Targets' },
@@ -140,16 +144,15 @@ export default function AdminDashboard() {
             case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
             case 'feedback': return <FeedbackScreen />;
-            case 'profit': return <LegacySurfaceScreen eyebrow="Reports" title="Profit" subtitle="Profit analysis is available as a dashboard route." points={['Review revenue and cost summaries.', 'Keep it within the authenticated reporting stack.', 'Mirror the original navigation item.']} />;
-            case 'weekly-report': return <LegacySurfaceScreen eyebrow="Reports" title="Weekly Report" subtitle="Weekly reporting is now visible in the dashboard menu." points={['Summarize weekly operational activity.', 'Stay aligned with the legacy admin sidebar.', 'Use the same session and role checks.']} />;
+            case 'profit': return <ProfitScreen />;
+            case 'weekly-report': return <WeeklyReportScreen />;
             case 'sales': return <SalesScreen />;
             case 'parts-catalog': return <PartsCatalogScreen />;
             case 'fault-finder': return <FaultFinderScreen />;
-            case 'route-planning': return <LegacySurfaceScreen eyebrow="Operations" title="Route Planning" subtitle="Route planning stays available as a standalone dashboard surface." points={['Plan the day’s field visit order.', 'Keep it aligned with tickets and courier work.', 'Preserve the original route entry point.']} />;
-            case 'inquiries': return <InquiriesScreen />;
+            case 'route-planning': return <RoutePlanningScreen />;
             case 'auto-inventory': return <AutoInventoryScreen />;
             case 'auto-sites': return <AutoSitesScreen />;
-            case 'auto-visits-report': return <LegacySurfaceScreen eyebrow="Automation" title="Visit Report" subtitle="Automated visit reporting is available from the admin menu." points={['Review visit summaries and automation results.', 'Keep the route aligned to the legacy sidebar.', 'Treat it as a management report surface.']} />;
+            case 'auto-visits-report': return <AutoVisitsReportScreen />;
             case 'ai-agent': return <LegacySurfaceScreen eyebrow="AI Agent" title="Virtual AI Agent" subtitle="The AI agent entry point is now visible inside the dashboard." points={['Reserve the agent workspace route.', 'Keep it behind the current auth/session flow.', 'Use it as the integration point for future agent work.']} />;
             case 'ai-analysis': return <LegacySurfaceScreen eyebrow="AI Agent" title="AI Analysis" subtitle="The AI analysis surface remains available as a dashboard route." points={['Show AI-generated summaries and insights.', 'Keep it behind authenticated access.', 'Mirror the reference app’s navigation item.']} />;
             case 'report-edit': return <LegacySurfaceScreen eyebrow="Workflow" title="Report Edit" subtitle="The report edit workflow from the reference app is now surfaced as a dedicated route." points={['Capture edits before approval.', 'Keep the workflow tied to report management.', 'Use the existing CRM shell and auth flow.']} />;
