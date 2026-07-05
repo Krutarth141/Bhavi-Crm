@@ -19,7 +19,7 @@ export default function TicketsScreen() {
     userRole: currentUserRole,
     userId: currentUserId,
   });
-  const { engineers, loading: engineersLoading, error: engineersError, fetchEngineers: refetchEngineers } = useEngineers();
+  const { engineers, loading: engineersLoading, error: engineersError, loadEngineers: refetchEngineers } = useEngineers()
   const { formData, handleFormChange, setFormValues, resetForm } = useTicketForm();
 
   const [filterStatus, setFilterStatus] = useState('all');

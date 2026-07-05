@@ -324,7 +324,7 @@ export default function EngPartsAdmin({
                       return (
                         <tr key={log.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
-                            {new Date(log.created_at).toLocaleDateString()}
+                            {new Date(log.created_at ?? '').toLocaleDateString()}
                           </td>
                           <td style={styles.tableCell}>{log.eng_name}</td>
                           <td style={styles.tableCell}>{part?.item_name ?? log.part_id}</td>
@@ -383,7 +383,7 @@ export default function EngPartsAdmin({
                     return (
                       <tr key={log.id} style={styles.tableRow}>
                         <td style={styles.tableCell}>
-                          {new Date(log.created_at).toLocaleDateString()}
+                          {new Date(log.created_at ?? '').toLocaleDateString()}
                         </td>
                         <td style={styles.tableCell}>
                           <span style={actionBadgeStyle(log.action)}>{log.action}</span>

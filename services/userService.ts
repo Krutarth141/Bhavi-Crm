@@ -37,7 +37,7 @@ export const createUser = async (form: UserFormData): Promise<void> => {
 
 // ─── Update user ──────────────────────────────────────────────────────────────
 
-export const updateUser = async (id: string, form: Partial<UserFormData>): Promise<void> => {
+export const updateUser = async (id: number, form: Partial<UserFormData>): Promise<void> => {
     const res = await fetch(`/api/admin/engineers/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -50,15 +50,11 @@ export const updateUser = async (id: string, form: Partial<UserFormData>): Promi
     }
 };
 
-// ─── Toggle active ────────────────────────────────────────────────────────────
-
-export const toggleUserActive = async (id: string, is_active: boolean): Promise<void> => {
+export const toggleUserActive = async (id: number, is_active: boolean): Promise<void> => {
     await updateUser(id, { is_active });
 };
 
-// ─── Delete user ──────────────────────────────────────────────────────────────
-
-export const deleteUser = async (id: string): Promise<void> => {
+export const deleteUser = async (id: number): Promise<void> => {
     const res = await fetch(`/api/admin/engineers/${id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -69,8 +65,6 @@ export const deleteUser = async (id: string): Promise<void> => {
     }
 };
 
-// ─── Change own password ──────────────────────────────────────────────────────
-
-export const changePassword = async (id: string, password: string): Promise<void> => {
+export const changePassword = async (id: number, password: string): Promise<void> => {
     await updateUser(id, { password } as any);
 };
