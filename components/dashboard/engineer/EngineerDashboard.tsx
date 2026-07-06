@@ -10,8 +10,9 @@ import ReportsScreen from '@/components/screens/ReportsScreen';
 // New screens
 import MyCallsScreen from '@/components/screens/MyCallsScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
+import EngineerUpdateScreen from '@/components/screens/EngineerUpdateScreen';
 
-type EngineerTab = 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports';
+type EngineerTab = 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'engineer-update';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'my-calls', label: '📞 My Calls' },
@@ -19,6 +20,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'tickets', label: '🎫 My Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'reports', label: '📈 My Reports' },
+    { id: 'engineer-update', label: '🛠️ Engineer Update' },
 ];
 
 export default function EngineerDashboard() {
@@ -31,6 +33,7 @@ export default function EngineerDashboard() {
             case 'tickets': return <TicketsScreen />;
             case 'eng-parts': return <EngPartsScreen />;
             case 'reports': return <ReportsScreen />;
+            case 'engineer-update': return <EngineerUpdateScreen />;
             default: return null;
         }
     };

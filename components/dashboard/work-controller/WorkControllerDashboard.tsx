@@ -14,6 +14,8 @@ import WalkInReportScreen from '@/components/screens/WalkInReportScreen';
 import CourierScreen from '@/components/screens/CourierScreen';
 import CourierReportScreen from '@/components/screens/CourierReportScreen';
 import PendingListScreen from '@/components/screens/PendingListScreen';
+import InquiriesScreen from '@/components/screens/InquiriesScreen';
+import AttendanceScreen from '@/components/screens/AttendanceScreen';
 
 type WorkControllerTab =
     | 'tickets'
@@ -24,7 +26,9 @@ type WorkControllerTab =
     | 'walkin-report'
     | 'courier'
     | 'courier-report'
-    | 'reports';
+    | 'reports'
+    | 'inquiries'
+    | 'attendance';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'tickets', label: '🎫 Tickets' },
@@ -36,6 +40,8 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'courier', label: '🚚 Courier' },
     { id: 'courier-report', label: '📑 Courier Report' },
     { id: 'reports', label: '📈 Reports' },
+    { id: 'inquiries', label: '🔎 Inquiries' },
+    { id: 'attendance', label: '🗓️ Attendance' },
 ];
 
 export default function WorkControllerDashboard() {
@@ -52,6 +58,8 @@ export default function WorkControllerDashboard() {
             case 'courier': return <CourierScreen />;
             case 'courier-report': return <CourierReportScreen />;
             case 'reports': return <ReportsScreen />;
+            case 'inquiries': return <InquiriesScreen />;
+            case 'attendance': return <AttendanceScreen />;
             default: return null;
         }
     };
