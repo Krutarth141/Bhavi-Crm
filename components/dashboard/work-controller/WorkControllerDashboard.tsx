@@ -18,17 +18,9 @@ import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
 
 type WorkControllerTab =
-    | 'tickets'
-    | 'pending'
-    | 'tasks'
-    | 'customers'
-    | 'walkin'
-    | 'walkin-report'
-    | 'courier'
-    | 'courier-report'
-    | 'reports'
-    | 'inquiries'
-    | 'attendance';
+    | 'tickets' | 'pending' | 'tasks' | 'customers'
+    | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
+    | 'reports' | 'inquiries' | 'attendance';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'tickets', label: '🎫 Tickets' },
@@ -46,6 +38,12 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
 
 export default function WorkControllerDashboard() {
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('tickets');
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    const handleNavClick = (id: WorkControllerTab) => {
+        setActiveTab(id);
+        setSidebarOpen(false);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -66,15 +64,28 @@ export default function WorkControllerDashboard() {
 
     return (
         <div className="work-controller-dashboard">
-            <div className="dashboard-sidebar">
+
+            {/* Overlay */}
+            {sidebarOpen && (
+                <div
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 998 }}
+                />
+            )}
+
+            {/* Sidebar */}
+            <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
-                    <h2>Work Controller Menu</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
+                        <h2 style={{ margin: 0 }}>Work Controller Menu</h2>
+                        <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
+                    </div>
                     <ul>
                         {NAV_ITEMS.map(item => (
                             <li key={item.id}>
                                 <button
                                     className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => setActiveTab(item.id)}
+                                    onClick={() => handleNavClick(item.id)}
                                 >
                                     {item.label}
                                 </button>
@@ -84,9 +95,22 @@ export default function WorkControllerDashboard() {
                 </nav>
             </div>
 
-            <div className="dashboard-content">
-                {renderContent()}
+            {/* Main */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                {/* Mobile top bar */}
+                <div className="mobile-topbar">
+                    <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+                        <span /><span /><span />
+                    </button>
+                    <span className="mobile-topbar-title">
+                        {NAV_ITEMS.find(n => n.id === activeTab)?.label}
+                    </span>
+                </div>
+                <div className="dashboard-content">
+                    {renderContent()}
+                </div>
             </div>
+
         </div>
     );
 }

@@ -13,10 +13,7 @@ export function useMyCalls(engId: string, engName: string) {
     const [error, setError] = useState<string | null>(null);
 
     const fetchAll = useCallback(async () => {
-        if (!engId) {
-            setLoading(false);
-            return;
-        }
+        if (!engId) { setLoading(false); return; }
 
         try {
             setLoading(true);
@@ -34,13 +31,13 @@ export function useMyCalls(engId: string, engName: string) {
                     .from('punch_logs')
                     .select('*')
                     .eq('eng_id', engId)
-                    .eq('log_date', today)
+                    .eq('punch_in_date', today)   // ← was log_date
                     .maybeSingle(),
                 supabase
                     .from('work_logs')
                     .select('*')
                     .eq('eng_id', engId)
-                    .eq('log_date', today)
+                    .eq('log_date', today)         // keep as-is — check work_logs schema
                     .order('from_time'),
                 supabase
                     .from('tickets')
@@ -49,7 +46,7 @@ export function useMyCalls(engId: string, engName: string) {
                     .not(
                         'status',
                         'in',
-                        `(${MY_CALLS_CLOSED_STATUSES.map((s) => `"${s}"`).join(',')})`
+                        `(${MY_CALLS_CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`
                     )
                     .order('sequence_no', { ascending: true, nullsFirst: false }),
                 supabase
@@ -77,17 +74,7 @@ export function useMyCalls(engId: string, engName: string) {
         }
     }, [engId]);
 
-    useEffect(() => {
-        fetchAll();
-    }, [fetchAll]);
+    useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    return {
-        punchLog,
-        workLogs,
-        myTickets,
-        myTasks,
-        loading,
-        error,
-        refetch: fetchAll,
-    };
+    return { punchLog, workLogs, myTickets, myTasks, loading, error, refetch: fetchAll };
 }

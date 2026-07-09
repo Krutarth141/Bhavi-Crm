@@ -46,43 +46,14 @@ import AIAnalysisScreen from '@/components/screens/AIAnalysisScreen';
 import '@/styles/dashboard.css';
 
 type AdminTab =
-    | 'overview'
-    | 'tickets'
-    | 'pending'
-    | 'inventory'
-    | 'eng-parts'
-    | 'tasks'
-    | 'customers'
-    | 'walkin'
-    | 'walkin-report'
-    | 'courier'
-    | 'courier-report'
-    | 'reports'
-    | 'worklogs'
-    | 'engineers'
-    | 'master'
-    | 'settings'
-    | 'live-map'
-    | 'attendance'
-    | 'targets'
-    | 'amc'
-    | 'feedback'
-    | 'profit'
-    | 'weekly-report'
-    | 'sales'
-    | 'parts-catalog'
-    | 'fault-finder'
-    | 'route-planning'
-    | 'inquiries'
-    | 'auto-inventory'
-    | 'auto-sites'
-    | 'auto-visits-report'
-    | 'ai-agent'
-    | 'ai-analysis'
-    | 'report-edit'
-    | 'customer-approval'
-    | 'engineer-update'
-    | 'part-request';
+    | 'overview' | 'tickets' | 'pending' | 'inventory' | 'eng-parts'
+    | 'tasks' | 'customers' | 'walkin' | 'walkin-report' | 'courier'
+    | 'courier-report' | 'reports' | 'worklogs' | 'engineers' | 'master'
+    | 'settings' | 'live-map' | 'attendance' | 'targets' | 'amc'
+    | 'feedback' | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
+    | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
+    | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
+    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -126,6 +97,12 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
 
 export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    const handleNavClick = (id: AdminTab) => {
+        setActiveTab(id);
+        setSidebarOpen(false);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -172,15 +149,28 @@ export default function AdminDashboard() {
 
     return (
         <div className="admin-dashboard">
-            <div className="dashboard-sidebar">
+
+            {/* Overlay */}
+            {sidebarOpen && (
+                <div
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 998 }}
+                />
+            )}
+
+            {/* Sidebar */}
+            <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
-                    <h2>Admin Menu</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
+                        <h2 style={{ margin: 0 }}>Admin Menu</h2>
+                        <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
+                    </div>
                     <ul>
                         {NAV_ITEMS.map(item => (
                             <li key={item.id}>
                                 <button
                                     className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => setActiveTab(item.id)}
+                                    onClick={() => handleNavClick(item.id)}
                                 >
                                     {item.label}
                                 </button>
@@ -189,9 +179,23 @@ export default function AdminDashboard() {
                     </ul>
                 </nav>
             </div>
-            <div className="dashboard-content">
-                {renderContent()}
+
+            {/* Main */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                {/* Mobile top bar */}
+                <div className="mobile-topbar">
+                    <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+                        <span /><span /><span />
+                    </button>
+                    <span className="mobile-topbar-title">
+                        {NAV_ITEMS.find(n => n.id === activeTab)?.label}
+                    </span>
+                </div>
+                <div className="dashboard-content">
+                    {renderContent()}
+                </div>
             </div>
+
         </div>
     );
 }

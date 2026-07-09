@@ -58,11 +58,13 @@ export const styles = {
         borderRadius: '10px',
         boxShadow: colors.shadow,
         padding: '16px',
+        overflowX: 'auto' as const,  // ← FIX: table scroll on mobile
     },
     table: {
         width: '100%',
         borderCollapse: 'collapse' as const,
         fontSize: '13px',
+        minWidth: '800px',  // ← FIX: force horizontal scroll instead of squishing
     },
     tableHeader: {
         background: '#f8fafc',
@@ -123,42 +125,15 @@ export const styles = {
         fontSize: '11px',
         fontWeight: 600,
     },
-    badgePending: {
-        backgroundColor: '#ffe4e6',
-        color: '#be123c',
-    },
-    badgeOpen: {
-        backgroundColor: '#dbeafe',
-        color: '#1a56db',
-    },
-    badgeProgress: {
-        backgroundColor: '#fef3c7',
-        color: '#d97706',
-    },
-    badgeClosed: {
-        backgroundColor: '#d1fae5',
-        color: '#065f46',
-    },
-    badgeHold: {
-        backgroundColor: '#f3e8ff',
-        color: '#7c3aed',
-    },
-    badgeCancel: {
-        backgroundColor: '#f1f5f9',
-        color: '#475569',
-    },
-    badgeReject: {
-        backgroundColor: '#fef2f2',
-        color: '#dc2626',
-    },
-    badgeApprove: {
-        backgroundColor: '#d1fae5',
-        color: '#065f46',
-    },
-    badgeWarranty: {
-        backgroundColor: '#e0e7ff',
-        color: '#4338ca',
-    },
+    badgePending: { backgroundColor: '#ffe4e6', color: '#be123c' },
+    badgeOpen: { backgroundColor: '#dbeafe', color: '#1a56db' },
+    badgeProgress: { backgroundColor: '#fef3c7', color: '#d97706' },
+    badgeClosed: { backgroundColor: '#d1fae5', color: '#065f46' },
+    badgeHold: { backgroundColor: '#f3e8ff', color: '#7c3aed' },
+    badgeCancel: { backgroundColor: '#f1f5f9', color: '#475569' },
+    badgeReject: { backgroundColor: '#fef2f2', color: '#dc2626' },
+    badgeApprove: { backgroundColor: '#d1fae5', color: '#065f46' },
+    badgeWarranty: { backgroundColor: '#e0e7ff', color: '#4338ca' },
     modalOverlay: {
         position: 'fixed' as const,
         inset: 0,

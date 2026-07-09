@@ -135,6 +135,56 @@
   font-weight: 600;
 }
 
+/* ── Mobile elements — hidden on desktop ── */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.mobile-topbar-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.hamburger-btn {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.hamburger-btn span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #374151;
+  border-radius: 2px;
+}
+
+/* ← FIXED: defined BEFORE media query so mobile override works correctly */
+.sidebar-close-btn {
+  display: none !important;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
 /* Content Sections */
 .content-section {
   background: white;
@@ -178,7 +228,9 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .stat-card:hover {
@@ -341,11 +393,9 @@
 .priority-high {
   background: #ef4444;
 }
-
 .priority-medium {
   background: #f59e0b;
 }
-
 .priority-low {
   background: #10b981;
 }
@@ -380,7 +430,6 @@
 .btn-danger {
   background: #ef4444;
 }
-
 .btn-danger:hover {
   background: #dc2626;
 }
@@ -518,49 +567,72 @@
   }
 }
 
-/* Responsive */
+/* ══════════════════════════════════════
+   MOBILE — Hamburger Drawer
+   ══════════════════════════════════════ */
 @media (max-width: 768px) {
   .admin-dashboard,
   .engineer-dashboard,
   .work-controller-dashboard {
     flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 80px);
   }
 
-  .dashboard-sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .dashboard-nav ul {
+  /* Show mobile elements */
+  .mobile-topbar {
     display: flex;
-    overflow-x: auto;
+  }
+  .hamburger-btn {
+    display: flex;
+  }
+  .sidebar-close-btn {
+    display: block;
+  } /* ← now works because base is display:none above */
+
+  /* Sidebar — fixed drawer from left */
+  .dashboard-sidebar {
+    position: fixed !important;
+    left: -270px;
+    top: 0;
+    height: 100vh;
+    width: 260px;
+    z-index: 999;
+    transition: left 0.25s ease;
+    overflow-y: auto;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+    border-right: none;
+  }
+
+  .dashboard-sidebar.open {
+    left: 0;
+  }
+
+  /* Nav — vertical list */
+  .dashboard-nav ul {
+    display: block;
   }
 
   .dashboard-nav li {
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid #e5e7eb;
+    flex-shrink: unset;
+    border-right: none;
+    border-bottom: 1px solid #f3f4f6;
   }
 
   .dashboard-content {
     padding: 1rem;
   }
-
   .form-row {
     grid-template-columns: 1fr;
   }
-
   .section-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
   }
-
   .stats-grid {
     grid-template-columns: 1fr;
   }
-
   .user-info {
     flex-direction: column;
     gap: 0.5rem;

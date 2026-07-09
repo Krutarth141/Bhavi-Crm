@@ -25,6 +25,12 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
 
 export default function EngineerDashboard() {
     const [activeTab, setActiveTab] = useState<EngineerTab>('my-calls');
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    const handleNavClick = (id: EngineerTab) => {
+        setActiveTab(id);
+        setSidebarOpen(false);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -40,15 +46,28 @@ export default function EngineerDashboard() {
 
     return (
         <div className="engineer-dashboard">
-            <div className="dashboard-sidebar">
+
+            {/* Overlay */}
+            {sidebarOpen && (
+                <div
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 998 }}
+                />
+            )}
+
+            {/* Sidebar */}
+            <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
-                    <h2>Engineer Menu</h2>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
+                        <h2 style={{ margin: 0 }}>Engineer Menu</h2>
+                        <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
+                    </div>
                     <ul>
                         {NAV_ITEMS.map(item => (
                             <li key={item.id}>
                                 <button
                                     className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => setActiveTab(item.id)}
+                                    onClick={() => handleNavClick(item.id)}
                                 >
                                     {item.label}
                                 </button>
@@ -58,9 +77,22 @@ export default function EngineerDashboard() {
                 </nav>
             </div>
 
-            <div className="dashboard-content">
-                {renderContent()}
+            {/* Main */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                {/* Mobile top bar */}
+                <div className="mobile-topbar">
+                    <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+                        <span /><span /><span />
+                    </button>
+                    <span className="mobile-topbar-title">
+                        {NAV_ITEMS.find(n => n.id === activeTab)?.label}
+                    </span>
+                </div>
+                <div className="dashboard-content">
+                    {renderContent()}
+                </div>
             </div>
+
         </div>
     );
 }
