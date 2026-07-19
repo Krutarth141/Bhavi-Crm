@@ -1,18 +1,47 @@
 import { supabase } from '@/lib/supabase';
-import { PunchLog } from '@/types/attendance';
+import { PunchLog, ATT_EXCLUDED_IDS } from '@/types/attendance';
 import * as XLSX from 'xlsx';
 
-export const fetchPunchLogs = async (): Promise<PunchLog[]> => {
+export const fetchPunchLogs = async (params: {
+    from?: string;
+    to?: string;
+    empId?: string; // filters to one employee; for non-admins pass their own id
+}): Promise<PunchLog[]> => {
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('punch_logs')
             .select('*')
-            .order('created_at', { ascending: false })
-            .limit(500);
+            .order('punch_in_date', { ascending: false })
+            .order('created_at', { ascending: false });
+        if (params.from) query = query.gte('punch_in_date', params.from);
+        if (params.to) query = query.lte('punch_in_date', params.to);
+        if (params.empId) query = query.eq('eng_id', params.empId);
+        const { data, error } = await query;
         if (error) throw error;
-        return data || [];
+        // Office/reception logins never punch — drop historical rows too.
+        return (data || []).filter((l: any) => !ATT_EXCLUDED_IDS.includes(l.eng_id));
     } catch (err) {
         console.error('Failed to fetch punch logs:', err);
+        return [];
+    }
+};
+
+// Active punchable employees — for the admin filter dropdown and roster mode.
+// Pure admins (non-WC) don't punch; excluded like HTML does.
+export const fetchAttendanceEmployees = async (): Promise<{ user_id: string; name: string; role: string; role_type?: string }[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('user_id, name, role, role_type')
+            .eq('is_active', true)
+            .order('name');
+        if (error) throw error;
+        return (data || []).filter((u: any) =>
+            !ATT_EXCLUDED_IDS.includes(u.user_id) &&
+            !(u.role === 'admin' && u.role_type !== 'work_controller')
+        );
+    } catch (err) {
+        console.error('Failed to fetch employees:', err);
         return [];
     }
 };
