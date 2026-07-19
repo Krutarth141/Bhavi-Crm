@@ -1,3 +1,11 @@
+export interface TicketSpare {
+    name?: string;
+    code?: string;
+    qty?: number;
+    price?: number;      // MRP, GST-inclusive
+    gst_pct?: number;
+}
+
 export interface Ticket {
     id: string;
     call_type: string;
@@ -36,6 +44,14 @@ export interface Ticket {
     priority?: string;
     fault_code?: string;
     action?: string;
+    timeline?: any[];
+    spares?: TicketSpare[];
+    other_charge?: number;
+    parts_cost?: number;
+    eng_remarks?: string;
+    work_done?: string;
+    invoice_done?: boolean;
+    invoice_no?: string;
 }
 
 export const statusBadges: Record<string, string> = {

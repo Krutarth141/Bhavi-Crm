@@ -5,7 +5,22 @@ import {
     PortalService, PortalServiceForm,
     TelegramSettings,
 } from '@/types/settings';
+import { CompanyInfo } from '@/types/companyInfo';
 
+export const fetchCompanyInfo = async (): Promise<CompanyInfo | null> => {
+    try {
+        const { data, error } = await supabase.from('company_info').select('*').single();
+        if (error) return null;
+        return data;
+    } catch {
+        return null;
+    }
+};
+
+export const saveCompanyInfo = async (info: Partial<CompanyInfo>): Promise<void> => {
+    const { error } = await supabase.from('company_info').upsert([{ id: 1, ...info }]);
+    if (error) throw error;
+};
 // ─── Shift Settings ───────────────────────────────────────────────────────────
 
 export const fetchShiftSettings = async (): Promise<ShiftSettings | null> => {

@@ -10,6 +10,8 @@ import { useTicketForm } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
 import { createTicket, updateTicket, updateTicketRemarks, closeTicket } from '@/services/ticketService';
 import { printTicket, getBadgeStyle } from '@/utils/printTicket';
+import { generateInvoice } from '@/utils/printInvoice';
+import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -28,6 +30,8 @@ export default function TicketsScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'pending' | 'done'>('all');
+  const [invoiceModalTicket, setInvoiceModalTicket] = useState<Ticket | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -39,6 +43,9 @@ export default function TicketsScreen() {
     }
     return false;
   };
+
+  const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && t.status === 'Closed';
+  const canMarkInvoice = currentUserRole === 'admin' || currentUserRole === 'work_controller';
 
   const allowedStatusOptions = useMemo(() => {
     if (modalMode !== 'edit' || !selectedTicket) return statusOptions;
@@ -201,9 +208,12 @@ export default function TicketsScreen() {
         ticket.mobile.includes(searchTerm) ||
         ticket.serial.includes(searchTerm) ||
         ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
+      const matchesInvoice = invoiceFilter === 'all'
+        || (invoiceFilter === 'pending' && isInvoiceable(ticket) && !ticket.invoice_done)
+        || (invoiceFilter === 'done' && isInvoiceable(ticket) && ticket.invoice_done);
+      return matchesStatus && matchesSearch && matchesInvoice;
     });
-  }, [tickets, filterStatus, searchTerm]);
+  }, [tickets, filterStatus, searchTerm, invoiceFilter]);
 
   const screenTitle = currentUserRole === 'engineer' ? '🎫 My Tickets' : '🎫 All Tickets';
 
@@ -224,6 +234,11 @@ export default function TicketsScreen() {
           <option value="all">All</option>
           {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
         </select>
+        <select value={invoiceFilter} onChange={(e) => setInvoiceFilter(e.target.value as any)} style={styles.filterSelect}>
+          <option value="all">All Invoice</option>
+          <option value="pending">🧾 Invoice Pending</option>
+          <option value="done">✅ Invoice Done</option>
+        </select>
       </div>
 
       {loading ? <div style={styles.loadingText}>Loading...</div> : filteredTickets.length === 0 ? <div style={styles.emptyMessage}>{tickets.length === 0 ? 'No tickets' : 'No matches'}</div> : (
@@ -241,6 +256,7 @@ export default function TicketsScreen() {
                 <th style={styles.tableHeader}>Service</th>
                 <th style={styles.tableHeader}>Problem</th>
                 <th style={styles.tableHeader}>Status</th>
+                <th style={styles.tableHeader}>Invoice</th>
                 <th style={styles.tableHeader}>Engineer</th>
                 <th style={styles.tableHeader}>Action</th>
               </tr>
@@ -258,6 +274,13 @@ export default function TicketsScreen() {
                   <td style={styles.tableCell}>{t.service_type}</td>
                   <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.problem}</td>
                   <td style={styles.tableCell}><span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
+                  <td style={styles.tableCell}>
+                    {isInvoiceable(t) && (
+                      t.invoice_done
+                        ? <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Inv</span>
+                        : <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>🧾 Pending</span>
+                    )}
+                  </td>
                   <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.assigned_name || '—'}</td>
                   <td style={styles.tableCell}>
                     <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
@@ -379,6 +402,16 @@ export default function TicketsScreen() {
                       🔒 Close Ticket
                     </button>
                   )}
+                  {isInvoiceable(selectedTicket!) && (
+                    <button style={{ ...styles.btn, background: '#7c3aed', color: 'white' }} onClick={() => generateInvoice(selectedTicket!)}>
+                      🧾 Invoice
+                    </button>
+                  )}
+                  {isInvoiceable(selectedTicket!) && canMarkInvoice && (
+                    <button style={{ ...styles.btn, background: selectedTicket!.invoice_done ? '#6b7280' : '#f59e0b', color: 'white' }} onClick={() => setInvoiceModalTicket(selectedTicket)}>
+                      {selectedTicket!.invoice_done ? `✏️ Edit Invoice #${selectedTicket!.invoice_no}` : '🧾 Add Invoice No.'}
+                    </button>
+                  )}
                   <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
                     💾 Save Remarks
                   </button>
@@ -391,6 +424,17 @@ export default function TicketsScreen() {
             </div>
           </div>
         </div>
+      )}
+      {invoiceModalTicket && (
+        <InvoiceModal
+          ticket={invoiceModalTicket}
+          updatedBy={(session?.user as any)?.name || currentUserRole || ''}
+          onClose={() => setInvoiceModalTicket(null)}
+          onDone={async () => {
+            setInvoiceModalTicket(null);
+            await fetchTickets();
+          }}
+        />
       )}
     </div>
   );

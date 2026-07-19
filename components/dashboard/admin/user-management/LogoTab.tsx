@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchCompanyInfo, saveCompanyInfo } from '@/services/settingsService';
 
 const fieldStyle = {
     width: '100%', padding: '8px 12px', border: '1px solid var(--border)',
@@ -19,6 +20,11 @@ export default function LogoTab() {
     const [companyPhone, setCompanyPhone] = useState('');
     const [companyEmail, setCompanyEmail] = useState('');
     const [companyAddress, setCompanyAddress] = useState('');
+    const [gstNo, setGstNo] = useState('');
+    const [gstPct, setGstPct] = useState('18');
+    const [laborGstPct, setLaborGstPct] = useState('18');
+    const [website, setWebsite] = useState('');
+    const [terms, setTerms] = useState('• Warranty on repaired parts: 90 days\n• No warranty on physical/liquid damage\n• Uncollected products after 30 days attract storage charges');
     const [savingInfo, setSavingInfo] = useState(false);
 
     const fileRef = useRef<HTMLInputElement>(null);
@@ -27,20 +33,18 @@ export default function LogoTab() {
 
     useEffect(() => {
         const load = async () => {
-            try {
-                const { data } = await supabase
-                    .from('company_info')
-                    .select('*')
-                    .single();
-                if (data) {
-                    setLogoUrl(data.logo_url || null);
-                    setCompanyName(data.company_name || 'BHAVI ELECTRONICS');
-                    setCompanyPhone(data.phone || '');
-                    setCompanyEmail(data.email || '');
-                    setCompanyAddress(data.address || '');
-                }
-            } catch {
-                // company_info may not exist yet — ok
+            const data = await fetchCompanyInfo();
+            if (data) {
+                setLogoUrl(data.logo_url || null);
+                setCompanyName(data.company_name || 'BHAVI ELECTRONICS');
+                setCompanyPhone(data.phone || '');
+                setCompanyEmail(data.email || '');
+                setCompanyAddress(data.address || '');
+                setGstNo(data.gst_no || '');
+                setGstPct(String(data.gst_pct ?? 18));
+                setLaborGstPct(String(data.labor_gst_pct ?? 18));
+                setWebsite(data.website || '');
+                if (data.terms) setTerms(data.terms);
             }
         };
         load();
@@ -103,16 +107,17 @@ export default function LogoTab() {
     const handleSaveInfo = async () => {
         setSavingInfo(true);
         try {
-            const { error } = await supabase
-                .from('company_info')
-                .upsert([{
-                    id: 1,
-                    company_name: companyName,
-                    phone: companyPhone,
-                    email: companyEmail,
-                    address: companyAddress,
-                }]);
-            if (error) throw error;
+            await saveCompanyInfo({
+                company_name: companyName,
+                phone: companyPhone,
+                email: companyEmail,
+                address: companyAddress,
+                gst_no: gstNo,
+                gst_pct: Number(gstPct) || 18,
+                labor_gst_pct: Number(laborGstPct) || 18,
+                website,
+                terms,
+            });
             showMsg('✅ Company info saved!');
         } catch (e: any) {
             showMsg('Failed: ' + e.message, true);
@@ -219,6 +224,38 @@ export default function LogoTab() {
                             rows={3}
                             style={{ ...fieldStyle, resize: 'vertical' }}
                         />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 14 }}>GST No</label>
+                            <input type="text" value={gstNo} onChange={e => setGstNo(e.target.value)} style={fieldStyle} />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 14 }}>Default Parts GST %</label>
+                            <select value={gstPct} onChange={e => setGstPct(e.target.value)} style={fieldStyle}>
+                                <option value="0">0% (Exempt)</option>
+                                <option value="5">5%</option>
+                                <option value="12">12%</option>
+                                <option value="18">18%</option>
+                                <option value="28">28%</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 14 }}>Labor / Service GST %</label>
+                            <select value={laborGstPct} onChange={e => setLaborGstPct(e.target.value)} style={fieldStyle}>
+                                <option value="0">0%</option>
+                                <option value="5">5%</option>
+                                <option value="18">18% (Standard)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 14 }}>Website</label>
+                        <input type="text" placeholder="bhavi-crm.github.io/bhavi-crm" value={website} onChange={e => setWebsite(e.target.value)} style={fieldStyle} />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 14 }}>Invoice Terms</label>
+                        <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3} style={{ ...fieldStyle, resize: 'vertical' }} />
                     </div>
                     <button
                         onClick={handleSaveInfo}

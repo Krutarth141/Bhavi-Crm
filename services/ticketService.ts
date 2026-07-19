@@ -112,6 +112,26 @@ export const updateTicketRemarks = async (ticketId: string, remarks: string): Pr
     return updateTicket(ticketId, { remarks });
 };
 
+export const markInvoiceDone = async (ticket: Ticket, invoiceNo: string, updatedBy: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const existing = ticket.timeline || [];
+        const now = new Date().toISOString();
+        const { error } = await supabase
+            .from('tickets')
+            .update({
+                invoice_done: true,
+                invoice_no: invoiceNo,
+                timeline: [...existing, { action: 'Invoice Done', by: updatedBy, at: now, note: `Invoice No: ${invoiceNo}` }],
+                updated_at: now,
+            })
+            .eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};
+
 export const closeTicket = async (ticketId: string, finalRemarks?: string): Promise<{ success: boolean; error?: string }> => {
     try {
         const updates: any = {
