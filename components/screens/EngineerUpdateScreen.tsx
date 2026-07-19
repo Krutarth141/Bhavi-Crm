@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useEngineerUpdate } from '@/hooks/useEngineerUpdate';
 import Modal from '@/components/Modal';
-import { EngineerTicket, ENGINEER_ALLOWED_TRANSITIONS, CLOSED_STATUSES, UpdateForm } from '@/types/engineerUpdate';
+import { EngineerTicket, UpdateForm } from '@/types/engineerUpdate';
+import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketStatus';
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -32,21 +33,29 @@ export default function EngineerUpdateScreen() {
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
-        const allowed = ENGINEER_ALLOWED_TRANSITIONS[ticket.status || ''] || [];
+        const allowed = getAllowedStatuses(ticket.status, 'engineer', ticket.service_type, ticket.call_type, ticket.warranty_coverage);
         setForm({ newStatus: allowed[0] || '', note: '', labour: String(ticket.labor || ticket.service_charges || '') });
         setModalOpen(true);
     };
 
     const handleSave = async () => {
         if (!selected || !form.newStatus) { alert('Select new status'); return; }
+
+        let note = form.note;
+        if (form.newStatus === 'Call Cancel') {
+            const reason = validateStatusChangeReason(selected.status, form.newStatus);
+            if (reason === null) return; // user cancelled the reason prompt
+            if (reason) note = note ? `${note}\n\nCancel reason: ${reason}` : `Cancel reason: ${reason}`;
+        }
+
         setSaving(true);
-        const r = await update(selected, form.newStatus, form.note, form.labour, userName);
+        const r = await update(selected, form.newStatus, note, form.labour, userName);
         if (r.success) { setModalOpen(false); }
         else alert('Error: ' + r.error);
         setSaving(false);
     };
 
-    const allowed = ENGINEER_ALLOWED_TRANSITIONS[selected?.status || ''] || [];
+    const allowed = getAllowedStatuses(selected?.status, 'engineer', selected?.service_type, selected?.call_type, selected?.warranty_coverage);
 
     const modalFooter = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -85,7 +94,7 @@ export default function EngineerUpdateScreen() {
                         <div style={{ display: 'grid', gap: 10 }}>
                             {tickets.map(t => {
                                 const sc = statusColor[t.status || ''] || { bg: '#f3f4f6', color: '#374151' };
-                                const canUpdate = !!(ENGINEER_ALLOWED_TRANSITIONS[t.status || '']?.length);
+                                const canUpdate = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage).length > 0;
                                 return (
                                     <div key={t.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

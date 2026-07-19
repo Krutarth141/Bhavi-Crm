@@ -39,14 +39,21 @@ export interface Ticket {
 }
 
 export const statusBadges: Record<string, string> = {
+    'Pending Customer Arrival': 'badge-pending',
     'Pending Allocation': 'badge-pending',
     'Assigned': 'badge-open',
     'In Progress': 'badge-progress',
     'Pending Customer Approval': 'badge-pending',
     'Customer Approved': 'badge-approve',
     'Pending Parts': 'badge-hold',
+    'Pending Engineer Stock': 'badge-hold',
     'Pending Repair Carry In': 'badge-hold',
     'Pending Repair On Site': 'badge-hold',
+    'Repaired': 'badge-progress',
+    'Sent to MSC': 'badge-hold',
+    'Pending for Delivery': 'badge-hold',
+    'Resolved By Phone': 'badge-closed',
+    'Delivered': 'badge-closed',
     'Closed': 'badge-closed',
     'Call Cancel': 'badge-cancel',
     'Customer Reject': 'badge-reject',
@@ -62,17 +69,23 @@ export const callTypeBadges: Record<string, string> = {
 };
 
 export const statusOptions = [
+    'Pending Customer Arrival',
     'Pending Allocation',
     'Assigned',
     'In Progress',
-    'Pending Customer Approval',
-    'Customer Approved',
-    'Pending Parts',
     'Pending Repair Carry In',
     'Pending Repair On Site',
-    'Closed',
-    'Call Cancel',
+    'Pending Parts',
+    'Pending Engineer Stock',
+    'Pending Customer Approval',
+    'Customer Approved',
     'Customer Reject',
+    'Call Cancel',
+    'Closed',
+    'Repaired',
+    'Sent to MSC',
+    'Pending for Delivery',
+    'Resolved By Phone',
 ];
 
 export const callTypeOptions = ['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat', 'Other'];

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { EngineerTicket, CLOSED_STATUSES } from '@/types/engineerUpdate';
+import { EngineerTicket } from '@/types/engineerUpdate';
+import { isTicketActive } from '@/types/ticketStatus';
 import { fetchEngineerTickets, updateTicketStatus } from '@/services/engineerUpdateService';
 
 export const useEngineerUpdate = (engineerName: string, statusFilter: 'active' | 'closed' | 'all') => {
@@ -28,9 +29,9 @@ export const useEngineerUpdate = (engineerName: string, statusFilter: 'active' |
         return r;
     };
 
-    // Derived
-    const active = tickets.filter(t => !CLOSED_STATUSES.includes(t.status || '')).length;
-    const closed = tickets.filter(t => CLOSED_STATUSES.includes(t.status || '')).length;
+    // Derived — matches Dashboard's canonical active/closed bucketing.
+    const active = tickets.filter(t => isTicketActive(t.status)).length;
+    const closed = tickets.filter(t => !isTicketActive(t.status)).length;
 
     return { tickets, loading, error, active, closed, update, refetch: load };
 };

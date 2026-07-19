@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tickets';
+import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketStatus';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
@@ -38,6 +39,12 @@ export default function TicketsScreen() {
     }
     return false;
   };
+
+  const allowedStatusOptions = useMemo(() => {
+    if (modalMode !== 'edit' || !selectedTicket) return statusOptions;
+    const next = getAllowedStatuses(selectedTicket.status, currentUserRole, formData.service_type, formData.call_type, formData.warranty_coverage);
+    return Array.from(new Set([selectedTicket.status, ...next]));
+  }, [modalMode, selectedTicket, currentUserRole, formData.service_type, formData.call_type, formData.warranty_coverage]);
 
   // Handle engineer assignment - update both ID and name
   const handleEngineerChange = (engineerId: string) => {
@@ -163,6 +170,11 @@ export default function TicketsScreen() {
         }
 
         const ticketData = getFormDataWithEngineerName();
+        if (ticketData.status !== selectedTicket.status) {
+          const reason = validateStatusChangeReason(selectedTicket.status, ticketData.status);
+          if (reason === null) return; // user cancelled the mandatory reason prompt
+          if (reason) ticketData.remarks = ticketData.remarks ? `${ticketData.remarks}\n\nStatus change reason: ${reason}` : `Status change reason: ${reason}`;
+        }
         console.log('Updating ticket with data:', { assigned_to: ticketData.assigned_to, assigned_name: ticketData.assigned_name, status: ticketData.status });
         const result = await updateTicket(selectedTicket.id, ticketData);
         if (!result.success) throw new Error(result.error);
@@ -302,7 +314,7 @@ export default function TicketsScreen() {
                 <h3 style={styles.sectionHeader2}>🔧 Service</h3>
                 <div style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
-                  <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={statusOptions} disabled={modalMode === 'view'} />
+                  <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={modalMode === 'view'} />
                   {(currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
                     <div style={{ ...styles.formGroup }}>
                       <label style={styles.formLabel}>

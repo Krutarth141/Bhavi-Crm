@@ -100,10 +100,22 @@ export const useTicketForm = () => {
         setFormData(initialFormData);
     };
 
+    const NUMERIC_FIELDS = new Set(['service_charges', 'labor', 'final_charges', 'pin']);
+    const BOOLEAN_FIELDS = new Set(['rerepair', 'rerepair_foc']);
+
     const setFormValues = (data: Partial<TicketFormData>) => {
+        const cleaned: Partial<TicketFormData> = {};
+        (Object.keys(data) as (keyof TicketFormData)[]).forEach((key) => {
+            const value = data[key];
+            if (value === null || value === undefined) {
+                (cleaned as any)[key] = NUMERIC_FIELDS.has(key as string) ? 0 : BOOLEAN_FIELDS.has(key as string) ? false : '';
+            } else {
+                (cleaned as any)[key] = value;
+            }
+        });
         setFormData(prev => ({
             ...prev,
-            ...data,
+            ...cleaned,
         }));
     };
 
