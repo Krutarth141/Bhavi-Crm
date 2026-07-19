@@ -87,3 +87,43 @@ export const recordSalesDelivery = async (id: string, note: string): Promise<{ s
         return { success: true };
     } catch (err) { return { success: false, error: String(err) }; }
 };
+
+export const fetchAllSalesProducts = async (): Promise<SalesProduct[]> => {
+    try {
+        const { data, error } = await supabase.from('sales_products').select('*').eq('is_active', true).order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    } catch (err) { console.error('fetchAllSalesProducts:', err); return []; }
+};
+
+export const saveSalesProduct = async (id: string | null, data: Partial<SalesProduct>): Promise<{ success: boolean; error?: string }> => {
+    try {
+        if (id) {
+            const { error } = await supabase.from('sales_products').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.from('sales_products').insert([{ ...data, is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
+            if (error) throw error;
+        }
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};
+
+export const deactivateSalesProduct = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('sales_products').update({ is_active: false, updated_at: new Date().toISOString() }).eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: String(err) }; }
+};
+
+export const bulkImportSalesProducts = async (products: Partial<SalesProduct>[]): Promise<{ success: boolean; count?: number; error?: string }> => {
+    try {
+        const rows = products.map(p => ({ ...p, is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+        const { error } = await supabase.from('sales_products').insert(rows);
+        if (error) throw error;
+        return { success: true, count: rows.length };
+    } catch (err) { return { success: false, error: String(err) }; }
+};

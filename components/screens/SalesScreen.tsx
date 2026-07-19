@@ -11,8 +11,9 @@ import PaymentModal from '@/components/screens/sales/PaymentModal';
 import DispatchModal from '@/components/screens/sales/DispatchModal';
 import DeliveryModal from '@/components/screens/sales/DeliveryModal';
 import SalesSetupTab from '@/components/screens/sales/SalesSetupTab';
+import ProductsTab from '@/components/screens/sales/ProductsTab';
 
-type Tab = 'orders' | 'setup';
+type Tab = 'orders' | 'products' | 'setup';
 
 export default function SalesScreen() {
     const { data: session } = useSession();
@@ -53,10 +54,13 @@ export default function SalesScreen() {
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <button onClick={() => setTab('orders')} style={{ background: tab === 'orders' ? '#1d4ed8' : '#f1f5f9', color: tab === 'orders' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>📋 Orders</button>
+                <button onClick={() => setTab('products')} style={{ background: tab === 'products' ? '#1d4ed8' : '#f1f5f9', color: tab === 'products' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>🛍️ Products</button>
                 <button onClick={() => setTab('setup')} style={{ background: tab === 'setup' ? '#1d4ed8' : '#f1f5f9', color: tab === 'setup' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>⚙️ Setup</button>
             </div>
 
-            {tab === 'setup' ? (
+            {tab === 'products' ? (
+                <ProductsTab onProductsChanged={refetch} />
+            ) : tab === 'setup' ? (
                 <SalesSetupTab upiQrUrl={upiQrUrl} onUpdated={refetch} />
             ) : (
                 <>
