@@ -40,6 +40,7 @@ export interface AutoInventoryLog {
 
 export interface AutoInventoryForm {
     brand: string;
+    made_in: string;
     item_name: string;
     category: string;
     purchase_price: string;
@@ -49,12 +50,19 @@ export interface AutoInventoryForm {
     selling_price: string;
     model_no: string;
     description: string;
+    dealer: string;         // add-mode only: opening-stock supplier
+    purchase_date: string;  // add-mode only: opening-stock date
 }
 
-export const emptyAutoInventoryForm: AutoInventoryForm = {
-    brand: '', item_name: '', category: '', purchase_price: '',
-    stock_qty: '0', unit: 'pcs', gst_percent: '18',
+export const emptyAutoInventoryForm = (): AutoInventoryForm => ({
+    brand: '', made_in: '', item_name: '', category: '', purchase_price: '',
+    stock_qty: '0', unit: 'pcs', gst_percent: '0',
     selling_price: '', model_no: '', description: '',
-};
+    dealer: '', purchase_date: new Date().toISOString().slice(0, 10),
+});
+
+export const AUTO_UNITS = ['pcs', 'Each', 'Pair', 'Mtr', 'Rft', 'Roll', 'Set', 'Box', 'Bag', 'Kg', 'Ltr', 'Nos', 'Job', 'Yr'];
+
+export type StockTxnType = 'in' | 'out' | 'sell';
 
 export const AUTO_CATEGORIES = ['CCTV', 'Gate Automation', 'Curtain Motor', 'Sensors', 'Cables', 'Power Supply', 'DVR/NVR', 'Other'];

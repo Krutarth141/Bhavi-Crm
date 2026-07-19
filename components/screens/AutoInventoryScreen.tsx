@@ -1,61 +1,56 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useAutoInventory } from '@/hooks/useAutoInventory';
-import Modal from '@/components/Modal';
-import { AutoInventoryForm, emptyAutoInventoryForm, AUTO_CATEGORIES, AutoInventoryItem } from '@/types/autoInventory';
-
-const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
+import { AutoInventoryItem } from '@/types/autoInventory';
+import AutoInventoryFormModal from '@/components/screens/auto-inventory/AutoInventoryFormModal';
+import StockModal from '@/components/screens/auto-inventory/StockModal';
+import InventoryHistoryModal from '@/components/screens/auto-inventory/InventoryHistoryModal';
 
 export default function AutoInventoryScreen() {
-    const { items, loading, error, categories, lowStock, totalValue, add } = useAutoInventory();
-    const [modalOpen, setModalOpen] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [search, setSearch] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [form, setForm] = useState<AutoInventoryForm>(emptyAutoInventoryForm);
+    const { data: session } = useSession();
+    const userName = (session?.user as any)?.name || '';
 
-    const filtered: AutoInventoryItem[] = items.filter(i => {
+    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, stockTxn } = useAutoInventory();
+
+    const [search, setSearch] = useState('');
+    const [brandFilter, setBrandFilter] = useState('');
+    const [formOpen, setFormOpen] = useState(false);
+    const [editItem, setEditItem] = useState<AutoInventoryItem | null>(null);
+    const [stockItem, setStockItem] = useState<AutoInventoryItem | null>(null);
+    const [historyItem, setHistoryItem] = useState<AutoInventoryItem | null>(null);
+
+    const filtered = items.filter(i => {
         const q = search.toLowerCase();
         const matchSearch = !search.trim() || i.item_name?.toLowerCase().includes(q) || i.brand?.toLowerCase().includes(q) || i.model_no?.toLowerCase().includes(q);
-        const matchCat = !categoryFilter || i.category === categoryFilter;
-        return matchSearch && matchCat;
+        const matchBrand = !brandFilter || i.brand === brandFilter;
+        return matchSearch && matchBrand;
     });
 
-    const handleAdd = async () => {
-        if (!form.item_name.trim()) { alert('Item name required'); return; }
-        setSaving(true);
-        const r = await add(form);
-        if (r.success) { setModalOpen(false); setForm(emptyAutoInventoryForm); }
-        else alert('Error: ' + r.error);
-        setSaving(false);
+    const handleDelete = async (item: AutoInventoryItem) => {
+        if (!confirm(`Delete "${item.item_name}"? This cannot be undone.`)) return;
+        const r = await remove(item.id);
+        if (!r.success) alert('Delete error: ' + r.error);
     };
 
-    const modalFooter = (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => setModalOpen(false)} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-            <button onClick={handleAdd} disabled={saving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving...' : '💾 Add Item'}
-            </button>
-        </div>
-    );
+    const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: '2px 5px' } as const;
 
     return (
         <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>📦 Auto Inventory ({items.length})</h1>
-                <button onClick={() => setModalOpen(true)} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ Add Item</button>
+                <button onClick={() => { setEditItem(null); setFormOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ Add Item</button>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
-            {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
                 {[
                     { label: 'Total Items', value: items.length, color: '#185FA5' },
-                    { label: 'Categories', value: categories.length, color: '#7c3aed' },
+                    { label: 'Brands', value: brands.length, color: '#7c3aed' },
                     { label: '⚠️ Low Stock', value: lowStock, color: '#dc2626' },
-                    { label: 'Total Value', value: '₹' + totalValue.toLocaleString(), color: '#059669' },
+                    { label: 'Stock Value', value: '₹' + totalValue.toLocaleString('en-IN'), color: '#059669' },
                 ].map(s => (
                     <div key={s.label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
                         <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -64,48 +59,55 @@ export default function AutoInventoryScreen() {
                 ))}
             </div>
 
-            {/* Filters */}
             <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input type="text" placeholder="Search item name, brand, model..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit' }} />
-                <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }}>
-                    <option value="">All Categories</option>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                <input type="text" placeholder="Search item / brand / model..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit' }} />
+                <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }}>
+                    <option value="">All Brands</option>
+                    {brands.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
                 <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center' }}>{filtered.length} / {items.length}</span>
             </div>
 
-            {/* Table */}
             <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                 {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                    : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No items found</p>
+                    : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No items yet. Click &quot;Add Item&quot; to get started!</p>
                         : (
                             <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1000 }}>
                                     <thead>
                                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['#', 'Item Name', 'Brand', 'Category', 'Model No', 'Stock', 'Unit', 'Purchase ₹', 'Selling ₹', 'GST%'].map(h => (
+                                            {['Brand / Made In', 'Model No', 'Item Name', 'Category', 'Unit', 'Purchase ₹', 'Sell ₹', 'GST', 'Stock', 'Stock Value', 'Action'].map(h => (
                                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filtered.map((item, i) => {
-                                            const isLow = (item.stock_qty || 0) <= 2;
+                                        {filtered.map(it => {
+                                            const stockValue = (it.purchase_price || 0) * (it.stock_qty || 0);
                                             return (
-                                                <tr key={item.id} style={{ borderBottom: '1px solid #f3f4f6', background: isLow ? '#fff5f5' : 'white' }}>
-                                                    <td style={{ padding: '10px 12px', color: '#6b7280', fontSize: 12 }}>{i + 1}</td>
-                                                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>
-                                                        {item.item_name}
-                                                        {isLow && <span style={{ marginLeft: 6, fontSize: 10, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 10 }}>LOW</span>}
+                                                <tr key={it.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                    <td style={{ padding: '10px 12px' }}>
+                                                        <span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{it.brand || '—'}</span>
+                                                        {it.made_in && <><br /><span style={{ fontSize: 10, color: '#6b7280' }}>🌐 {it.made_in}</span></>}
                                                     </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{item.brand || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{item.category || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'monospace' }}>{item.model_no || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontWeight: isLow ? 700 : 'normal', color: isLow ? '#dc2626' : 'inherit' }}>{item.stock_qty ?? 0}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{item.unit || '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{item.purchase_price ? `₹${item.purchase_price}` : '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12, color: '#059669' }}>{item.selling_price ? `₹${item.selling_price}` : '—'}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{item.gst_percent ? `${item.gst_percent}%` : '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600 }}>{it.model_no || '—'}</td>
+                                                    <td style={{ padding: '10px 12px' }}>
+                                                        <span onClick={() => setHistoryItem(it)} style={{ cursor: 'pointer', color: '#185FA5', fontWeight: 600 }} title="View history">{it.item_name}</span>
+                                                        {it.description && <><br /><span style={{ fontSize: 11, color: '#6b7280' }}>{it.description}</span></>}
+                                                    </td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{it.category || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>{it.unit || 'pcs'}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>₹{Number(it.purchase_price || 0).toLocaleString('en-IN')}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: '#065f46' }}>{it.selling_price ? `₹${Number(it.selling_price).toLocaleString('en-IN')}` : '—'}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, color: '#6b7280' }}>{it.gst_percent ? `${it.gst_percent}%` : '—'}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: (it.stock_qty || 0) > 0 ? '#065f46' : '#dc2626' }}>{it.stock_qty || 0}</td>
+                                                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#065f46', fontWeight: 600 }}>₹{Number(stockValue).toLocaleString('en-IN')}</td>
+                                                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                                        <button onClick={() => setStockItem(it)} title="Stock IN/OUT/Sell" style={btnIcon}>📦</button>
+                                                        <button onClick={() => setHistoryItem(it)} title="IN/OUT History" style={btnIcon}>📋</button>
+                                                        <button onClick={() => { setEditItem(it); setFormOpen(true); }} title="Edit" style={btnIcon}>✏️</button>
+                                                        <button onClick={() => handleDelete(it)} title="Delete" style={{ ...btnIcon, color: '#dc2626' }}>🗑️</button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -115,28 +117,22 @@ export default function AutoInventoryScreen() {
                         )}
             </div>
 
-            {/* Add Modal */}
-            <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="📦 Add Inventory Item" footer={modalFooter}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Item Name *</label><input type="text" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Brand</label><input type="text" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-                            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={fieldStyle}>
-                                <option value="">Select Category</option>
-                                {AUTO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Model No</label><input type="text" value={form.model_no} onChange={e => setForm(f => ({ ...f, model_no: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Purchase Price ₹</label><input type="number" value={form.purchase_price} onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Selling Price ₹</label><input type="number" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Stock Qty</label><input type="number" value={form.stock_qty} onChange={e => setForm(f => ({ ...f, stock_qty: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Unit</label><input type="text" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={fieldStyle} placeholder="pcs, mtr, kg..." /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>GST %</label><input type="number" value={form.gst_percent} onChange={e => setForm(f => ({ ...f, gst_percent: e.target.value }))} style={fieldStyle} /></div>
-                    </div>
-                    <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
-                </div>
-            </Modal>
+            {formOpen && (
+                <AutoInventoryFormModal
+                    editItem={editItem}
+                    allItems={items}
+                    onClose={() => { setFormOpen(false); setEditItem(null); }}
+                    onSave={async (form) => editItem ? update(editItem.id, form) : add(form, userName)}
+                />
+            )}
+            {stockItem && (
+                <StockModal
+                    item={stockItem}
+                    onClose={() => setStockItem(null)}
+                    onSave={async (params) => stockTxn({ item: stockItem, doneBy: userName, ...params })}
+                />
+            )}
+            {historyItem && <InventoryHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}
         </div>
     );
 }
