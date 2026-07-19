@@ -7,6 +7,7 @@ import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import EngineerDashboard from '@/components/dashboard/engineer/EngineerDashboard';
 import WorkControllerDashboard from '@/components/dashboard/work-controller/WorkControllerDashboard';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
+import PeonDashboard from '@/components/dashboard/peon/PeonDashboard';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -36,6 +37,8 @@ export default function DashboardPage() {
                 return <WorkControllerDashboard />;
             case 'engineer':
                 return <EngineerDashboard />;
+            case 'peon':
+                return <PeonDashboard />;
             default:
                 return <div style={{ padding: '20px' }}>Unknown role: {userRole}</div>;
         }

@@ -42,6 +42,7 @@ import PartRequestScreen from '@/components/screens/PartRequestScreen';
 import ReportEditScreen from '@/components/screens/ReportEditScreen';
 import AIAgentScreen from '@/components/screens/AIAgentScreen';
 import AIAnalysisScreen from '@/components/screens/AIAnalysisScreen';
+import PeonActivityScreen from '@/components/screens/PeonActivityScreen';
 
 import '@/styles/dashboard.css';
 
@@ -53,7 +54,7 @@ type AdminTab =
     | 'feedback' | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
-    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request';
+    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'part-request' | 'peon-activity';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -74,6 +75,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'settings', label: '⚙️ Settings' },
     { id: 'live-map', label: '📍 Live Map' },
     { id: 'attendance', label: '🗓️ Attendance' },
+    { id: 'peon-activity', label: '🧹 Peon Activity' },
     { id: 'targets', label: '🎯 Targets' },
     { id: 'amc', label: '🔄 AMC' },
     { id: 'feedback', label: '⭐ Feedback' },
@@ -125,6 +127,7 @@ export default function AdminDashboard() {
             case 'live-map': return <LiveMapScreen />;
             case 'inquiries': return <InquiriesScreen />;
             case 'attendance': return <AttendanceScreen />;
+            case 'peon-activity': return <PeonActivityScreen />;
             case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
             case 'feedback': return <FeedbackScreen />;
