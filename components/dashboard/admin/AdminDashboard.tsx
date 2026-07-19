@@ -54,7 +54,7 @@ type AdminTab =
     | 'feedback' | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
-    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'part-request' | 'peon-activity';
+    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },

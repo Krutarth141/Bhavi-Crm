@@ -8,7 +8,7 @@ export const fetchEngineerTickets = async (
     try {
         let query = supabase
             .from('tickets')
-            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, call_type, service_type, warranty_coverage, assigned_name, status, service_charges, labor, address, pin, timeline, created_at, updated_at')
+            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, address, pin, timeline, created_at, updated_at')
             .order('updated_at', { ascending: false })
             .limit(100);
 

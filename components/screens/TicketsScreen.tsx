@@ -12,6 +12,8 @@ import { createTicket, updateTicket, updateTicketRemarks, closeTicket } from '@/
 import { printTicket, getBadgeStyle } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
+import { approveWarrantyClaim, rejectWarrantyClaim } from '@/services/warrantyClaimService';
+import VoidWarrantyModal from '@/components/screens/tickets/VoidWarrantyModal';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -32,6 +34,7 @@ export default function TicketsScreen() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'pending' | 'done'>('all');
   const [invoiceModalTicket, setInvoiceModalTicket] = useState<Ticket | null>(null);
+  const [voidWarrantyTicket, setVoidWarrantyTicket] = useState<Ticket | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -214,6 +217,21 @@ export default function TicketsScreen() {
       return matchesStatus && matchesSearch && matchesInvoice;
     });
   }, [tickets, filterStatus, searchTerm, invoiceFilter]);
+
+  const handleApproveWarrantyClaim = async (ticket: Ticket) => {
+    if (!confirm('Approve warranty claim? This will convert the call to Warranty type and set charges to zero.')) return;
+    const r = await approveWarrantyClaim(ticket, (session?.user as any)?.name || currentUserRole || '');
+    if (r.success) { alert('✅ Warranty approved — call converted to Warranty.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleRejectWarrantyClaim = async (ticket: Ticket) => {
+    const reason = prompt('Reason for rejection (will be noted):');
+    if (reason === null) return;
+    const r = await rejectWarrantyClaim(ticket, reason, (session?.user as any)?.name || currentUserRole || '');
+    if (r.success) { alert('Warranty claim rejected.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
 
   const screenTitle = currentUserRole === 'engineer' ? '🎫 My Tickets' : '🎫 All Tickets';
 
@@ -412,6 +430,15 @@ export default function TicketsScreen() {
                       {selectedTicket!.invoice_done ? `✏️ Edit Invoice #${selectedTicket!.invoice_no}` : '🧾 Add Invoice No.'}
                     </button>
                   )}
+                  {selectedTicket?.warranty_claim_pending && (currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
+                    <>
+                      <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => handleApproveWarrantyClaim(selectedTicket!)}>✅ Approve Claim</button>
+                      <button style={{ ...styles.btn, background: '#dc2626', color: 'white' }} onClick={() => handleRejectWarrantyClaim(selectedTicket!)}>❌ Reject Claim</button>
+                    </>
+                  )}
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller') && selectedTicket?.warranty_coverage !== 'Out of Coverage' && (
+                    <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>
+                  )}
                   <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
                     💾 Save Remarks
                   </button>
@@ -434,6 +461,14 @@ export default function TicketsScreen() {
             setInvoiceModalTicket(null);
             await fetchTickets();
           }}
+        />
+      )}
+      {voidWarrantyTicket && (
+        <VoidWarrantyModal
+          ticket={voidWarrantyTicket}
+          byUser={(session?.user as any)?.name || currentUserRole || ''}
+          onClose={() => setVoidWarrantyTicket(null)}
+          onDone={async () => { setVoidWarrantyTicket(null); setModalOpen(false); await fetchTickets(); }}
         />
       )}
     </div>

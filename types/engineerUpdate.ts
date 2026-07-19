@@ -20,6 +20,7 @@ export interface EngineerTicket {
     timeline?: any[];
     created_at?: string;
     updated_at?: string;
+    warranty_claim_pending?: boolean;
 }
 
 export interface UpdateForm {

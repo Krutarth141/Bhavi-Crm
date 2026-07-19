@@ -6,6 +6,8 @@ import { useEngineerUpdate } from '@/hooks/useEngineerUpdate';
 import Modal from '@/components/Modal';
 import { EngineerTicket, UpdateForm } from '@/types/engineerUpdate';
 import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketStatus';
+import WarrantyClaimModal from '@/components/screens/tickets/WarrantyClaimModal';
+import EngVoidWarrantyModal from '@/components/screens/tickets/EngVoidWarrantyModal';
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -30,6 +32,8 @@ export default function EngineerUpdateScreen() {
     const [modalOpen, setModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [form, setForm] = useState<UpdateForm>({ newStatus: '', note: '', labour: '' });
+    const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
+    const [voidModalOpen, setVoidModalOpen] = useState(false);
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
@@ -131,6 +135,16 @@ export default function EngineerUpdateScreen() {
                             </div>
                         </div>
 
+                        {(selected.call_type === 'Non-Warranty' || selected.call_type === 'Non-Warranty Repeat') && !selected.warranty_claim_pending && (
+                            <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
+                        )}
+                        {selected.warranty_claim_pending && (
+                            <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
+                        )}
+                        {selected.warranty_coverage !== 'Out of Coverage' && (
+                            <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>
+                        )}
+
                         {allowed.length > 0 ? (
                             <>
                                 <div>
@@ -159,6 +173,22 @@ export default function EngineerUpdateScreen() {
                     </div>
                 )}
             </Modal>
+            {warrantyModalOpen && selected && (
+                <WarrantyClaimModal
+                    ticket={selected}
+                    submittedBy={userName}
+                    onClose={() => setWarrantyModalOpen(false)}
+                    onDone={async () => { setWarrantyModalOpen(false); setModalOpen(false); await refetch(); }}
+                />
+            )}
+            {voidModalOpen && selected && (
+                <EngVoidWarrantyModal
+                    ticket={selected}
+                    byUser={userName}
+                    onClose={() => setVoidModalOpen(false)}
+                    onDone={async () => { setVoidModalOpen(false); setModalOpen(false); await refetch(); }}
+                />
+            )}
         </div>
     );
 }

@@ -52,6 +52,12 @@ export interface Ticket {
     work_done?: string;
     invoice_done?: boolean;
     invoice_no?: string;
+    warranty_claim_pending?: boolean;
+    warranty_claim_by?: string;
+    warranty_claim_note?: string;
+    warranty_claim_approved?: boolean;
+    warranty_claim_approved_by?: string;
+    coverage_remark?: string;
 }
 
 export const statusBadges: Record<string, string> = {
