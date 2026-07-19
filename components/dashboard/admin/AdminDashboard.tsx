@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import AdminStats from './AdminStats';
+import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import AdminUserManagement from './AdminUserManagement';
 
 // Existing screens
@@ -106,7 +106,7 @@ export default function AdminDashboard() {
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'overview': return <AdminStats />;
+            case 'overview': return <DashboardOverview role="admin" />;
             case 'tickets': return <TicketsScreen />;
             case 'pending': return <PendingListScreen />;
             case 'inventory': return <InventoryScreen />;

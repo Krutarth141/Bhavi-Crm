@@ -11,10 +11,12 @@ import ReportsScreen from '@/components/screens/ReportsScreen';
 import MyCallsScreen from '@/components/screens/MyCallsScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
 import EngineerUpdateScreen from '@/components/screens/EngineerUpdateScreen';
+import DashboardOverview from '@/components/dashboard/DashboardOverview';
 
-type EngineerTab = 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'engineer-update';
+type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'engineer-update';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
+    { id: 'overview', label: '📊 Overview' },
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'tasks', label: '📋 My Tasks' },
     { id: 'tickets', label: '🎫 My Tickets' },
@@ -24,7 +26,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
 ];
 
 export default function EngineerDashboard() {
-    const [activeTab, setActiveTab] = useState<EngineerTab>('my-calls');
+    const [activeTab, setActiveTab] = useState<EngineerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const handleNavClick = (id: EngineerTab) => {
@@ -34,6 +36,7 @@ export default function EngineerDashboard() {
 
     const renderContent = () => {
         switch (activeTab) {
+            case 'overview': return <DashboardOverview role="engineer" />;
             case 'my-calls': return <MyCallsScreen />;
             case 'tasks': return <TasksScreen />;
             case 'tickets': return <TicketsScreen />;

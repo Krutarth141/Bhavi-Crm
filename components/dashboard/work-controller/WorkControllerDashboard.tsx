@@ -16,13 +16,15 @@ import CourierReportScreen from '@/components/screens/CourierReportScreen';
 import PendingListScreen from '@/components/screens/PendingListScreen';
 import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
+import DashboardOverview from '@/components/dashboard/DashboardOverview';
 
 type WorkControllerTab =
-    | 'tickets' | 'pending' | 'tasks' | 'customers'
+    | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
     | 'reports' | 'inquiries' | 'attendance';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
+    { id: 'overview', label: '📊 Overview' },
     { id: 'tickets', label: '🎫 Tickets' },
     { id: 'pending', label: '📋 Pending List' },
     { id: 'tasks', label: '✅ Tasks' },
@@ -37,7 +39,7 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
 ];
 
 export default function WorkControllerDashboard() {
-    const [activeTab, setActiveTab] = useState<WorkControllerTab>('tickets');
+    const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const handleNavClick = (id: WorkControllerTab) => {
@@ -47,6 +49,7 @@ export default function WorkControllerDashboard() {
 
     const renderContent = () => {
         switch (activeTab) {
+            case 'overview': return <DashboardOverview role="work_controller" />;
             case 'tickets': return <TicketsScreen />;
             case 'pending': return <PendingListScreen />;
             case 'tasks': return <TasksScreen />;
