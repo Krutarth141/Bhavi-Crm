@@ -10,4 +10,5 @@ export interface CompanyInfo {
     labor_gst_pct?: number;  // labor/service GST %, e.g. 18
     website?: string;
     terms?: string;          // invoice terms, newline-separated
+    upi_qr_url?: string | null;
 }

@@ -1,124 +1,178 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useSales } from '@/hooks/useSales';
 import { SalesOrder, SALES_STATUSES } from '@/types/sales';
+import { sendBrochure, sendQuote, sendPaymentDetails, sendPaymentConfirm, sendDispatch, sendDelivered } from '@/utils/salesWhatsApp';
+import NewSalesOrderModal from '@/components/screens/sales/NewSalesOrderModal';
+import SalesOrderDetailModal from '@/components/screens/sales/SalesOrderDetailModal';
+import PaymentModal from '@/components/screens/sales/PaymentModal';
+import DispatchModal from '@/components/screens/sales/DispatchModal';
+import DeliveryModal from '@/components/screens/sales/DeliveryModal';
+import SalesSetupTab from '@/components/screens/sales/SalesSetupTab';
 
-const statusColor: Record<string, { bg: string; color: string }> = {
-    pending: { bg: '#fef3c7', color: '#92400e' },
-    confirmed: { bg: '#dbeafe', color: '#1e40af' },
-    dispatched: { bg: '#ede9fe', color: '#5b21b6' },
-    delivered: { bg: '#d1fae5', color: '#065f46' },
-    cancelled: { bg: '#fee2e2', color: '#991b1b' },
-};
+type Tab = 'orders' | 'setup';
 
 export default function SalesScreen() {
-    const { orders, loading, error, totalRevenue, updateStatus } = useSales();
-    const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    const { data: session } = useSession();
+    const userName = (session?.user as any)?.name || 'Admin';
 
-    const filtered: SalesOrder[] = orders.filter(o => {
-        const q = search.toLowerCase();
-        const matchSearch = !search.trim() || o.customer_name?.toLowerCase().includes(q) || o.order_no?.toLowerCase().includes(q) || o.customer_mobile?.includes(q);
-        const matchStatus = !statusFilter || o.status === statusFilter;
-        return matchSearch && matchStatus;
-    });
+    const { orders, products, upiQrUrl, companyPhone, loading, totalRevenue, addOrder, markStatus, recordPayment, recordDispatch, recordDelivery, refetch } = useSales();
 
-    const handleStatusChange = async (id: string, status: string) => {
-        if (!confirm(`Change status to "${status}"?`)) return;
-        const r = await updateStatus(id, status);
+    const [tab, setTab] = useState<Tab>('orders');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [newOrderOpen, setNewOrderOpen] = useState(false);
+    const [detailOrder, setDetailOrder] = useState<SalesOrder | null>(null);
+    const [paymentOrder, setPaymentOrder] = useState<SalesOrder | null>(null);
+    const [dispatchOrder, setDispatchOrder] = useState<SalesOrder | null>(null);
+    const [deliveryOrder, setDeliveryOrder] = useState<SalesOrder | null>(null);
+
+    const filtered = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter);
+
+    const handleMarkQuoted = async (o: SalesOrder) => {
+        const r = await markStatus(o.id, 'quoted');
+        if (!r.success) alert('Error: ' + r.error);
+    };
+    const handleConfirm = async (o: SalesOrder) => {
+        const r = await markStatus(o.id, 'confirmed');
         if (!r.success) alert('Error: ' + r.error);
     };
 
+    if (loading) return <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>;
+
     return (
         <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>💼 Sales Orders ({orders.length})</h1>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>💼 Sales</h1>
                 <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>₹{totalRevenue.toLocaleString()}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>₹{totalRevenue.toLocaleString('en-IN')}</div>
                     <div style={{ fontSize: 11, color: '#6b7280' }}>Total Revenue</div>
                 </div>
             </div>
 
-            {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button onClick={() => setTab('orders')} style={{ background: tab === 'orders' ? '#1d4ed8' : '#f1f5f9', color: tab === 'orders' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>📋 Orders</button>
+                <button onClick={() => setTab('setup')} style={{ background: tab === 'setup' ? '#1d4ed8' : '#f1f5f9', color: tab === 'setup' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>⚙️ Setup</button>
+            </div>
 
-            {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
-                {SALES_STATUSES.map(s => {
-                    const count = orders.filter(o => o.status === s).length;
-                    const sc = statusColor[s] || { bg: '#f3f4f6', color: '#374151' };
-                    return (
-                        <div key={s} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', textAlign: 'center', cursor: 'pointer', outline: statusFilter === s ? '2px solid #185FA5' : 'none' }} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}>
-                            <div style={{ fontSize: 22, fontWeight: 700, color: sc.color }}>{count}</div>
-                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2, textTransform: 'capitalize' }}>{s}</div>
+            {tab === 'setup' ? (
+                <SalesSetupTab upiQrUrl={upiQrUrl} onUpdated={refetch} />
+            ) : (
+                <>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                        <button onClick={() => setStatusFilter('all')} style={{ background: statusFilter === 'all' ? '#6b7280' : '#f1f5f9', color: statusFilter === 'all' ? '#fff' : '#475569', border: 'none', borderRadius: 20, padding: '4px 11px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>All ({orders.length})</button>
+                        {SALES_STATUSES.map(s => (
+                            <button key={s.id} onClick={() => setStatusFilter(s.id)} style={{ background: statusFilter === s.id ? s.color : '#f1f5f9', color: statusFilter === s.id ? '#fff' : '#475569', border: 'none', borderRadius: 20, padding: '4px 11px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                                {s.label} ({orders.filter(o => o.status === s.id).length})
+                            </button>
+                        ))}
+                    </div>
+
+                    <button onClick={() => setNewOrderOpen(true)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 12 }}>+ New Order</button>
+
+                    {filtered.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>No orders found.</div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {filtered.map(o => {
+                                const statusInfo = SALES_STATUSES.find(s => s.id === o.status);
+                                return (
+                                    <div key={o.id} style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                                            <div>
+                                                <div style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{o.customer_name}</div>
+                                                <div style={{ fontSize: 11, color: '#6b7280' }}>{o.order_no || ''}{o.customer_mobile ? ` | 📞 ${o.customer_mobile}` : ''} | {o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
+                                            </div>
+                                            <span style={{ background: statusInfo?.color || '#9ca3af', color: '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{o.status}</span>
+                                        </div>
+                                        <div style={{ marginTop: 6, fontSize: 15, fontWeight: 800, color: '#1d4ed8' }}>₹{(o.total_amount || 0).toLocaleString('en-IN')}<span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}> incl. all taxes</span></div>
+                                        {o.courier_name && <div style={{ marginTop: 6, fontSize: 12, color: '#0ea5e9', fontWeight: 600 }}>🚚 {o.courier_name} — AWB: {o.awb_number}{o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: 11, marginLeft: 6 }}>Track →</a>}</div>}
+                                        {o.delivery_date && <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>✅ Delivered: {o.delivery_date}</div>}
+
+                                        <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                            <button onClick={() => setDetailOrder(o)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>👁 View</button>
+
+                                            {o.status === 'inquiry' && (
+                                                <>
+                                                    <button onClick={() => handleMarkQuoted(o)} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>Mark Quoted</button>
+                                                    <button onClick={() => sendBrochure(o.customer_name, o.customer_mobile || '')} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Brochure</button>
+                                                    <button onClick={() => sendQuote(o, upiQrUrl)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Quote & Pay</button>
+                                                </>
+                                            )}
+                                            {o.status === 'quoted' && (
+                                                <>
+                                                    <button onClick={() => handleConfirm(o)} style={{ background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>Confirm Order</button>
+                                                    <button onClick={() => sendQuote(o, upiQrUrl)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Re-send Quote</button>
+                                                    <button onClick={() => sendPaymentDetails(o, upiQrUrl)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Payment Details</button>
+                                                </>
+                                            )}
+                                            {o.status === 'confirmed' && (
+                                                <>
+                                                    <div style={{ width: '100%', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 8, padding: '7px 11px', fontSize: 12, color: '#92400e', marginBottom: 6 }}>⏳ Payment Details sent to customer. Once they pay → click <strong>✅ Mark Paid</strong> to confirm receipt.</div>
+                                                    <button onClick={() => setPaymentOrder(o)} style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✅ Mark Paid</button>
+                                                    <button onClick={() => sendPaymentDetails(o, upiQrUrl)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Resend Payment Link</button>
+                                                </>
+                                            )}
+                                            {o.status === 'paid' && (
+                                                <button onClick={() => setDispatchOrder(o)} style={{ background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>🚚 Dispatch</button>
+                                            )}
+                                            {o.status === 'dispatched' && (
+                                                <>
+                                                    <button onClick={() => setDeliveryOrder(o)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>✅ Mark Delivered</button>
+                                                    <button onClick={() => sendDispatch(o, o.courier_name || '', o.awb_number || '', o.dispatch_date || '', o.tracking_url || '', companyPhone)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Resend Tracking</button>
+                                                </>
+                                            )}
+                                            {o.status === 'done' && (
+                                                <button onClick={() => sendDelivered(o, o.delivery_note || '', companyPhone)} style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer' }}>📲 Delivery Msg</button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    );
-                })}
-            </div>
+                    )}
+                </>
+            )}
 
-            {/* Filters */}
-            <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
-                <input type="text" placeholder="Search customer, order no, mobile..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit' }} />
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }}>
-                    <option value="">All Status</option>
-                    {SALES_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center' }}>{filtered.length} / {orders.length}</span>
-            </div>
-
-            {/* Table */}
-            <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-                {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                    : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No sales orders found</p>
-                        : (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                                    <thead>
-                                        <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['Order No', 'Customer', 'Amount', 'Payment', 'Courier/AWB', 'Status', 'Action'].map(h => (
-                                                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filtered.map(o => {
-                                            const sc = statusColor[o.status || ''] || { bg: '#f3f4f6', color: '#374151' };
-                                            return (
-                                                <tr key={o.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                                    <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 12, fontWeight: 600 }}>{o.order_no || o.id.slice(0, 8)}</td>
-                                                    <td style={{ padding: '10px 12px' }}>
-                                                        <div style={{ fontWeight: 600 }}>{o.customer_name}</div>
-                                                        {o.customer_mobile && <div style={{ fontSize: 11, color: '#6b7280' }}>{o.customer_mobile}</div>}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#059669' }}>₹{(o.total_amount || 0).toLocaleString()}</td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
-                                                        <div>{o.payment_method || '—'}</div>
-                                                        {o.payment_reference && <div style={{ color: '#6b7280', fontSize: 11 }}>{o.payment_reference}</div>}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px', fontSize: 12 }}>
-                                                        <div>{o.courier_name || '—'}</div>
-                                                        {o.awb_number && <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#185FA5' }}>{o.awb_number}</div>}
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px' }}>
-                                                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color, textTransform: 'capitalize' }}>{o.status || '—'}</span>
-                                                    </td>
-                                                    <td style={{ padding: '10px 12px' }}>
-                                                        <select
-                                                            value={o.status || ''}
-                                                            onChange={e => handleStatusChange(o.id, e.target.value)}
-                                                            style={{ padding: '3px 8px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
-                                                        >
-                                                            {SALES_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-            </div>
+            {newOrderOpen && (
+                <NewSalesOrderModal products={products} createdBy={userName} onClose={() => setNewOrderOpen(false)} onSave={addOrder} />
+            )}
+            {detailOrder && <SalesOrderDetailModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
+            {paymentOrder && (
+                <PaymentModal
+                    order={paymentOrder}
+                    upiQrUrl={upiQrUrl}
+                    onClose={() => setPaymentOrder(null)}
+                    onSave={async (method, ref, date) => {
+                        const r = await recordPayment(paymentOrder.id, method, ref, date);
+                        if (r.success) sendPaymentConfirm(paymentOrder, method, ref, companyPhone);
+                        return r;
+                    }}
+                />
+            )}
+            {dispatchOrder && (
+                <DispatchModal
+                    order={dispatchOrder}
+                    onClose={() => setDispatchOrder(null)}
+                    onSave={async (courier, awb, date, trackUrl, notes) => {
+                        const r = await recordDispatch(dispatchOrder.id, courier, awb, date, trackUrl, notes);
+                        if (r.success) sendDispatch(dispatchOrder, courier, awb, date, trackUrl, companyPhone);
+                        return r;
+                    }}
+                />
+            )}
+            {deliveryOrder && (
+                <DeliveryModal
+                    order={deliveryOrder}
+                    onClose={() => setDeliveryOrder(null)}
+                    onSave={async (note) => {
+                        const r = await recordDelivery(deliveryOrder.id, note);
+                        if (r.success) sendDelivered(deliveryOrder, note, companyPhone);
+                        return r;
+                    }}
+                />
+            )}
         </div>
     );
 }
