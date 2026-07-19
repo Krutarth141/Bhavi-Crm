@@ -4,9 +4,12 @@ import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAttendance } from '@/hooks/useAttendance';
 import AttendanceTable from '@/components/screens/attendance/AttendanceTable';
-import { exportPunchLogsExcel } from '@/services/attendanceService';
-import { RosterRow } from '@/types/attendance';
-import { computeAttExtras, computeLeaves, fmtAttMin } from '@/utils/attendanceCalc';
+import { exportAttendanceExcel, approveAttEdit, rejectAttEdit } from '@/services/attendanceService';
+import { PunchLog, RosterRow } from '@/types/attendance';
+import { computeAttExtras, computeLeaves, fmtAttMin, parsePendingEdit } from '@/utils/attendanceCalc';
+import AttAddModal from '@/components/screens/attendance/AttAddModal';
+import AttEditModal from '@/components/screens/attendance/AttEditModal';
+import AttEditRequestModal from '@/components/screens/attendance/AttEditRequestModal';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
@@ -21,8 +24,11 @@ export default function AttendanceScreen() {
     const [to, setTo] = useState(todayStr());
     const [empFilter, setEmpFilter] = useState('');
     const [applied, setApplied] = useState({ from: todayStr(), to: todayStr(), empFilter: '' });
+    const [addOpen, setAddOpen] = useState(false);
+    const [editLog, setEditLog] = useState<PunchLog | null>(null);
+    const [requestLog, setRequestLog] = useState<PunchLog | null>(null);
 
-    const { logs, shiftMap, employees, loading, error, verify } = useAttendance({
+    const { logs, shiftMap, employees, loading, error, verify, refetch } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
 
@@ -46,6 +52,23 @@ export default function AttendanceScreen() {
         if (remark === null) return;
         const result = await verify(id, remark, adminName);
         if (!result.success) alert('Error: ' + result.error);
+    };
+
+    const handleApprove = async (log: PunchLog) => {
+        const pe = parsePendingEdit(log.pending_edit);
+        if (!pe) { alert('No pending request'); return; }
+        if (!confirm(`Approve edit request from ${log.eng_name}?`)) return;
+        const r = await approveAttEdit(log, pe, log.eng_id ? shiftMap[log.eng_id] : undefined);
+        if (r.success) { alert('✅ Attendance edit approved!'); await refetch(); }
+        else alert('Error: ' + r.error);
+    };
+
+    const handleReject = async (log: PunchLog) => {
+        const reason = prompt('Reason for rejection:');
+        if (reason === null) return;
+        const r = await rejectAttEdit(log.id, reason);
+        if (r.success) { alert('❌ Edit request rejected.'); await refetch(); }
+        else alert('Error: ' + r.error);
     };
 
     // Roster mode — admin viewing one day with no employee filter: show every
@@ -95,9 +118,16 @@ export default function AttendanceScreen() {
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🗓️ Attendance Report</h1>
-                <button onClick={() => exportPunchLogsExcel(logs)} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
-                    ⬇ Download Excel
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {isAdmin && (
+                        <button onClick={() => setAddOpen(true)} style={{ padding: '8px 16px', background: '#fff', color: '#185FA5', border: '1px solid #185FA5', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                            ➕ Add Attendance
+                        </button>
+                    )}
+                    <button onClick={() => exportAttendanceExcel(logs, shiftMap)} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+                        ⬇ Download Excel
+                    </button>
+                </div>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
@@ -141,9 +171,26 @@ export default function AttendanceScreen() {
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
                 ) : (
-                    <AttendanceTable logs={logs} rosterRows={rosterRows} shiftMap={shiftMap} isAdmin={isAdmin} onVerify={handleVerify} />
+                    <AttendanceTable
+                        logs={logs} rosterRows={rosterRows} shiftMap={shiftMap} isAdmin={isAdmin} myId={myId}
+                        onVerify={handleVerify}
+                        onAdminEdit={setEditLog}
+                        onRequestEdit={setRequestLog}
+                        onApprove={handleApprove}
+                        onReject={handleReject}
+                    />
                 )}
             </div>
+
+            {addOpen && (
+                <AttAddModal employees={employees} shiftMap={shiftMap} onClose={() => setAddOpen(false)} onDone={async () => { setAddOpen(false); await refetch(); }} />
+            )}
+            {editLog && (
+                <AttEditModal log={editLog} shift={editLog.eng_id ? shiftMap[editLog.eng_id] : undefined} onClose={() => setEditLog(null)} onDone={async () => { setEditLog(null); await refetch(); }} />
+            )}
+            {requestLog && (
+                <AttEditRequestModal log={requestLog} requestedBy={adminName} onClose={() => setRequestLog(null)} onDone={async () => { setRequestLog(null); await refetch(); }} />
+            )}
         </div>
     );
 }

@@ -6,11 +6,16 @@ import { EmployeeShift } from '@/types/settings';
 
 export const attToMin = (t?: string): number | null => {
     if (!t) return null;
-    const parts = t.split(':');
-    if (parts.length < 2) return null;
-    const h = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
-    if (isNaN(h) || isNaN(m)) return null;
+    const s = String(t).trim();
+    const isPM = /pm/i.test(s);
+    const isAM = /am/i.test(s);
+    const clean = s.replace(/[^0-9:]/g, '');
+    const p = clean.split(':');
+    let h = parseInt(p[0], 10);
+    const m = parseInt(p[1], 10) || 0;
+    if (isNaN(h)) return null;
+    if (isPM && h !== 12) h += 12;
+    if (isAM && h === 12) h = 0;
     return h * 60 + m;
 };
 
@@ -70,3 +75,46 @@ export function computeLeaves(
     }
     return Math.max(0, workingDays - presentInRange);
 }
+
+export const to12h = (t24: string): string => {
+    if (!t24) return '';
+    const p = t24.split(':');
+    let h = parseInt(p[0], 10);
+    const m = p[1];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ampm}`;
+};
+
+export const to24h = (t?: string): string => {
+    const mins = attToMin(t);
+    if (mins == null) return '';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m}`;
+};
+
+export interface PendingEdit {
+    requested_by: string;
+    reason: string;
+    at: string;
+    new_in?: string;
+    new_out?: string;
+}
+export const parsePendingEdit = (pe: any): PendingEdit | null => {
+    if (!pe) return null;
+    if (typeof pe === 'string') {
+        try { return JSON.parse(pe); } catch { return null; }
+    }
+    return pe;
+};
+
+export const computeWorkAndOvertime = (inT?: string, outT?: string, shift?: EmployeeShift): { working: number; overtime: number } => {
+    const inM = attToMin(inT), outM = attToMin(outT);
+    if (inM == null || outM == null) return { working: 0, overtime: 0 };
+    let working = outM - inM;
+    if (working < 0) working += 1440;
+    const ss = attToMin(shift?.shift_start), se = attToMin(shift?.shift_end);
+    const shiftDur = (ss != null && se != null) ? se - ss : 480;
+    return { working, overtime: Math.max(0, working - shiftDur) };
+};
