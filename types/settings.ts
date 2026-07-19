@@ -1,21 +1,23 @@
 // ─── Shift Settings ───────────────────────────────────────────────────────────
 // Table: shift_settings (id=1, single row)
 
-export interface ShiftSettings {
-    id?: number;
-    punch_in_start: string;     // e.g. "09:00"
-    punch_in_end: string;       // e.g. "10:00"
-    punch_out_time: string;     // e.g. "19:00"
-    late_punch_in_after: string; // e.g. "10:00"
+// ─── Shift Settings ───────────────────────────────────────────────────────────
+// Table: shift_settings — one row per employee (emp_id is the key), matching
+// the HTML app's schema. Replaces the earlier single-global-row model.
+
+export interface EmployeeShift {
+    emp_id: string;
+    emp_name?: string;
+    emp_role?: string;
+    shift_start: string;   // e.g. "09:30"
+    shift_end: string;     // e.g. "18:30"
+    weekly_off: string;    // 'Sunday' | 'Saturday' | 'Sunday,Saturday' | 'None'
     updated_at?: string;
 }
 
-export const defaultShiftSettings: ShiftSettings = {
-    punch_in_start: '09:00',
-    punch_in_end: '10:00',
-    punch_out_time: '19:00',
-    late_punch_in_after: '10:00',
-};
+export const WEEKLY_OFF_OPTIONS = ['Sunday', 'Saturday', 'Sunday,Saturday', 'None'];
+
+export const DEFAULT_SHIFT = { shift_start: '09:30', shift_end: '18:30', weekly_off: 'Sunday' };
 
 // ─── MSC Centers ──────────────────────────────────────────────────────────────
 // Table: auto_msc_centers

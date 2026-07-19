@@ -2,22 +2,15 @@
 
 import { useState } from 'react';
 import { useShiftSettings } from '@/hooks/useShiftSettings';
+import { WEEKLY_OFF_OPTIONS } from '@/types/settings';
 
-const fieldStyle = {
-    width: '100%', padding: '8px 12px', border: '1px solid var(--border)',
-    borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const,
+const inputStyle = {
+    border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px',
+    fontSize: 13, outline: 'none',
 };
-const labelStyle = { display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '13px' };
-
-const TIME_FIELDS = [
-    { key: 'punch_in_start', label: 'Punch In Start' },
-    { key: 'punch_in_end', label: 'Punch In End' },
-    { key: 'late_punch_in_after', label: 'Late After' },
-    { key: 'punch_out_time', label: 'Punch Out Time' },
-] as const;
 
 export default function ShiftSettingsCard() {
-    const { settings, setSettings, loaded, saving, error, load, save } = useShiftSettings();
+    const { shifts, loaded, loading, savingId, error, load, updateShift, saveShift } = useShiftSettings();
     const [message, setMessage] = useState('');
 
     const showMsg = (msg: string) => {
@@ -25,13 +18,9 @@ export default function ShiftSettingsCard() {
         setTimeout(() => setMessage(''), 3000);
     };
 
-    const handleSave = async () => {
-        try {
-            await save();
-            showMsg('✅ Shift settings saved!');
-        } catch {
-            showMsg('❌ ' + (error || 'Save failed'));
-        }
+    const handleSave = async (empId: string) => {
+        const r = await saveShift(empId);
+        showMsg(r.success ? '✅ Shift saved!' : '❌ ' + r.error);
     };
 
     return (
@@ -45,15 +34,9 @@ export default function ShiftSettingsCard() {
                         </p>
                     )}
                 </div>
-                {!loaded ? (
-                    <button onClick={load} style={{ padding: '6px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                        📂 Load
-                    </button>
-                ) : (
-                    <button onClick={handleSave} disabled={saving} style={{ padding: '6px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>
-                        {saving ? 'Saving...' : '💾 Save'}
-                    </button>
-                )}
+                <button onClick={load} disabled={loading} style={{ padding: '6px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: loading ? 0.6 : 1 }}>
+                    {loading ? 'Loading...' : loaded ? '🔄 Reload' : '📂 Load'}
+                </button>
             </div>
 
             {message && (
@@ -61,20 +44,51 @@ export default function ShiftSettingsCard() {
                     {message}
                 </div>
             )}
+            {error && !message && (
+                <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 12, background: '#fee2e2', color: '#dc2626' }}>
+                    Error: {error}
+                </div>
+            )}
 
             {loaded && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                    {TIME_FIELDS.map(({ key, label }) => (
-                        <div key={key}>
-                            <label style={labelStyle}>{label}</label>
-                            <input
-                                type="time"
-                                value={settings[key]}
-                                onChange={e => setSettings(s => ({ ...s, [key]: e.target.value }))}
-                                style={fieldStyle}
-                            />
-                        </div>
-                    ))}
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                            <tr style={{ background: 'var(--bg)' }}>
+                                <th style={{ padding: 8, textAlign: 'left' }}>Employee</th>
+                                <th style={{ padding: 8 }}>Shift Start</th>
+                                <th style={{ padding: 8 }}>Shift End</th>
+                                <th style={{ padding: 8 }}>Weekly Off</th>
+                                <th style={{ padding: 8 }}>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {shifts.map(s => (
+                                <tr key={s.emp_id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                    <td style={{ padding: 8, fontWeight: 600 }}>
+                                        {s.emp_name}
+                                        <br /><span style={{ fontSize: 11, color: '#64748b' }}>{s.emp_role}</span>
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                        <input type="time" value={s.shift_start} onChange={e => updateShift(s.emp_id, { shift_start: e.target.value })} style={inputStyle} />
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                        <input type="time" value={s.shift_end} onChange={e => updateShift(s.emp_id, { shift_end: e.target.value })} style={inputStyle} />
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                        <select value={s.weekly_off} onChange={e => updateShift(s.emp_id, { weekly_off: e.target.value })} style={inputStyle}>
+                                            {WEEKLY_OFF_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                                        </select>
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                        <button onClick={() => handleSave(s.emp_id)} disabled={savingId === s.emp_id} style={{ padding: '5px 14px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: savingId === s.emp_id ? 0.6 : 1 }}>
+                                            {savingId === s.emp_id ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

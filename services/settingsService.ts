@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import {
-    ShiftSettings,
+    EmployeeShift, DEFAULT_SHIFT,
     MSCCenter, MSCCenterForm,
     PortalService, PortalServiceForm,
     TelegramSettings,
@@ -21,25 +21,55 @@ export const saveCompanyInfo = async (info: Partial<CompanyInfo>): Promise<void>
     const { error } = await supabase.from('company_info').upsert([{ id: 1, ...info }]);
     if (error) throw error;
 };
-// ─── Shift Settings ───────────────────────────────────────────────────────────
+// ─── Shift Settings (per-employee) ────────────────────────────────────────────
 
-export const fetchShiftSettings = async (): Promise<ShiftSettings | null> => {
-    const { data, error } = await supabase
-        .from('shift_settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
-    if (error) return null;
-    return data;
+export const fetchEmployeesWithShifts = async (): Promise<EmployeeShift[]> => {
+    const [usersRes, shiftsRes] = await Promise.all([
+        supabase.from('users').select('user_id, name, role').eq('is_active', true).order('name'),
+        supabase.from('shift_settings').select('*').order('emp_id'),
+    ]);
+    if (usersRes.error) throw usersRes.error;
+
+    const shiftMap: Record<string, any> = {};
+    (shiftsRes.data || []).forEach((s: any) => { shiftMap[s.emp_id] = s; });
+
+    return (usersRes.data || []).map((u: any) => {
+        const s = shiftMap[u.user_id];
+        return {
+            emp_id: u.user_id,
+            emp_name: u.name,
+            emp_role: u.role,
+            shift_start: s?.shift_start || DEFAULT_SHIFT.shift_start,
+            shift_end: s?.shift_end || DEFAULT_SHIFT.shift_end,
+            weekly_off: s?.weekly_off || DEFAULT_SHIFT.weekly_off,
+        };
+    });
 };
 
-export const saveShiftSettings = async (settings: ShiftSettings): Promise<void> => {
-    const { error } = await supabase
-        .from('shift_settings')
-        .upsert([{ id: 1, ...settings, updated_at: new Date().toISOString() }]);
-    if (error) throw error;
+export const saveEmployeeShift = async (shift: EmployeeShift): Promise<void> => {
+    const { data: existing } = await supabase.from('shift_settings').select('emp_id').eq('emp_id', shift.emp_id);
+    const payload = {
+        shift_start: shift.shift_start,
+        shift_end: shift.shift_end,
+        weekly_off: shift.weekly_off,
+        updated_at: new Date().toISOString(),
+    };
+    if (existing && existing.length > 0) {
+        const { error } = await supabase.from('shift_settings').update(payload).eq('emp_id', shift.emp_id);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from('shift_settings').insert([{ emp_id: shift.emp_id, emp_name: shift.emp_name, emp_role: shift.emp_role, ...payload }]);
+        if (error) throw error;
+    }
 };
 
+// Used by attendance computations (next step): shift lookup keyed by emp_id.
+export const fetchShiftMap = async (): Promise<Record<string, EmployeeShift>> => {
+    const { data } = await supabase.from('shift_settings').select('*');
+    const map: Record<string, EmployeeShift> = {};
+    (data || []).forEach((s: any) => { map[s.emp_id] = s; });
+    return map;
+};
 // ─── MSC Centers ──────────────────────────────────────────────────────────────
 
 export const fetchMSCCenters = async (): Promise<MSCCenter[]> => {
