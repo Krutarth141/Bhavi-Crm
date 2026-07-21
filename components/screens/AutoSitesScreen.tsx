@@ -4,29 +4,43 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAutoSites } from '@/hooks/useAutoSites';
 import Modal from '@/components/Modal';
-import { SiteFormData, emptySiteForm, AutoSite } from '@/types/autoSites';
-import { fetchSiteItems, fetchSiteVisits, addSiteVisit } from '@/services/autoSitesService';
+import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, SiteItemForm, PaymentForm } from '@/types/autoSites';
+import {
+    fetchSiteItems, fetchSiteVisits, addSiteVisit, fetchSitePayments,
+    addSiteItem, updateSiteItem, deleteSiteItem, markItemDelivered,
+    addSitePayment, deleteSitePayment,
+} from '@/services/autoSitesService';
+import { printPaymentReceipt } from '@/utils/printSiteReceipt';
+import SiteItemFormModal from '@/components/screens/auto-sites/SiteItemFormModal';
+import SitePaymentModal from '@/components/screens/auto-sites/SitePaymentModal';
+import MarkDeliveredModal from '@/components/screens/auto-sites/MarkDeliveredModal';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
+const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 5px' } as const;
 
 export default function AutoSitesScreen() {
     const { data: session } = useSession();
     const userId = (session?.user as any)?.user_id ?? '';
     const userName = (session?.user as any)?.name ?? 'Admin';
 
-    const { sites, loading, error, add, remove } = useAutoSites();
+    const { sites, payMap, itemMap, loading, error, add, remove, refetch } = useAutoSites();
     const [addModalOpen, setAddModalOpen] = useState(false);
     const [detailSite, setDetailSite] = useState<AutoSite | null>(null);
-    const [siteItems, setSiteItems] = useState<any[]>([]);
+    const [siteItems, setSiteItems] = useState<AutoSiteItem[]>([]);
     const [siteVisits, setSiteVisits] = useState<any[]>([]);
+    const [sitePayments, setSitePayments] = useState<AutoSitePayment[]>([]);
     const [detailTab, setDetailTab] = useState<'items' | 'visits'>('items');
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
     const [form, setForm] = useState<SiteFormData>(emptySiteForm);
 
-    // Visit form
     const [visitForm, setVisitForm] = useState({ visit_date: '', work_done: '', material_delivered: '' });
     const [addingVisit, setAddingVisit] = useState(false);
+
+    const [itemFormOpen, setItemFormOpen] = useState(false);
+    const [editingItem, setEditingItem] = useState<AutoSiteItem | null>(null);
+    const [deliverItem, setDeliverItem] = useState<AutoSiteItem | null>(null);
+    const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
     const filtered = sites.filter(s => {
         if (!search.trim()) return true;
@@ -45,9 +59,10 @@ export default function AutoSitesScreen() {
 
     const openDetail = async (site: AutoSite) => {
         setDetailSite(site);
-        const [items, visits] = await Promise.all([fetchSiteItems(site.id), fetchSiteVisits(site.id)]);
+        const [items, visits, payments] = await Promise.all([fetchSiteItems(site.id), fetchSiteVisits(site.id), fetchSitePayments(site.id)]);
         setSiteItems(items);
         setSiteVisits(visits);
+        setSitePayments(payments);
     };
 
     const handleAddVisit = async () => {
@@ -60,6 +75,76 @@ export default function AutoSitesScreen() {
             setSiteVisits(visits);
         } else alert('Error: ' + r.error);
         setAddingVisit(false);
+    };
+
+    const grandSell = siteItems.reduce((a, i) => a + (i.total_price || Math.round((i.unit_price || 0) * (i.qty || 0) * (1 + (i.gst_percent || 0) / 100))), 0);
+    const totalPaid = sitePayments.reduce((a, p) => a + (p.amount || 0), 0);
+    const pending = grandSell - totalPaid;
+    const delivCount = siteItems.filter(i => i.delivery_status === 'delivered').length;
+
+    const handleItemSave = async (itemForm: SiteItemForm) => {
+        if (!detailSite) return { success: false, error: 'No site selected' };
+        const r = editingItem ? await updateSiteItem(editingItem.id, itemForm) : await addSiteItem(detailSite.id, itemForm);
+        if (r.success) {
+            const items = await fetchSiteItems(detailSite.id);
+            setSiteItems(items);
+            refetch();
+        }
+        return r;
+    };
+
+    const handleDeleteItem = async (item: AutoSiteItem) => {
+        if (!confirm(`Remove "${item.item_name}" from this site?`) || !detailSite) return;
+        const r = await deleteSiteItem(item.id);
+        if (r.success) {
+            const items = await fetchSiteItems(detailSite.id);
+            setSiteItems(items);
+            refetch();
+        } else alert('Error: ' + r.error);
+    };
+
+    const handleMarkDelivered = async (params: { deliveredQty: number; date: string; via: string; by: string; note: string }) => {
+        if (!deliverItem || !detailSite) return { success: false, error: 'No item selected' };
+        const r = await markItemDelivered(deliverItem.id, { ...params, totalQty: deliverItem.qty || 0 });
+        if (r.success) {
+            const items = await fetchSiteItems(detailSite.id);
+            setSiteItems(items);
+            refetch();
+        }
+        return r;
+    };
+
+    const handlePaymentSave = async (payForm: PaymentForm) => {
+        if (!detailSite) return { success: false, error: 'No site selected' };
+        const paidBeforeThis = totalPaid;
+        const r = await addSitePayment(detailSite.id, payForm, userId);
+        if (r.success) {
+            const payments = await fetchSitePayments(detailSite.id);
+            setSitePayments(payments);
+            refetch();
+            printPaymentReceipt({
+                id: r.id || Date.now(),
+                site_name: detailSite.site_name,
+                quotation_total: grandSell,
+                paid_before: paidBeforeThis,
+                amount: Number(payForm.amount) || 0,
+                payment_mode: payForm.payment_mode,
+                payment_date: payForm.payment_date,
+                reference_no: payForm.reference_no,
+                note: payForm.note,
+            });
+        }
+        return r;
+    };
+
+    const handleDeletePayment = async (id: number) => {
+        if (!confirm('Delete this payment record?') || !detailSite) return;
+        const r = await deleteSitePayment(id);
+        if (r.success) {
+            const payments = await fetchSitePayments(detailSite.id);
+            setSitePayments(payments);
+            refetch();
+        } else alert('Error: ' + r.error);
     };
 
     const addModalFooter = (
@@ -88,20 +173,35 @@ export default function AutoSitesScreen() {
                 : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No sites found</p>
                     : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-                            {filtered.map(s => (
-                                <div key={s.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                        <div style={{ fontWeight: 700, fontSize: 15 }}>{s.site_name}</div>
-                                        <button onClick={() => { if (confirm(`Delete "${s.site_name}"?`)) remove(s.id); }} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
+                            {filtered.map(s => {
+                                const paid = payMap[s.id] || 0;
+                                const agg = itemMap[s.id] || { total: 0, delivered: 0, value: 0 };
+                                const quotTotal = agg.value;
+                                const sitePending = quotTotal - paid;
+                                const delivPct = agg.total > 0 ? Math.round(agg.delivered / agg.total * 100) : 0;
+                                const delivColor = delivPct === 100 ? '#065f46' : delivPct > 0 ? '#d97706' : '#6b7280';
+                                const delivBg = delivPct === 100 ? '#f0fdf4' : delivPct > 0 ? '#fff7ed' : '#f3f4f6';
+                                return (
+                                    <div key={s.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderLeft: '4px solid #7c3aed', borderRadius: 8, padding: 16 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                            <div style={{ fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>🏗️ {s.site_name}</div>
+                                            <button onClick={() => { if (confirm(`Delete "${s.site_name}"? This also deletes its items, visits, and payments.`)) remove(s.id); }} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
+                                        </div>
+                                        <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>👤 {s.client_name}</div>
+                                        {s.mobile && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>📞 {s.mobile}</div>}
+                                        {s.address && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>📍 {s.address}</div>}
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                                            {quotTotal > 0 && <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>📋 ₹{quotTotal.toLocaleString('en-IN')}</span>}
+                                            {paid > 0 && <span style={{ fontSize: 11, background: '#f0fdf4', color: '#065f46', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>✅ Paid ₹{paid.toLocaleString('en-IN')}</span>}
+                                            {sitePending > 0 && <span style={{ fontSize: 11, background: '#fff7ed', color: '#d97706', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>⏳ Pending ₹{sitePending.toLocaleString('en-IN')}</span>}
+                                            {agg.total > 0 && <span style={{ fontSize: 11, background: delivBg, color: delivColor, padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>📦 {agg.delivered}/{agg.total} Delivered{delivPct === 100 ? ' ✅' : ''}</span>}
+                                        </div>
+                                        <button onClick={() => openDetail(s)} style={{ width: '100%', padding: '7px 0', background: '#eff6ff', color: '#185FA5', border: '1px solid #bfdbfe', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                                            📋 View Details
+                                        </button>
                                     </div>
-                                    <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>👤 {s.client_name}</div>
-                                    {s.mobile && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>📞 {s.mobile}</div>}
-                                    {s.address && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>📍 {s.address}</div>}
-                                    <button onClick={() => openDetail(s)} style={{ width: '100%', padding: '7px 0', background: '#eff6ff', color: '#185FA5', border: '1px solid #bfdbfe', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
-                                        📋 View Details
-                                    </button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
@@ -118,7 +218,7 @@ export default function AutoSitesScreen() {
             </Modal>
 
             {/* Site Detail Modal */}
-            <Modal isOpen={!!detailSite} onClose={() => setDetailSite(null)} title={`📋 ${detailSite?.site_name || ''}`}>
+            <Modal isOpen={!!detailSite} onClose={() => setDetailSite(null)} title={`📋 ${detailSite?.site_name || ''}`} size="lg">
                 {detailSite && (
                     <div>
                         <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
@@ -130,31 +230,100 @@ export default function AutoSitesScreen() {
                         </div>
 
                         {detailTab === 'items' ? (
-                            siteItems.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>No items added</p> : (
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                    <thead><tr style={{ background: '#f9fafb' }}>
-                                        {['Item', 'Qty', 'Unit Price', 'Total', 'Delivery'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{h}</th>)}
-                                    </tr></thead>
-                                    <tbody>
-                                        {siteItems.map(item => (
-                                            <tr key={item.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                                <td style={{ padding: '8px 10px', fontWeight: 500 }}>{item.item_name}</td>
-                                                <td style={{ padding: '8px 10px' }}>{item.qty} {item.unit || ''}</td>
-                                                <td style={{ padding: '8px 10px' }}>₹{item.unit_price || 0}</td>
-                                                <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹{item.total_price || 0}</td>
-                                                <td style={{ padding: '8px 10px', fontSize: 11 }}>
-                                                    <span style={{ padding: '1px 6px', borderRadius: 8, background: item.delivery_status === 'delivered' ? '#d1fae5' : '#fef3c7', color: item.delivery_status === 'delivered' ? '#065f46' : '#92400e' }}>
-                                                        {item.delivery_status || 'pending'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )
+                            <div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 14 }}>
+                                    <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                                        <div style={{ fontSize: 11, color: '#6b7280' }}>📋 Quotation</div>
+                                        <div style={{ fontSize: 15, fontWeight: 700 }}>₹{grandSell.toLocaleString('en-IN')}</div>
+                                    </div>
+                                    <div style={{ background: '#f9fafb', border: '1px solid #0e9f6e', borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                                        <div style={{ fontSize: 11, color: '#6b7280' }}>✅ Paid</div>
+                                        <div style={{ fontSize: 15, fontWeight: 700, color: '#0e9f6e' }}>₹{totalPaid.toLocaleString('en-IN')}</div>
+                                    </div>
+                                    <div style={{ background: '#f9fafb', border: '1px solid #d97706', borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                                        <div style={{ fontSize: 11, color: '#6b7280' }}>⏳ Pending</div>
+                                        <div style={{ fontSize: 15, fontWeight: 700, color: '#d97706' }}>₹{Math.max(0, pending).toLocaleString('en-IN')}</div>
+                                    </div>
+                                    <div style={{ background: '#f9fafb', border: '1px solid #7c3aed', borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                                        <div style={{ fontSize: 11, color: '#6b7280' }}>📦 Delivery</div>
+                                        <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed' }}>{delivCount}/{siteItems.length}</div>
+                                    </div>
+                                </div>
+
+                                {siteItems.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>No items added</p> : (
+                                    <div style={{ overflowX: 'auto', marginBottom: 14 }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                            <thead><tr style={{ background: '#f9fafb' }}>
+                                                {['Item', 'Qty', 'Purchase ₹', 'Selling ₹', 'Total', 'Delivery', ''].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{h}</th>)}
+                                            </tr></thead>
+                                            <tbody>
+                                                {siteItems.map(item => {
+                                                    const sell = item.total_price || Math.round((item.unit_price || 0) * (item.qty || 0) * (1 + (item.gst_percent || 0) / 100));
+                                                    const status = item.delivery_status || 'pending';
+                                                    const badge = status === 'delivered'
+                                                        ? <span style={{ background: '#dcfce7', color: '#065f46', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>🟢 Delivered</span>
+                                                        : status === 'partial'
+                                                            ? <span style={{ background: '#fef9c3', color: '#854d0e', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>🟡 Partial ({item.delivered_qty || 0}/{item.qty})</span>
+                                                            : <span style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700 }}>🔴 Pending</span>;
+                                                    return (
+                                                        <tr key={item.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 500 }}>{item.item_name}{item.note && <><br /><span style={{ fontSize: 11, color: '#6b7280' }}>{item.note}</span></>}</td>
+                                                            <td style={{ padding: '8px 10px' }}>{item.qty} {item.unit || ''}</td>
+                                                            <td style={{ padding: '8px 10px', color: '#6b7280' }}>₹{Number(item.purchase_price || 0).toLocaleString('en-IN')}</td>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 600 }}>₹{Number(item.unit_price || 0).toLocaleString('en-IN')}</td>
+                                                            <td style={{ padding: '8px 10px', fontWeight: 700 }}>₹{sell.toLocaleString('en-IN')}</td>
+                                                            <td style={{ padding: '8px 10px' }}>{badge}</td>
+                                                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                                                <button onClick={() => { setEditingItem(item); setItemFormOpen(true); }} title="Edit" style={btnIcon}>✏️</button>
+                                                                {status !== 'delivered' && <button onClick={() => setDeliverItem(item)} title="Mark Delivered" style={btnIcon}>📦</button>}
+                                                                <button onClick={() => handleDeleteItem(item)} title="Remove" style={{ ...btnIcon, color: '#dc2626' }}>🗑️</button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {sitePayments.length > 0 && (
+                                    <div style={{ marginBottom: 8 }}>
+                                        <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>💰 Payment History</h3>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                                <thead><tr style={{ background: '#f9fafb' }}>
+                                                    {['Date', 'Amount', 'Mode', 'Ref', 'Note', ''].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{h}</th>)}
+                                                </tr></thead>
+                                                <tbody>
+                                                    {sitePayments.map((p, idx) => {
+                                                        const paidBefore = sitePayments.slice(idx + 1).reduce((s, x) => s + (x.amount || 0), 0);
+                                                        return (
+                                                            <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                                <td style={{ padding: '8px 10px' }}>{p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-IN') : '—'}</td>
+                                                                <td style={{ padding: '8px 10px', fontWeight: 700, color: '#065f46' }}>₹{Number(p.amount).toLocaleString('en-IN')}</td>
+                                                                <td style={{ padding: '8px 10px' }}>{p.payment_mode}</td>
+                                                                <td style={{ padding: '8px 10px' }}>{p.reference_no || '—'}</td>
+                                                                <td style={{ padding: '8px 10px' }}>{p.note || '—'}</td>
+                                                                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                                                    <button onClick={() => printPaymentReceipt({ id: p.id, site_name: detailSite.site_name, quotation_total: grandSell, paid_before: paidBefore, amount: p.amount, payment_mode: p.payment_mode || '', payment_date: p.payment_date || '', reference_no: p.reference_no, note: p.note })} title="Print Receipt" style={btnIcon}>🖨️</button>
+                                                                    <button onClick={() => handleDeletePayment(p.id)} title="Delete" style={{ ...btnIcon, color: '#dc2626' }}>🗑️</button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                                    <button onClick={() => { setEditingItem(null); setItemFormOpen(true); }} style={{ padding: '7px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>➕ Add Item</button>
+                                    <button onClick={() => setPaymentModalOpen(true)} style={{ padding: '7px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>💰 Add Payment</button>
+                                </div>
+                            </div>
                         ) : (
                             <div>
-                                {/* Add visit form */}
                                 <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 12 }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                                         <input type="date" value={visitForm.visit_date} onChange={e => setVisitForm(f => ({ ...f, visit_date: e.target.value }))} style={fieldStyle} />
@@ -180,6 +349,31 @@ export default function AutoSitesScreen() {
                     </div>
                 )}
             </Modal>
+
+            {itemFormOpen && detailSite && (
+                <SiteItemFormModal
+                    siteItems={siteItems}
+                    editItem={editingItem}
+                    onClose={() => { setItemFormOpen(false); setEditingItem(null); }}
+                    onSave={handleItemSave}
+                />
+            )}
+            {paymentModalOpen && detailSite && (
+                <SitePaymentModal
+                    siteName={detailSite.site_name}
+                    quotationTotal={grandSell}
+                    paidSoFar={totalPaid}
+                    onClose={() => setPaymentModalOpen(false)}
+                    onSave={handlePaymentSave}
+                />
+            )}
+            {deliverItem && (
+                <MarkDeliveredModal
+                    item={deliverItem}
+                    onClose={() => setDeliverItem(null)}
+                    onSave={handleMarkDelivered}
+                />
+            )}
         </div>
     );
 }

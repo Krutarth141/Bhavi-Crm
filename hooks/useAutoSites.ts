@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
 import { AutoSite, SiteFormData } from '@/types/autoSites';
-import { fetchSites, createSite, deleteSite } from '@/services/autoSitesService';
+import { fetchSites, createSite, deleteSite, fetchAllSitePaymentSums, fetchAllSiteItemAggregates } from '@/services/autoSitesService';
 
 export const useAutoSites = () => {
     const [sites, setSites] = useState<AutoSite[]>([]);
+    const [payMap, setPayMap] = useState<Record<number, number>>({});
+    const [itemMap, setItemMap] = useState<Record<number, { total: number; delivered: number; value: number }>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true); setError(null);
-        try { setSites(await fetchSites()); }
+        try {
+            const [s, pm, im] = await Promise.all([fetchSites(), fetchAllSitePaymentSums(), fetchAllSiteItemAggregates()]);
+            setSites(s); setPayMap(pm); setItemMap(im);
+        }
         catch (err) { setError((err as any).message); }
         finally { setLoading(false); }
     };
@@ -28,5 +33,5 @@ export const useAutoSites = () => {
         return r;
     };
 
-    return { sites, loading, error, add, remove, refetch: load };
+    return { sites, payMap, itemMap, loading, error, add, remove, refetch: load };
 };

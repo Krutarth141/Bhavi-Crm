@@ -64,3 +64,45 @@ export interface SiteFormData {
 export const emptySiteForm: SiteFormData = {
     site_name: '', client_name: '', mobile: '', address: '',
 };
+
+export interface AutoSitePayment {
+    id: number;
+    site_id: number;
+    amount: number;
+    payment_mode?: string;
+    payment_date?: string;
+    reference_no?: string;
+    note?: string;
+    created_by?: string;
+    created_at?: string;
+}
+
+export interface SiteItemForm {
+    item_name: string;
+    qty: string;
+    unit: string;
+    purchase_price: string;
+    unit_price: string;
+    gst_percent: string;
+    note: string;
+}
+
+export const emptySiteItemForm: SiteItemForm = {
+    item_name: '', qty: '1', unit: 'pcs', purchase_price: '0', unit_price: '0', gst_percent: '0', note: '',
+};
+
+export const SERVICE_CHARGE_TYPES = ['Professional Charges', 'Configuration Charges', 'Installation Charges', 'Service Charges', 'AMC Charges', 'Labour Charges', 'Commissioning Charges', 'Other Charges'];
+
+export interface PaymentForm {
+    amount: string;
+    payment_mode: string;
+    payment_date: string;
+    reference_no: string;
+    note: string;
+}
+
+export const emptyPaymentForm = (): PaymentForm => ({
+    amount: '', payment_mode: '', payment_date: new Date().toISOString().slice(0, 10), reference_no: '', note: '',
+});
+
+export const PAYMENT_MODES = ['Cash', 'NEFT', 'IMPS', 'Cheque', 'UPI'];
