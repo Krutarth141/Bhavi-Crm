@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { AutoInventoryItem, AutoInventoryLog, AutoInventoryForm, StockTxnType } from '@/types/autoInventory';
+import { AutoInventoryItem, AutoInventoryLog, AutoInventoryForm, StockTxnType, ImportInventoryRow } from '@/types/autoInventory';
 
 export const fetchAutoInventory = async (): Promise<AutoInventoryItem[]> => {
     try {
@@ -111,4 +111,77 @@ export const fetchAutoInventoryLogs = async (inventoryId: number): Promise<AutoI
         if (error) throw error;
         return data || [];
     } catch (err) { console.error('fetchAutoInventoryLogs:', err); return []; }
+};
+
+export const bulkStockUpdate = async (params: {
+    type: Exclude<StockTxnType, 'sell'>;
+    date: string;
+    dealerOrCustomer: string;
+    invoiceNo: string;
+    doneBy: string;
+    items: AutoInventoryItem[];
+    rows: { itemId: number | null; itemName: string; qty: number; unit: string; price: number; sellPrice: number; gstPercent: number; note: string }[];
+}): Promise<{ successCount: number; errors: string[] }> => {
+    const { type, date, dealerOrCustomer, invoiceNo, doneBy, items, rows } = params;
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const row of rows) {
+        try {
+            let invId = row.itemId;
+            let currentStock = 0;
+
+            if (invId) {
+                currentStock = items.find(i => i.id === invId)?.stock_qty || 0;
+            } else {
+                const { data: created, error: createErr } = await supabase.from('auto_inventory')
+                    .insert([{ item_name: row.itemName, stock_qty: 0, purchase_price: row.price || 0, unit: row.unit || 'pcs', updated_at: new Date().toISOString() }])
+                    .select().single();
+                if (createErr) throw createErr;
+                invId = created.id;
+            }
+
+            const newStock = type === 'in' ? currentStock + row.qty : Math.max(0, currentStock - row.qty);
+            const { error: updateErr } = await supabase.from('auto_inventory')
+                .update({ stock_qty: newStock, updated_at: new Date().toISOString() })
+                .eq('id', invId);
+            if (updateErr) throw updateErr;
+
+            await supabase.from('auto_inventory_log').insert([{
+                inventory_id: invId, type, qty: row.qty,
+                dealer_name: type === 'in' ? (dealerOrCustomer || null) : null,
+                customer_name: type === 'out' ? (dealerOrCustomer || null) : null,
+                invoice_no: invoiceNo || null,
+                price_per_unit: type === 'in' ? (row.price || null) : (row.sellPrice || null),
+                note: row.note || (row.gstPercent ? `GST ${row.gstPercent}%` : null),
+                done_by: doneBy, created_at: new Date().toISOString(), txn_date: date,
+            }]).then(() => { }, () => { });
+
+            successCount++;
+        } catch (err) {
+            errors.push(`${row.itemName}: ${(err as any).message}`);
+        }
+    }
+    return { successCount, errors };
+};
+
+export const bulkImportInventory = async (rows: ImportInventoryRow[]): Promise<{ successCount: number; errors: string[] }> => {
+    let successCount = 0;
+    const errors: string[] = [];
+    for (const row of rows) {
+        try {
+            const { error } = await supabase.from('auto_inventory').insert([{
+                brand: row.brand || null, made_in: row.made_in || null, model_no: row.model_no || null,
+                item_name: row.item_name, category: row.category || null, description: row.description || null,
+                unit: row.unit || 'pcs', purchase_price: row.purchase_price || 0, gst_percent: row.gst_percent || 0,
+                selling_price: row.selling_price || 0, stock_qty: row.stock_qty || 0,
+                updated_at: new Date().toISOString(),
+            }]);
+            if (error) throw error;
+            successCount++;
+        } catch (err) {
+            errors.push(`${row.item_name}: ${(err as any).message}`);
+        }
+    }
+    return { successCount, errors };
 };

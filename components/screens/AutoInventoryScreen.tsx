@@ -1,18 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAutoInventory } from '@/hooks/useAutoInventory';
 import { AutoInventoryItem } from '@/types/autoInventory';
 import AutoInventoryFormModal from '@/components/screens/auto-inventory/AutoInventoryFormModal';
 import StockModal from '@/components/screens/auto-inventory/StockModal';
 import InventoryHistoryModal from '@/components/screens/auto-inventory/InventoryHistoryModal';
+import BulkStockModal from '@/components/screens/auto-inventory/BulkStockModal';
+import { downloadInventoryTemplate, parseInventoryFile } from '@/utils/autoInventoryImport';
+
+const outlineBtn = { padding: '8px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 } as const;
 
 export default function AutoInventoryScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name || '';
 
-    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, stockTxn } = useAutoInventory();
+    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, stockTxn, bulkStock, bulkImport } = useAutoInventory();
 
     const [search, setSearch] = useState('');
     const [brandFilter, setBrandFilter] = useState('');
@@ -20,6 +24,9 @@ export default function AutoInventoryScreen() {
     const [editItem, setEditItem] = useState<AutoInventoryItem | null>(null);
     const [stockItem, setStockItem] = useState<AutoInventoryItem | null>(null);
     const [historyItem, setHistoryItem] = useState<AutoInventoryItem | null>(null);
+    const [bulkStockType, setBulkStockType] = useState<'in' | 'out' | null>(null);
+    const [importing, setImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const filtered = items.filter(i => {
         const q = search.toLowerCase();
@@ -34,13 +41,38 @@ export default function AutoInventoryScreen() {
         if (!r.success) alert('Delete error: ' + r.error);
     };
 
+    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setImporting(true);
+        try {
+            const rows = await parseInventoryFile(file);
+            if (!rows.length) { alert('No valid rows found. Please check the template format.'); return; }
+            if (!confirm(`Import ${rows.length} items?`)) return;
+            const r = await bulkImport(rows);
+            alert(`✅ ${r.successCount} items imported!${r.errors.length ? ` ⚠️ ${r.errors.length} failed.` : ''}`);
+        } catch (err: any) {
+            alert('Import error: ' + err.message);
+        } finally {
+            setImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: '2px 5px' } as const;
 
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>📦 Auto Inventory ({items.length})</h1>
-                <button onClick={() => { setEditItem(null); setFormOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ Add Item</button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={downloadInventoryTemplate} style={outlineBtn}>📥 Template</button>
+                    <button onClick={() => fileInputRef.current?.click()} disabled={importing} style={{ ...outlineBtn, opacity: importing ? 0.6 : 1 }}>{importing ? 'Importing...' : '📤 Import'}</button>
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleImportFile} />
+                    <button onClick={() => setBulkStockType('in')} style={{ ...outlineBtn, background: '#059669', color: '#fff', borderColor: '#059669' }}>⬇️ Bulk IN</button>
+                    <button onClick={() => setBulkStockType('out')} style={{ ...outlineBtn, borderColor: '#dc2626', color: '#dc2626' }}>⬆️ Bulk OUT</button>
+                    <button onClick={() => { setEditItem(null); setFormOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ Add Item</button>
+                </div>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
@@ -133,6 +165,15 @@ export default function AutoInventoryScreen() {
                 />
             )}
             {historyItem && <InventoryHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}
+            {bulkStockType && (
+                <BulkStockModal
+                    type={bulkStockType}
+                    items={items}
+                    doneBy={userName}
+                    onClose={() => setBulkStockType(null)}
+                    onSave={bulkStock}
+                />
+            )}
         </div>
     );
 }

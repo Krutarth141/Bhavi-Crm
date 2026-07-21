@@ -61,6 +61,35 @@ export const emptyAutoInventoryForm = (): AutoInventoryForm => ({
     dealer: '', purchase_date: new Date().toISOString().slice(0, 10),
 });
 
+export interface BulkStockRow {
+    itemId: number | null;   // null → new item, created automatically on save
+    itemName: string;
+    unit: string;
+    qty: string;
+    price: string;           // purchase price / unit
+    sellPrice: string;       // selling price / unit
+    gstPercent: string;
+    note: string;
+}
+
+export const emptyBulkStockRow = (): BulkStockRow => ({
+    itemId: null, itemName: '', unit: 'pcs', qty: '1', price: '0', sellPrice: '0', gstPercent: '0', note: '',
+});
+
+export interface ImportInventoryRow {
+    brand?: string;
+    made_in?: string;
+    model_no?: string;
+    item_name: string;
+    category?: string;
+    description?: string;
+    unit: string;
+    purchase_price: number;
+    gst_percent: number;
+    selling_price: number;
+    stock_qty: number;
+}
+
 export const AUTO_UNITS = ['pcs', 'Each', 'Pair', 'Mtr', 'Rft', 'Roll', 'Set', 'Box', 'Bag', 'Kg', 'Ltr', 'Nos', 'Job', 'Yr'];
 
 export type StockTxnType = 'in' | 'out' | 'sell';
