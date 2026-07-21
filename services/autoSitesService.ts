@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { AutoSite, AutoSiteItem, AutoSiteVisit, AutoSitePayment, SiteFormData, SiteItemForm, PaymentForm } from '@/types/autoSites';
+import { AutoSite, AutoSiteItem, AutoSiteVisit, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteFormData, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
 
 export const fetchSites = async (): Promise<AutoSite[]> => {
     try {
@@ -151,4 +151,80 @@ export const fetchAllSiteItemAggregates = async (): Promise<Record<number, { tot
         });
         return map;
     } catch (err) { console.error('fetchAllSiteItemAggregates:', err); return {}; }
+};
+
+export const updateSite = async (id: number, form: SiteFormData): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('auto_sites').update({
+            site_name: form.site_name.trim(), client_name: form.client_name.trim(),
+            mobile: form.mobile.trim() || null, address: form.address.trim() || null,
+        }).eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
+export const fetchSiteDispatches = async (siteId: number): Promise<AutoSiteDispatch[]> => {
+    try {
+        const { data, error } = await supabase.from('auto_site_dispatches').select('*').eq('site_id', siteId).order('created_at', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    } catch (err) { console.error('fetchSiteDispatches:', err); return []; }
+};
+
+export const createDispatch = async (params: {
+    siteId: number;
+    date: string;
+    mode: string;
+    deliveredBy: string;
+    receiverName: string;
+    notes: string;
+    createdBy: string;
+    items: { item: AutoSiteItem; qty: number }[];
+}): Promise<{ success: boolean; dcNumber?: string; error?: string }> => {
+    try {
+        const dcNumber = 'DC-' + Date.now().toString().slice(-6);
+        const dispatchItems = params.items.map(d => ({ site_item_id: d.item.id, item_name: d.item.item_name, qty: d.qty, unit: d.item.unit || 'pcs' }));
+        const { error } = await supabase.from('auto_site_dispatches').insert([{
+            site_id: params.siteId, dispatch_date: params.date, delivery_mode: params.mode,
+            delivery_detail: params.deliveredBy || null, receiver_name: params.receiverName || null,
+            items: JSON.stringify(dispatchItems), dc_number: dcNumber, notes: params.notes || null,
+            created_by: params.createdBy,
+        }]);
+        if (error) throw error;
+
+        for (const d of params.items) {
+            const newDelivered = Math.min(d.item.qty || 0, (d.item.delivered_qty || 0) + d.qty);
+            const newStatus = newDelivered >= (d.item.qty || 0) ? 'delivered' : 'partial';
+            await supabase.from('auto_site_items').update({
+                delivery_status: newStatus, delivered_qty: newDelivered, delivered_date: params.date,
+                delivered_by: params.mode + (params.deliveredBy ? ` — ${params.deliveredBy}` : ''),
+            }).eq('id', d.item.id);
+        }
+        return { success: true, dcNumber };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
+export const fetchSiteContacts = async (siteId: number): Promise<SiteContact[]> => {
+    try {
+        const { data, error } = await supabase.from('auto_site_contacts').select('*').eq('site_id', siteId).order('id');
+        if (error) throw error;
+        return data || [];
+    } catch (err) { console.error('fetchSiteContacts:', err); return []; }
+};
+
+export const addSiteContact = async (siteId: number, form: ContactForm): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('auto_site_contacts').insert([{ site_id: siteId, agency: form.agency.trim(), contact_name: form.contact_name.trim(), mobile: form.mobile.trim() }]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
+export const deleteSiteContact = async (id: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('auto_site_contacts').delete().eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
 };

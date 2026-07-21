@@ -4,16 +4,23 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAutoSites } from '@/hooks/useAutoSites';
 import Modal from '@/components/Modal';
-import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, SiteItemForm, PaymentForm } from '@/types/autoSites';
+import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
 import {
     fetchSiteItems, fetchSiteVisits, addSiteVisit, fetchSitePayments,
     addSiteItem, updateSiteItem, deleteSiteItem, markItemDelivered,
-    addSitePayment, deleteSitePayment,
+    addSitePayment, deleteSitePayment, updateSite,
+    fetchSiteDispatches, createDispatch,
+    fetchSiteContacts, addSiteContact, deleteSiteContact,
 } from '@/services/autoSitesService';
 import { printPaymentReceipt } from '@/utils/printSiteReceipt';
+import { printDeliveryChallan } from '@/utils/printSiteDC';
+import { printQuotation } from '@/utils/printQuotation';
 import SiteItemFormModal from '@/components/screens/auto-sites/SiteItemFormModal';
 import SitePaymentModal from '@/components/screens/auto-sites/SitePaymentModal';
 import MarkDeliveredModal from '@/components/screens/auto-sites/MarkDeliveredModal';
+import DispatchModal from '@/components/screens/auto-sites/DispatchModal';
+import SiteContactsModal from '@/components/screens/auto-sites/SiteContactsModal';
+import TCSelectorModal from '@/components/screens/auto-sites/TCSelectorModal';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 5px' } as const;
@@ -25,10 +32,12 @@ export default function AutoSitesScreen() {
 
     const { sites, payMap, itemMap, loading, error, add, remove, refetch } = useAutoSites();
     const [addModalOpen, setAddModalOpen] = useState(false);
+    const [editingSite, setEditingSite] = useState<AutoSite | null>(null);
     const [detailSite, setDetailSite] = useState<AutoSite | null>(null);
     const [siteItems, setSiteItems] = useState<AutoSiteItem[]>([]);
     const [siteVisits, setSiteVisits] = useState<any[]>([]);
     const [sitePayments, setSitePayments] = useState<AutoSitePayment[]>([]);
+    const [siteDispatches, setSiteDispatches] = useState<AutoSiteDispatch[]>([]);
     const [detailTab, setDetailTab] = useState<'items' | 'visits'>('items');
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
@@ -41,6 +50,10 @@ export default function AutoSitesScreen() {
     const [editingItem, setEditingItem] = useState<AutoSiteItem | null>(null);
     const [deliverItem, setDeliverItem] = useState<AutoSiteItem | null>(null);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+    const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
+    const [contactsSite, setContactsSite] = useState<AutoSite | null>(null);
+    const [siteContacts, setSiteContacts] = useState<SiteContact[]>([]);
+    const [tcSelectorOpen, setTcSelectorOpen] = useState(false);
 
     const filtered = sites.filter(s => {
         if (!search.trim()) return true;
@@ -48,21 +61,47 @@ export default function AutoSitesScreen() {
         return s.site_name?.toLowerCase().includes(q) || s.client_name?.toLowerCase().includes(q) || s.mobile?.includes(q);
     });
 
-    const handleAdd = async () => {
+    const handleSaveSite = async () => {
         if (!form.site_name.trim() || !form.client_name.trim()) { alert('Site name and client name required'); return; }
         setSaving(true);
-        const r = await add(form, userId);
-        if (r.success) { setAddModalOpen(false); setForm(emptySiteForm); }
+        const r = editingSite ? await updateSite(editingSite.id, form) : await add(form, userId);
+        if (r.success) { setAddModalOpen(false); setEditingSite(null); setForm(emptySiteForm); refetch(); }
         else alert('Error: ' + r.error);
         setSaving(false);
     };
 
+    const openEditSite = (site: AutoSite) => {
+        setEditingSite(site);
+        setForm({ site_name: site.site_name, client_name: site.client_name, mobile: site.mobile || '', address: site.address || '' });
+        setAddModalOpen(true);
+    };
+
     const openDetail = async (site: AutoSite) => {
         setDetailSite(site);
-        const [items, visits, payments] = await Promise.all([fetchSiteItems(site.id), fetchSiteVisits(site.id), fetchSitePayments(site.id)]);
+        const [items, visits, payments, dispatches] = await Promise.all([fetchSiteItems(site.id), fetchSiteVisits(site.id), fetchSitePayments(site.id), fetchSiteDispatches(site.id)]);
         setSiteItems(items);
         setSiteVisits(visits);
         setSitePayments(payments);
+        setSiteDispatches(dispatches);
+    };
+
+    const openContacts = async (site: AutoSite) => {
+        setContactsSite(site);
+        setSiteContacts(await fetchSiteContacts(site.id));
+    };
+
+    const handleAddContact = async (contactForm: ContactForm) => {
+        if (!contactsSite) return { success: false, error: 'No site selected' };
+        const r = await addSiteContact(contactsSite.id, contactForm);
+        if (r.success) setSiteContacts(await fetchSiteContacts(contactsSite.id));
+        return r;
+    };
+
+    const handleDeleteContact = async (id: number) => {
+        if (!confirm('Delete this contact?') || !contactsSite) return;
+        const r = await deleteSiteContact(id);
+        if (r.success) setSiteContacts(await fetchSiteContacts(contactsSite.id));
+        else alert('Error: ' + r.error);
     };
 
     const handleAddVisit = async () => {
@@ -81,6 +120,7 @@ export default function AutoSitesScreen() {
     const totalPaid = sitePayments.reduce((a, p) => a + (p.amount || 0), 0);
     const pending = grandSell - totalPaid;
     const delivCount = siteItems.filter(i => i.delivery_status === 'delivered').length;
+    const pendingItems = siteItems.filter(i => i.delivery_status !== 'delivered');
 
     const handleItemSave = async (itemForm: SiteItemForm) => {
         if (!detailSite) return { success: false, error: 'No site selected' };
@@ -147,11 +187,59 @@ export default function AutoSitesScreen() {
         } else alert('Error: ' + r.error);
     };
 
+    const handleDispatchSave = async (params: { date: string; mode: string; deliveredBy: string; receiverName: string; notes: string; items: { item: AutoSiteItem; qty: number }[] }) => {
+        if (!detailSite) return { success: false, error: 'No site selected' };
+        const r = await createDispatch({ siteId: detailSite.id, ...params, createdBy: userId });
+        if (r.success) {
+            const [items, dispatches] = await Promise.all([fetchSiteItems(detailSite.id), fetchSiteDispatches(detailSite.id)]);
+            setSiteItems(items);
+            setSiteDispatches(dispatches);
+            refetch();
+            printDeliveryChallan({
+                siteName: detailSite.site_name,
+                dcNumber: r.dcNumber || '',
+                dispatchDate: params.date,
+                receiverName: params.receiverName,
+                deliveryDetail: `${params.mode}${params.deliveredBy ? ' | ' + params.deliveredBy : ''}`,
+                engineerName: userName,
+                items: params.items.map(d => ({ item_name: d.item.item_name, qty: d.qty, unit: d.item.unit, note: d.item.note })),
+            });
+        }
+        return r;
+    };
+
+    const handleReprintDC = (d: AutoSiteDispatch) => {
+        let its: any[] = [];
+        try { its = JSON.parse(d.items || '[]'); } catch { /* ignore */ }
+        printDeliveryChallan({
+            siteName: detailSite?.site_name || '',
+            dcNumber: d.dc_number || '',
+            dispatchDate: d.dispatch_date || '',
+            receiverName: d.receiver_name,
+            deliveryDetail: d.delivery_mode + (d.delivery_detail ? ` | ${d.delivery_detail}` : ''),
+            engineerName: userName,
+            items: its.map((i: any) => ({ item_name: i.item_name, qty: i.qty, unit: i.unit })),
+        });
+    };
+
+    const handleApplyTC = (tcLines: string[]) => {
+        setTcSelectorOpen(false);
+        if (!detailSite) return;
+        printQuotation({
+            items: siteItems,
+            siteName: detailSite.site_name,
+            address: detailSite.address,
+            mobile: detailSite.mobile,
+            paid: totalPaid,
+            tcLines,
+        });
+    };
+
     const addModalFooter = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => setAddModalOpen(false)} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-            <button onClick={handleAdd} disabled={saving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving...' : '💾 Add Site'}
+            <button onClick={() => { setAddModalOpen(false); setEditingSite(null); }} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+            <button onClick={handleSaveSite} disabled={saving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: saving ? 0.6 : 1 }}>
+                {saving ? 'Saving...' : (editingSite ? '💾 Update Site' : '💾 Add Site')}
             </button>
         </div>
     );
@@ -160,7 +248,7 @@ export default function AutoSitesScreen() {
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🏗️ Auto Sites ({sites.length})</h1>
-                <button onClick={() => setAddModalOpen(true)} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ New Site</button>
+                <button onClick={() => { setEditingSite(null); setForm(emptySiteForm); setAddModalOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ New Site</button>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
@@ -185,7 +273,11 @@ export default function AutoSitesScreen() {
                                     <div key={s.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderLeft: '4px solid #7c3aed', borderRadius: 8, padding: 16 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                                             <div style={{ fontWeight: 700, fontSize: 15, color: '#7c3aed' }}>🏗️ {s.site_name}</div>
-                                            <button onClick={() => { if (confirm(`Delete "${s.site_name}"? This also deletes its items, visits, and payments.`)) remove(s.id); }} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                                <button onClick={() => openContacts(s)} title="Contacts" style={{ background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>📞</button>
+                                                <button onClick={() => openEditSite(s)} title="Edit" style={{ background: '#e0e7ff', color: '#3730a3', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>✏️</button>
+                                                <button onClick={() => { if (confirm(`Delete "${s.site_name}"? This also deletes its items, visits, and payments.`)) remove(s.id); }} title="Delete" style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
+                                            </div>
                                         </div>
                                         <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>👤 {s.client_name}</div>
                                         {s.mobile && <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>📞 {s.mobile}</div>}
@@ -205,8 +297,8 @@ export default function AutoSitesScreen() {
                         </div>
                     )}
 
-            {/* Add Site Modal */}
-            <Modal isOpen={addModalOpen} onClose={() => setAddModalOpen(false)} title="🏗️ New Site" footer={addModalFooter}>
+            {/* Add / Edit Site Modal */}
+            <Modal isOpen={addModalOpen} onClose={() => { setAddModalOpen(false); setEditingSite(null); }} title={editingSite ? '✏️ Edit Site' : '🏗️ New Site'} footer={addModalFooter}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Site Name *</label><input type="text" value={form.site_name} onChange={e => setForm(f => ({ ...f, site_name: e.target.value }))} style={fieldStyle} /></div>
@@ -287,7 +379,7 @@ export default function AutoSitesScreen() {
                                 )}
 
                                 {sitePayments.length > 0 && (
-                                    <div style={{ marginBottom: 8 }}>
+                                    <div style={{ marginBottom: 20 }}>
                                         <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>💰 Payment History</h3>
                                         <div style={{ overflowX: 'auto' }}>
                                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -317,9 +409,40 @@ export default function AutoSitesScreen() {
                                     </div>
                                 )}
 
+                                {siteDispatches.length > 0 && (
+                                    <div style={{ marginBottom: 8 }}>
+                                        <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>📤 Dispatch History</h3>
+                                        <div style={{ overflowX: 'auto' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                                <thead><tr style={{ background: '#f9fafb' }}>
+                                                    {['Date', 'DC No', 'Mode', 'Items', ''].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: 12 }}>{h}</th>)}
+                                                </tr></thead>
+                                                <tbody>
+                                                    {siteDispatches.map(d => {
+                                                        let its: any[] = [];
+                                                        try { its = JSON.parse(d.items || '[]'); } catch { /* ignore */ }
+                                                        const summary = its.map((i: any) => `${i.qty}x ${i.item_name}`).join(', ');
+                                                        return (
+                                                            <tr key={d.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                                <td style={{ padding: '8px 10px' }}>{d.dispatch_date ? new Date(d.dispatch_date).toLocaleDateString('en-IN') : '—'}</td>
+                                                                <td style={{ padding: '8px 10px', fontWeight: 700 }}>{d.dc_number}</td>
+                                                                <td style={{ padding: '8px 10px' }}>{d.delivery_mode || '—'}</td>
+                                                                <td style={{ padding: '8px 10px', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</td>
+                                                                <td style={{ padding: '8px 10px' }}><button onClick={() => handleReprintDC(d)} style={{ padding: '3px 8px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>🖨️ DC</button></td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                                     <button onClick={() => { setEditingItem(null); setItemFormOpen(true); }} style={{ padding: '7px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>➕ Add Item</button>
                                     <button onClick={() => setPaymentModalOpen(true)} style={{ padding: '7px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>💰 Add Payment</button>
+                                    {pendingItems.length > 0 && <button onClick={() => setDispatchModalOpen(true)} style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>📤 Dispatch Material</button>}
+                                    <button onClick={() => setTcSelectorOpen(true)} style={{ padding: '7px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>📄 Quotation</button>
                                 </div>
                             </div>
                         ) : (
@@ -372,6 +495,29 @@ export default function AutoSitesScreen() {
                     item={deliverItem}
                     onClose={() => setDeliverItem(null)}
                     onSave={handleMarkDelivered}
+                />
+            )}
+            {dispatchModalOpen && detailSite && (
+                <DispatchModal
+                    siteName={detailSite.site_name}
+                    pendingItems={pendingItems}
+                    onClose={() => setDispatchModalOpen(false)}
+                    onSave={handleDispatchSave}
+                />
+            )}
+            {contactsSite && (
+                <SiteContactsModal
+                    siteName={contactsSite.site_name}
+                    contacts={siteContacts}
+                    onClose={() => setContactsSite(null)}
+                    onAdd={handleAddContact}
+                    onDelete={handleDeleteContact}
+                />
+            )}
+            {tcSelectorOpen && (
+                <TCSelectorModal
+                    onClose={() => setTcSelectorOpen(false)}
+                    onApply={handleApplyTC}
                 />
             )}
         </div>

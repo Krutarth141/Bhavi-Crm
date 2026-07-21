@@ -101,6 +101,41 @@ export interface PaymentForm {
     note: string;
 }
 
+export interface AutoSiteDispatch {
+    id: number;
+    site_id: number;
+    dispatch_date?: string;
+    delivery_mode?: string;
+    delivery_detail?: string;
+    receiver_name?: string;
+    items?: string; // JSON string of dispatched item summaries
+    dc_number?: string;
+    notes?: string;
+    created_by?: string;
+    created_at?: string;
+}
+
+export const DISPATCH_MODES = ['By Hand', 'Courier', 'Porter', 'Company Vehicle'];
+
+export interface SiteContact {
+    id: number;
+    site_id: number;
+    agency: string;
+    contact_name: string;
+    mobile: string;
+    created_at?: string;
+}
+
+export interface ContactForm {
+    agency: string;
+    contact_name: string;
+    mobile: string;
+}
+
+export const emptyContactForm: ContactForm = { agency: '', contact_name: '', mobile: '' };
+
+export const CONTACT_AGENCIES = ['Mistry', 'Electrician', 'Plumber', 'POP', 'Painter', 'Automation', 'CCTV', 'Network', 'AC Technician', 'Carpenter'];
+
 export const emptyPaymentForm = (): PaymentForm => ({
     amount: '', payment_mode: '', payment_date: new Date().toISOString().slice(0, 10), reference_no: '', note: '',
 });
