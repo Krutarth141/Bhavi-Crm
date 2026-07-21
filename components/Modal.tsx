@@ -1,3 +1,4 @@
+'use client';
 interface ModalProps {
     isOpen: boolean;
     title: string;
