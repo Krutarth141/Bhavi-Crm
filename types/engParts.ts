@@ -23,6 +23,10 @@ export interface EngMovement {
   to_owner?: string | null;
   job_sheet?: string | null;
   warranty?: boolean;
+  warranty_status?: 'PENDING' | 'PARTIAL' | 'WITH_ENGINEER' | 'RECEIVED' | null;
+  warranty_received_qty?: number;
+  warranty_received_at?: string | null;
+  se_call_id_full?: string | null;
   notes?: string | null;
   created_by?: string;
 }

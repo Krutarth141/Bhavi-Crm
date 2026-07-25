@@ -7,17 +7,19 @@ import { InventoryItem } from '@/types/inventory';
 import IssueModal from './IssueModal';
 import UseModal from './UseModal';
 import ReturnModal from './ReturnModal';
+import DirectWarrantyIssueModal from './DirectWarrantyIssueModal';
 import {
   issueToEngineer,
   recordUsage,
   engineerReturn,
   warrantyReturn,
+  directWarrantyIssue,
 } from '@/services/engPartsService';
 import { approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log';
-type ModalType = 'issue' | 'use' | 'return' | 'warranty' | null;
+type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | null;
 
 interface Props {
   inventory: InventoryItem[];
@@ -106,6 +108,13 @@ export default function EngPartsAdmin({
     onRefetch();
   };
 
+  const handleDirectWarrantyIssueSave = async (params: {
+    part_id: string; eng_name: string; qty: number; job_sheet: string; note?: string;
+  }) => {
+    await directWarrantyIssue(params);
+    onRefetch();
+  };
+
   const tabs: { key: AdminTabType; label: string }[] = [
     { key: 'overview', label: 'Stock Overview' },
     { key: 'analysis', label: 'Engineer Analysis' },
@@ -168,6 +177,12 @@ export default function EngPartsAdmin({
           onClick={() => setActiveModal('warranty')}
         >
           🔄 Warranty Return
+        </button>
+        <button
+          style={{ ...styles.btn, backgroundColor: '#4338ca', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setActiveModal('directWarranty')}
+        >
+          🎁 Direct Warranty Issue
         </button>
       </div>
 
@@ -441,6 +456,14 @@ export default function EngPartsAdmin({
           engStock={engStock}
           inventory={inventory}
           onSave={handleWarrantySave}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {activeModal === 'directWarranty' && (
+        <DirectWarrantyIssueModal
+          engineers={engineers}
+          inventory={inventory}
+          onSave={handleDirectWarrantyIssueSave}
           onClose={() => setActiveModal(null)}
         />
       )}

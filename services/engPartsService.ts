@@ -92,3 +92,57 @@ export const warrantyReturn = async (params: {
         return { success: false, error: String(err) };
     }
 };
+
+export const checkDirectWarrantyDuplicate = async (jobSheet: string, partId: string): Promise<boolean> => {
+    const trackKey = jobSheet.trim().toUpperCase().split('/').pop()!.trim();
+    const { data } = await supabase.from('eng_movements').select('id').eq('type', 'USE').eq('warranty', true).eq('job_sheet', trackKey).eq('part_id', partId);
+    return !!(data && data.length);
+};
+
+export const directWarrantyIssue = async (params: {
+    part_id: string; eng_name: string; qty: number; job_sheet: string; note?: string;
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { part_id, eng_name, qty, note } = params;
+        const trackKey = params.job_sheet.trim().toUpperCase().split('/').pop()!.trim();
+
+        const { data: invItem } = await supabase.from('inventory').select('*').eq('id', part_id).single();
+        const newQty = (invItem?.qty_in_stock || 0) + qty;
+        const newWarrantyQty = (invItem?.warranty_qty || 0) + qty;
+        await supabase.from('inventory').update({ qty_in_stock: newQty, warranty_qty: newWarrantyQty, updated_at: new Date().toISOString() }).eq('id', part_id);
+
+        await logMovement({
+            type: 'WARRANTY_DIRECT_IN', part_id, qty,
+            from_owner: 'COMPANY (Canon Warranty)', to_owner: eng_name,
+            job_sheet: trackKey, warranty: true, warranty_status: 'WITH_ENGINEER',
+            notes: `Direct Canon dispatch to ${eng_name}${note ? ' | ' + note : ''}`,
+        });
+
+        try {
+            const { data: matchTickets } = await supabase.from('tickets').select('id, spares, se_call_id').ilike('se_call_id', `%${trackKey}%`).limit(10);
+            const matchTkt = (matchTickets || []).find((t: any) => {
+                const raw = (t.se_call_id || '').trim().toUpperCase();
+                return raw === trackKey || raw.endsWith('/' + trackKey) || raw.endsWith(trackKey);
+            });
+            if (matchTkt) {
+                const existingSpares = matchTkt.spares || [];
+                const alreadyHas = existingSpares.some((s: any) => s.code && s.code === invItem?.part_code);
+                if (!alreadyHas) {
+                    const newSpare = {
+                        code: invItem?.part_code || part_id, name: invItem?.item_name || 'Part',
+                        qty, price: parseFloat(invItem?.unit_price) || 0,
+                        gst_pct: invItem?.gst_pct != null ? parseFloat(invItem.gst_pct) : 0,
+                        requested: true, stock_deducted: false, warranty_supplied: true,
+                    };
+                    await supabase.from('tickets').update({ spares: [...existingSpares, newSpare], updated_at: new Date().toISOString() }).eq('id', matchTkt.id);
+                }
+            }
+        } catch (autoErr) {
+            console.log('Auto-link to ticket failed:', autoErr);
+        }
+
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};
