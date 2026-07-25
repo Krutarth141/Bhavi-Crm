@@ -2,19 +2,21 @@
 import { useState } from 'react';
 import { PartRequest } from '@/types/partRequest';
 import { InventoryItem } from '@/types/inventory';
+import { EngStock } from '@/types/engParts';
 import { submitPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
-type EngTabType = 'my-requests' | 'self-service';
+type EngTabType = 'my-requests' | 'self-service' | 'return-parts';
 
 interface Props {
   engName: string;
   inventory: InventoryItem[];
+  myStock: EngStock[];
   myRequests: PartRequest[];
   onRefetch: () => void;
 }
 
-export default function EngPartsEngineer({ engName, inventory, myRequests, onRefetch }: Props) {
+export default function EngPartsEngineer({ engName, inventory, myStock, myRequests, onRefetch }: Props) {
   const [activeTab, setActiveTab] = useState<EngTabType>('my-requests');
   const [search, setSearch] = useState('');
 
@@ -24,6 +26,11 @@ export default function EngPartsEngineer({ engName, inventory, myRequests, onRef
   const [requestNote, setRequestNote] = useState('');
   const [requestError, setRequestError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Return-parts request state
+  const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
+  const [returnNotes, setReturnNotes] = useState('');
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
 
   // ── Self Service data ────────────────────────────────────────────────────
   const availableItems = inventory.filter(item => {
@@ -90,6 +97,44 @@ export default function EngPartsEngineer({ engName, inventory, myRequests, onRef
     }
   };
 
+  // ── Return-parts handlers ────────────────────────────────────────────────
+  const toggleReturnPart = (partId: string, maxQty: number) => {
+    setReturnQtys(prev => {
+      const next = { ...prev };
+      if (partId in next) delete next[partId];
+      else next[partId] = maxQty;
+      return next;
+    });
+  };
+
+  const setReturnQty = (partId: string, qty: number, maxQty: number) => {
+    setReturnQtys(prev => ({ ...prev, [partId]: Math.max(1, Math.min(maxQty, qty || 1)) }));
+  };
+
+  const submitReturnRequest = async () => {
+    const partIds = Object.keys(returnQtys);
+    if (!partIds.length) { alert('Select at least one part to return.'); return; }
+    setReturnSubmitting(true);
+    try {
+      const parts = partIds.map(partId => {
+        const inv = inventory.find(i => i.id === partId);
+        return { part_id: partId, part_name: inv?.item_name || partId, qty: returnQtys[partId] };
+      });
+      await submitPartRequest({
+        engineer_name: engName,
+        parts,
+        notes: returnNotes || undefined,
+        type: 'RETURN',
+      });
+      onRefetch();
+      setReturnQtys({});
+      setReturnNotes('');
+      alert('✅ Return request submitted!');
+    } finally {
+      setReturnSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
       <div style={styles.card}>
@@ -100,6 +145,9 @@ export default function EngPartsEngineer({ engName, inventory, myRequests, onRef
           </button>
           <button style={tabStyle('self-service')} onClick={() => setActiveTab('self-service')}>
             Self Service
+          </button>
+          <button style={tabStyle('return-parts')} onClick={() => setActiveTab('return-parts')}>
+            Return Parts
           </button>
         </div>
 
@@ -248,6 +296,74 @@ export default function EngPartsEngineer({ engName, inventory, myRequests, onRef
                 </table>
               </div>
             </>
+          )}
+
+          {/* ── Return Parts ── */}
+          {activeTab === 'return-parts' && (
+            myStock.filter(s => s.qty > 0).length === 0 ? (
+              <div style={styles.emptyMessage}>No parts in your stock to return</div>
+            ) : (
+              <>
+                <div style={{ overflowX: 'auto' as const }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.tableHeader}></th>
+                        <th style={styles.tableHeader}>Part</th>
+                        <th style={styles.tableHeader}>My Qty</th>
+                        <th style={styles.tableHeader}>Return Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {myStock.filter(s => s.qty > 0).map(s => {
+                        const inv = inventory.find(i => i.id === s.part_id);
+                        const selected = s.part_id in returnQtys;
+                        return (
+                          <tr key={s.id} style={styles.tableRow}>
+                            <td style={styles.tableCell}>
+                              <input type="checkbox" checked={selected} onChange={() => toggleReturnPart(s.part_id, s.qty)} />
+                            </td>
+                            <td style={styles.tableCell}>{inv ? (inv.part_code ?? inv.item_code) + ' — ' + inv.item_name : s.part_id}</td>
+                            <td style={styles.tableCell}>{s.qty}</td>
+                            <td style={styles.tableCell}>
+                              <input
+                                type="number"
+                                min={1}
+                                max={s.qty}
+                                disabled={!selected}
+                                style={{ ...styles.formInput, width: '70px' }}
+                                value={selected ? returnQtys[s.part_id] : s.qty}
+                                onChange={e => setReturnQty(s.part_id, Number(e.target.value), s.qty)}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ marginTop: '12px', display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' as const }}>
+                  <div style={{ ...styles.formGroup, flex: 1, minWidth: '200px' }}>
+                    <label style={styles.formLabel}>Note (optional)</label>
+                    <textarea
+                      style={{ ...styles.formInput, resize: 'vertical' as const, minHeight: '36px' }}
+                      value={returnNotes}
+                      onChange={e => setReturnNotes(e.target.value)}
+                      placeholder="Reason for return..."
+                    />
+                  </div>
+                  <div style={{ paddingBottom: '2px' }}>
+                    <button
+                      style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSm }}
+                      onClick={submitReturnRequest}
+                      disabled={returnSubmitting || Object.keys(returnQtys).length === 0}
+                    >
+                      {returnSubmitting ? 'Submitting...' : '↩️ Submit Return Request'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )
           )}
         </div>
       </div>

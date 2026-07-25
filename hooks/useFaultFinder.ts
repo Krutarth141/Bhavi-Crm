@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FaultKnowledge, FaultKnowledgeForm, ModelError } from '@/types/faultFinder';
-import { fetchFaultKnowledge, createFaultKnowledge, fetchModelErrors } from '@/services/faultFinderService';
+import { fetchFaultKnowledge, createFaultKnowledge, fetchModelErrors, updateFaultKnowledge, deleteFaultKnowledge } from '@/services/faultFinderService';
 
 export const useFaultFinder = () => {
     const [faults, setFaults] = useState<FaultKnowledge[]>([]);
@@ -30,6 +30,18 @@ export const useFaultFinder = () => {
         return result;
     };
 
+    const editFault = async (id: string, form: FaultKnowledgeForm) => {
+        const result = await updateFaultKnowledge(id, form);
+        if (result.success) await loadAll();
+        return result;
+    };
+
+    const removeFault = async (id: string) => {
+        const result = await deleteFaultKnowledge(id);
+        if (result.success) await loadAll();
+        return result;
+    };
+
     return {
         faults,
         errors,
@@ -37,5 +49,7 @@ export const useFaultFinder = () => {
         error,
         refetch: loadAll,
         addFault,
+        editFault,
+        removeFault,
     };
 };

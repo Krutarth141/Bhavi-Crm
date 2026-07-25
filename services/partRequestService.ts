@@ -27,7 +27,7 @@ export const submitPartRequest = async (params: {
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         const { error } = await supabase.from('eng_part_requests').insert([{
-            type: params.type || 'request',
+            type: params.type || 'RECEIVE',
             status: 'PENDING',
             engineer_id: params.engineer_id || null,
             engineer_name: params.engineer_name,
@@ -46,7 +46,6 @@ export const approvePartRequest = async (
     approvedBy: string
 ): Promise<{ success: boolean; error?: string }> => {
     try {
-        // 1. Update request status
         const { error: statusError } = await supabase
             .from('eng_part_requests')
             .update({
@@ -57,12 +56,13 @@ export const approvePartRequest = async (
             .eq('id', req.id);
         if (statusError) throw statusError;
 
-        // 2. For each part — upsert eng_stock + decrement inventory
         const parts = req.parts || [];
+        const isReturn = req.type === 'RETURN';
+
         for (const part of parts) {
             if (!part.part_id) continue;
+            const qty = part.qty || 1;
 
-            // Upsert eng_stock
             const { data: existing } = await supabase
                 .from('eng_stock')
                 .select('id, qty')
@@ -70,31 +70,33 @@ export const approvePartRequest = async (
                 .eq('part_id', part.part_id)
                 .maybeSingle();
 
+            const delta = isReturn ? -qty : qty;
             if (existing) {
                 await supabase.from('eng_stock')
-                    .update({ qty: existing.qty + (part.qty || 1) })
+                    .update({ qty: Math.max(0, existing.qty + delta) })
                     .eq('id', existing.id);
-            } else {
+            } else if (!isReturn) {
                 await supabase.from('eng_stock')
-                    .insert([{ owner: req.engineer_name, part_id: part.part_id, qty: part.qty || 1 }]);
+                    .insert([{ owner: req.engineer_name, part_id: part.part_id, qty }]);
             }
 
-            // Decrement inventory
             const { data: inv } = await supabase
                 .from('inventory')
                 .select('id, qty_in_stock')
                 .eq('id', part.part_id)
                 .single();
             if (inv) {
+                const invDelta = isReturn ? qty : -qty;
                 await supabase.from('inventory')
-                    .update({ qty_in_stock: (inv.qty_in_stock || 0) - (part.qty || 1) })
+                    .update({ qty_in_stock: Math.max(0, (inv.qty_in_stock || 0) + invDelta) })
                     .eq('id', part.part_id);
             }
 
-            // Log to the real audit trail (eng_movements), matching HTML's approve flow.
             await supabase.from('eng_movements').insert([{
-                type: 'ISSUE', part_id: part.part_id, qty: part.qty || 1,
-                from_owner: 'MAIN', to_owner: req.engineer_name,
+                type: isReturn ? 'ENG_RETURN' : 'ISSUE',
+                part_id: part.part_id, qty,
+                from_owner: isReturn ? req.engineer_name : 'MAIN',
+                to_owner: isReturn ? 'MAIN' : req.engineer_name,
                 notes: `Request by ${req.engineer_name}`, created_by: approvedBy,
             }]).then(() => { }, () => { });
         }

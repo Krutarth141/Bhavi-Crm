@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { FaultKnowledge, FaultKnowledgeForm, emptyFaultForm, SEVERITIES } from '@/types/faultFinder';
+import { bulkImportFaultKnowledge } from '@/services/faultFinderService';
 
 interface Props {
     faults: FaultKnowledge[];
     onAdd: (form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
+    onEdit: (id: string, form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
+    onDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    onRefetch: () => Promise<void>;
 }
 
 const SeverityBadge = ({ s }: { s?: string }) => {
@@ -19,33 +24,93 @@ const SeverityBadge = ({ s }: { s?: string }) => {
 
 const fieldStyle = { width: '100%', padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 
-export default function FaultKnowledgeTab({ faults, onAdd }: Props) {
+export default function FaultKnowledgeTab({ faults, onAdd, onEdit, onDelete, onRefetch }: Props) {
     const [showForm, setShowForm] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState<FaultKnowledgeForm>(emptyFaultForm);
     const [saving, setSaving] = useState(false);
+    const importRef = useRef<HTMLInputElement>(null);
 
-    const handleAdd = async () => {
+    const startAdd = () => { setEditingId(null); setForm(emptyFaultForm); setShowForm(true); };
+    const startEdit = (f: FaultKnowledge) => {
+        setEditingId(f.id);
+        setForm({
+            model_name: f.model_name || '', fault_type: f.fault_type || '',
+            description: f.description || '', solution: f.solution || '',
+            part_required: f.part_required || '', severity: f.severity || 'Medium',
+        });
+        setShowForm(true);
+    };
+    const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(emptyFaultForm); };
+
+    const handleSave = async () => {
         if (!form.model_name.trim() || !form.fault_type.trim()) { alert('Model name and fault type required'); return; }
         setSaving(true);
-        const result = await onAdd(form);
-        if (result.success) { setForm(emptyFaultForm); setShowForm(false); }
+        const result = editingId ? await onEdit(editingId, form) : await onAdd(form);
+        if (result.success) cancelForm();
         else alert('Error: ' + result.error);
         setSaving(false);
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Delete this fault entry?')) return;
+        const result = await onDelete(id);
+        if (!result.success) alert('Error: ' + result.error);
+    };
+
+    const downloadTemplate = () => {
+        const ws = XLSX.utils.aoa_to_sheet([
+            ['model_name', 'fault_type', 'description', 'solution', 'part_required', 'severity'],
+            ['Canon G3010', 'Paper Jam', 'Paper gets stuck in paper feed path', '1. Open back cover\n2. Remove jammed paper\n3. Check roller for wear\n4. Clean roller with damp cloth', 'CNX-Roller-Kit', 'Medium'],
+            ['Canon G3010', 'No Print / Blank Page', 'Printer prints but page comes out blank', '1. Check ink tanks - refill if empty\n2. Run head cleaning 2-3 times\n3. Print nozzle check pattern', '', 'Low'],
+            ['Epson L3110', 'Ink Not Recognized', 'Ink tank shows error even after refilling', '1. Remove and reinsert ink tanks\n2. Check ink tube for air bubbles\n3. Run ink charge cycle', '', 'High'],
+        ]);
+        ws['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 30 }, { wch: 50 }, { wch: 20 }, { wch: 12 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Fault Knowledge');
+        XLSX.writeFile(wb, 'fault_knowledge_template.xlsx');
+    };
+
+    const handleImport = () => {
+        const file = importRef.current?.files?.[0];
+        if (!file) { alert('Select a file first'); return; }
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const wb = XLSX.read(e.target?.result, { type: 'binary' });
+            const data = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+            if (!data.length) { alert('File has no data'); return; }
+            const rows = data.map(r => ({
+                model_name: String(r.model_name || r['Model Name'] || '').trim(),
+                fault_type: String(r.fault_type || r['Fault Type'] || '').trim(),
+                description: String(r.description || r['Description'] || '').trim(),
+                solution: String(r.solution || r['Solution'] || '').trim(),
+                part_required: String(r.part_required || r['Part Required'] || '').trim(),
+                severity: String(r.severity || r['Severity'] || 'Medium').trim(),
+            }));
+            const { ok, fail } = await bulkImportFaultKnowledge(rows);
+            alert(`✅ Import complete!\nSuccess: ${ok}\nFailed: ${fail}`);
+            if (importRef.current) importRef.current.value = '';
+            await onRefetch();
+        };
+        reader.readAsBinaryString(file);
     };
 
     if (!faults.length && !showForm) {
         return (
             <div style={{ textAlign: 'center', padding: '32px 0' }}>
                 <p style={{ color: '#6b7280', marginBottom: 12 }}>No fault knowledge entries yet</p>
-                <button onClick={() => setShowForm(true)} style={{ padding: '7px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>➕ Add First Entry</button>
+                <button onClick={startAdd} style={{ padding: '7px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>➕ Add First Entry</button>
             </div>
         );
     }
 
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                <button onClick={() => setShowForm(!showForm)} style={{ padding: '7px 14px', background: showForm ? '#f3f4f6' : '#185FA5', color: showForm ? '#374151' : '#fff', border: showForm ? '1px solid #e5e7eb' : 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button onClick={downloadTemplate} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Template</button>
+                <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ fontSize: 12, maxWidth: 160 }} />
+                <button onClick={handleImport} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📥 Import Excel</button>
+                <button onClick={showForm ? cancelForm : startAdd} style={{ padding: '7px 14px', background: showForm ? '#f3f4f6' : '#185FA5', color: showForm ? '#374151' : '#fff', border: showForm ? '1px solid #e5e7eb' : 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     {showForm ? '✕ Cancel' : '➕ Add Fault'}
                 </button>
             </div>
@@ -64,8 +129,8 @@ export default function FaultKnowledgeTab({ faults, onAdd }: Props) {
                         <div><label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Solution</label><input style={fieldStyle} value={form.solution} onChange={e => setForm(f => ({ ...f, solution: e.target.value }))} placeholder="How to fix" /></div>
                         <div><label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Part Required</label><input style={fieldStyle} value={form.part_required} onChange={e => setForm(f => ({ ...f, part_required: e.target.value }))} placeholder="e.g. Shutter Unit" /></div>
                     </div>
-                    <button onClick={handleAdd} disabled={saving} style={{ padding: '7px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                        {saving ? 'Saving...' : '💾 Save'}
+                    <button onClick={handleSave} disabled={saving} style={{ padding: '7px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                        {saving ? 'Saving...' : editingId ? '💾 Update' : '💾 Save'}
                     </button>
                 </div>
             )}
@@ -74,7 +139,7 @@ export default function FaultKnowledgeTab({ faults, onAdd }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                            {['#', 'Model', 'Fault Type', 'Description', 'Solution', 'Part Required', 'Severity'].map(h => (
+                            {['#', 'Model', 'Fault Type', 'Description', 'Solution', 'Part Required', 'Severity', 'Actions'].map(h => (
                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151' }}>{h}</th>
                             ))}
                         </tr>
@@ -89,6 +154,10 @@ export default function FaultKnowledgeTab({ faults, onAdd }: Props) {
                                 <td style={{ padding: '10px 12px', fontSize: 12, color: '#059669', maxWidth: 180 }}>{f.solution || '—'}</td>
                                 <td style={{ padding: '10px 12px', fontSize: 12 }}>{f.part_required || '—'}</td>
                                 <td style={{ padding: '10px 12px' }}><SeverityBadge s={f.severity} /></td>
+                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                    <button onClick={() => startEdit(f)} style={{ padding: '3px 8px', border: '1px solid #7c3aed', color: '#7c3aed', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer', marginRight: 4 }}>✏️</button>
+                                    <button onClick={() => handleDelete(f.id)} style={{ padding: '3px 8px', border: '1px solid #ef4444', color: '#ef4444', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>

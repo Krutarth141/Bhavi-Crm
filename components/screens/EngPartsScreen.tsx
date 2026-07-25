@@ -36,6 +36,7 @@ export default function EngPartsScreen({ isEngineerView }: Props) {
       <EngPartsEngineer
         engName={userName}
         inventory={inventory}
+        myStock={engStock.filter(s => s.owner === userName)}
         myRequests={requests.filter(r => r.engineer_name === userName)}
         onRefetch={refetch}
       />

@@ -8,6 +8,7 @@ import IssueModal from './IssueModal';
 import UseModal from './UseModal';
 import ReturnModal from './ReturnModal';
 import DirectWarrantyIssueModal from './DirectWarrantyIssueModal';
+import WarrantyPendingTab from './WarrantyPendingTab';
 import {
   issueToEngineer,
   recordUsage,
@@ -18,7 +19,7 @@ import {
 import { approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
-type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log';
+type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log' | 'warranty-pending';
 type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | null;
 
 interface Props {
@@ -119,6 +120,7 @@ export default function EngPartsAdmin({
     { key: 'overview', label: 'Stock Overview' },
     { key: 'analysis', label: 'Engineer Analysis' },
     { key: 'pending', label: `Pending Approvals${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}` },
+    { key: 'warranty-pending', label: '🔄 Warranty Pending' },
     { key: 'log', label: 'Log' },
   ];
 
@@ -371,6 +373,11 @@ export default function EngPartsAdmin({
                 </table>
               </div>
             )
+          )}
+
+          {/* ── Warranty Pending ── */}
+          {activeTab === 'warranty-pending' && (
+            <WarrantyPendingTab inventory={inventory} />
           )}
 
           {/* ── Log ── */}

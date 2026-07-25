@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { EngMovement } from '@/types/engParts';
+import { InventoryItem } from '@/types/inventory';
 
 // ─── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -144,5 +145,75 @@ export const directWarrantyIssue = async (params: {
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
+    }
+};
+
+export interface WarrantyTicketRow {
+    ticket_id: string;
+    cname?: string;
+    model?: string;
+    call_type?: string;
+    assigned_name?: string;
+    se_call_id?: string;
+    spare_code: string;
+    spare_name: string;
+    qty: number;
+    status?: string;
+    created_at: string;
+}
+
+export const fetchWarrantyPending = async (
+    showAll: boolean, inventory: InventoryItem[]
+): Promise<{ used: EngMovement[]; ticketRows: WarrantyTicketRow[] }> => {
+    try {
+        let query = supabase.from('eng_movements').select('*').eq('warranty', true).in('type', ['USE', 'WARRANTY_DIRECT_IN']).order('created_at', { ascending: false });
+        if (!showAll) query = query.neq('warranty_status', 'RECEIVED');
+        const { data: used, error } = await query;
+        if (error) throw error;
+
+        const { data: returned } = await supabase.from('eng_movements').select('*').eq('warranty', true).eq('type', 'WARRANTY_RETURN').order('created_at', { ascending: false });
+
+        const { data: wTickets } = await supabase.from('tickets').select('id, cname, model, call_type, assigned_name, se_call_id, spares, status, created_at').in('call_type', ['Warranty', 'Warranty Repeat', 'AMC']).order('created_at', { ascending: false });
+
+        const usedList = used || [];
+        const returnedList = returned || [];
+        const ticketRows: WarrantyTicketRow[] = [];
+
+        const matchesPart = (m: EngMovement, s: any) => {
+            if (!m.part_id) return false;
+            const inv = inventory.find(x => x.id === m.part_id);
+            return !!inv && (inv.part_code === s.code || inv.item_name === s.name);
+        };
+
+        (wTickets || []).forEach((t: any) => {
+            let spares = t.spares || [];
+            if (typeof spares === 'string') { try { spares = JSON.parse(spares); } catch { spares = []; } }
+            spares.forEach((s: any) => {
+                if (!s.code) return;
+                const trackKey = t.se_call_id ? t.se_call_id.split('/').pop().trim() : '';
+                const matchesJob = (m: EngMovement) => m.job_sheet === trackKey || m.job_sheet === t.id || m.se_call_id_full === t.se_call_id;
+                const alreadyTracked = usedList.some(m => matchesJob(m) && matchesPart(m, s));
+                const alreadyReturned = !showAll && returnedList.some(m => matchesJob(m) && matchesPart(m, s));
+                if (!alreadyTracked && !alreadyReturned) {
+                    ticketRows.push({
+                        ticket_id: t.id, cname: t.cname, model: t.model, call_type: t.call_type,
+                        assigned_name: t.assigned_name, se_call_id: t.se_call_id || '',
+                        spare_code: s.code, spare_name: s.name || s.code, qty: s.qty || 1,
+                        status: t.status, created_at: t.created_at,
+                    });
+                }
+            });
+        });
+
+        return { used: usedList, ticketRows };
+    } catch (err) {
+        console.error('fetchWarrantyPending:', err);
+        return { used: [], ticketRows: [] };
+    }
+};
+
+export const markWarrantyReceived = async (ids: string[]): Promise<void> => {
+    for (const id of ids) {
+        await supabase.from('eng_movements').update({ warranty_status: 'RECEIVED', warranty_received_at: new Date().toISOString() }).eq('id', id);
     }
 };

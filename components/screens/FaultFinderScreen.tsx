@@ -7,7 +7,7 @@ import ErrorCodesTab from '@/components/screens/fault-finder/ErrorCodesTab';
 import { FaultFinderTab } from '@/types/faultFinder';
 
 export default function FaultFinderScreen() {
-    const { faults, errors, loading, error, addFault } = useFaultFinder();
+    const { faults, errors, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [activeTab, setActiveTab] = useState<FaultFinderTab>('fault-knowledge');
     const [search, setSearch] = useState('');
 
@@ -75,7 +75,7 @@ export default function FaultFinderScreen() {
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
                 ) : activeTab === 'fault-knowledge' ? (
-                    <FaultKnowledgeTab faults={filteredFaults} onAdd={addFault} />
+                    <FaultKnowledgeTab faults={filteredFaults} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
                 ) : (
                     <ErrorCodesTab errors={filteredErrors} />
                 )}

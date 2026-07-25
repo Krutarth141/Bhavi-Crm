@@ -22,16 +22,15 @@ export const usePartsCatalog = () => {
 
     useEffect(() => { loadParts(); }, []);
 
-    // Derived
-    const categories = [...new Set(parts.map(p => p.category).filter(Boolean))].sort() as string[];
-    const lowStock = parts.filter(p => p.stock_qty !== undefined && p.stock_qty !== null && p.stock_qty <= 2).length;
+    const inStock = parts.filter(p => p.stock > 0).length;
+    const outStock = parts.filter(p => p.stock <= 0).length;
 
     return {
         parts,
         loading,
         error,
-        categories,
-        lowStock,
+        inStock,
+        outStock,
         refetch: loadParts,
     };
 };
