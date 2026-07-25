@@ -47,7 +47,7 @@ export interface AutoSiteVisit {
     material_delivered?: string;
     created_by?: string;
     created_by_name?: string;
-    material_items?: any[];
+    material_items?: string;   // JSON-encoded VisitMaterialItem[] — parse before use
     material_total?: number;
     delivery_details?: string;
     photos?: any[];
@@ -141,3 +141,23 @@ export const emptyPaymentForm = (): PaymentForm => ({
 });
 
 export const PAYMENT_MODES = ['Cash', 'NEFT', 'IMPS', 'Cheque', 'UPI'];
+
+export interface VisitMaterialItem {
+    site_item_id: number;
+    item_name: string;
+    purchase_price: number;
+    selling_price: number;   // discounted, excl. GST
+    discount_pct: number;
+    gst_percent: number;
+    qty: number;
+    total: number;           // qty * final-per-unit (incl. GST), rounded
+}
+
+export interface VisitDeliveryDetails {
+    mode: string;
+    docket?: string;
+    courier_date?: string;
+    contact_person?: string;
+    porter_date?: string;
+    contact_mobile?: string;
+}

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { AutoSite, AutoSiteItem, AutoSiteVisit, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteFormData, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
+import { AutoSite, AutoSiteItem, AutoSiteVisit, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteFormData, SiteItemForm, PaymentForm, ContactForm, VisitMaterialItem, VisitDeliveryDetails } from '@/types/autoSites';
 
 export const fetchSites = async (): Promise<AutoSite[]> => {
     try {
@@ -227,4 +227,65 @@ export const deleteSiteContact = async (id: number): Promise<{ success: boolean;
         if (error) throw error;
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
+export const addSiteVisitWithMaterial = async (params: {
+    site_id: number;
+    visit_date: string;
+    visit_time: string;
+    work_done: string;
+    materials: VisitMaterialItem[];
+    deliveryDetails: VisitDeliveryDetails | null;
+    photos: string[];
+    createdBy: string;
+    createdByName: string;
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const matText = params.materials.length
+            ? params.materials.map(m => `${m.qty}x ${m.item_name} @₹${m.selling_price.toFixed(2)}${m.discount_pct ? ` (${m.discount_pct}%disc)` : ''}`).join(', ')
+            : null;
+        const totalSelling = params.materials.reduce((s, m) => s + m.total, 0);
+
+        const { error } = await supabase.from('auto_site_visits').insert([{
+            site_id: params.site_id, visit_date: params.visit_date, visit_time: params.visit_time || null,
+            work_done: params.work_done || null,
+            material_delivered: matText,
+            material_items: params.materials.length ? JSON.stringify(params.materials) : null,
+            material_total: totalSelling || null,
+            delivery_details: params.deliveryDetails ? JSON.stringify(params.deliveryDetails) : null,
+            photos: params.photos.length ? params.photos : null,
+            created_by: params.createdBy, created_by_name: params.createdByName,
+        }]);
+        if (error) throw error;
+
+        // Update BOQ delivery statuses + auto-deduct auto_inventory stock for delivered materials.
+        if (params.materials.length) {
+            for (const mat of params.materials) {
+                const { data: orig } = await supabase.from('auto_site_items').select('qty, delivered_qty').eq('id', mat.site_item_id).single();
+                if (!orig) continue;
+                const newDelivered = Math.min(orig.qty || 0, (orig.delivered_qty || 0) + mat.qty);
+                const newStatus = newDelivered >= (orig.qty || 0) ? 'delivered' : 'partial';
+                await supabase.from('auto_site_items').update({
+                    delivery_status: newStatus, delivered_qty: newDelivered, delivered_date: params.visit_date,
+                    delivered_by: params.deliveryDetails?.mode || 'Visit',
+                }).eq('id', mat.site_item_id).then(() => { }, () => { });
+            }
+
+            for (const mat of params.materials) {
+                const { data: invMatches } = await supabase.from('auto_inventory').select('id, stock_qty').ilike('item_name', mat.item_name).limit(1);
+                const invMatch = invMatches?.[0];
+                if (!invMatch) continue;
+                const deducted = Math.max(0, (invMatch.stock_qty || 0) - mat.qty);
+                await supabase.from('auto_inventory').update({ stock_qty: deducted, updated_at: new Date().toISOString() }).eq('id', invMatch.id);
+                await supabase.from('auto_inventory_log').insert([{
+                    inventory_id: invMatch.id, type: 'out', qty: mat.qty, note: `Site visit: ${params.visit_date}`,
+                    done_by: params.createdByName, created_at: new Date().toISOString(), txn_date: params.visit_date,
+                }]).then(() => { }, () => { });
+            }
+        }
+
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
 };

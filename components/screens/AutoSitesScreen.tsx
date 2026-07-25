@@ -6,11 +6,12 @@ import { useAutoSites } from '@/hooks/useAutoSites';
 import Modal from '@/components/Modal';
 import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
 import {
-    fetchSiteItems, fetchSiteVisits, addSiteVisit, fetchSitePayments,
+    fetchSiteItems, fetchSiteVisits, fetchSitePayments,
     addSiteItem, updateSiteItem, deleteSiteItem, markItemDelivered,
     addSitePayment, deleteSitePayment, updateSite,
     fetchSiteDispatches, createDispatch,
     fetchSiteContacts, addSiteContact, deleteSiteContact,
+    addSiteVisitWithMaterial,
 } from '@/services/autoSitesService';
 import { printPaymentReceipt } from '@/utils/printSiteReceipt';
 import { printDeliveryChallan } from '@/utils/printSiteDC';
@@ -21,6 +22,7 @@ import MarkDeliveredModal from '@/components/screens/auto-sites/MarkDeliveredMod
 import DispatchModal from '@/components/screens/auto-sites/DispatchModal';
 import SiteContactsModal from '@/components/screens/auto-sites/SiteContactsModal';
 import TCSelectorModal from '@/components/screens/auto-sites/TCSelectorModal';
+import AddVisitModal from '@/components/screens/auto-sites/AddVisitModal';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 5px' } as const;
@@ -42,10 +44,7 @@ export default function AutoSitesScreen() {
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
     const [form, setForm] = useState<SiteFormData>(emptySiteForm);
-
-    const [visitForm, setVisitForm] = useState({ visit_date: '', work_done: '', material_delivered: '' });
-    const [addingVisit, setAddingVisit] = useState(false);
-
+    const [addVisitModalOpen, setAddVisitModalOpen] = useState(false);
     const [itemFormOpen, setItemFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<AutoSiteItem | null>(null);
     const [deliverItem, setDeliverItem] = useState<AutoSiteItem | null>(null);
@@ -104,16 +103,20 @@ export default function AutoSitesScreen() {
         else alert('Error: ' + r.error);
     };
 
-    const handleAddVisit = async () => {
-        if (!visitForm.visit_date || !detailSite) return;
-        setAddingVisit(true);
-        const r = await addSiteVisit(detailSite.id, { visit_date: visitForm.visit_date, work_done: visitForm.work_done, material_delivered: visitForm.material_delivered, created_by: userId, created_by_name: userName });
+    const handleSaveVisit = async (data: { visit_date: string; visit_time: string; work_done: string; materials: any[]; deliveryDetails: any; photos: string[] }) => {
+        if (!detailSite) return { success: false, error: 'No site selected' };
+        const r = await addSiteVisitWithMaterial({
+            site_id: detailSite.id, visit_date: data.visit_date, visit_time: data.visit_time,
+            work_done: data.work_done, materials: data.materials, deliveryDetails: data.deliveryDetails,
+            photos: data.photos, createdBy: userId, createdByName: userName,
+        });
         if (r.success) {
-            setVisitForm({ visit_date: '', work_done: '', material_delivered: '' });
-            const visits = await fetchSiteVisits(detailSite.id);
+            const [items, visits] = await Promise.all([fetchSiteItems(detailSite.id), fetchSiteVisits(detailSite.id)]);
+            setSiteItems(items);
             setSiteVisits(visits);
-        } else alert('Error: ' + r.error);
-        setAddingVisit(false);
+            refetch();
+        }
+        return r;
     };
 
     const grandSell = siteItems.reduce((a, i) => a + (i.total_price || Math.round((i.unit_price || 0) * (i.qty || 0) * (1 + (i.gst_percent || 0) / 100))), 0);
@@ -447,15 +450,8 @@ export default function AutoSitesScreen() {
                             </div>
                         ) : (
                             <div>
-                                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                                        <input type="date" value={visitForm.visit_date} onChange={e => setVisitForm(f => ({ ...f, visit_date: e.target.value }))} style={fieldStyle} />
-                                        <input type="text" placeholder="Work done" value={visitForm.work_done} onChange={e => setVisitForm(f => ({ ...f, work_done: e.target.value }))} style={fieldStyle} />
-                                    </div>
-                                    <input type="text" placeholder="Material delivered" value={visitForm.material_delivered} onChange={e => setVisitForm(f => ({ ...f, material_delivered: e.target.value }))} style={{ ...fieldStyle, marginBottom: 8 }} />
-                                    <button onClick={handleAddVisit} disabled={addingVisit} style={{ padding: '6px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-                                        {addingVisit ? 'Adding...' : '➕ Add Visit'}
-                                    </button>
+                                <div style={{ marginBottom: 12 }}>
+                                    <button onClick={() => setAddVisitModalOpen(true)} style={{ padding: '7px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>➕ Add Visit</button>
                                 </div>
                                 {siteVisits.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>No visits yet</p> : (
                                     siteVisits.map(v => (
@@ -518,6 +514,14 @@ export default function AutoSitesScreen() {
                 <TCSelectorModal
                     onClose={() => setTcSelectorOpen(false)}
                     onApply={handleApplyTC}
+                />
+            )}
+            {addVisitModalOpen && detailSite && (
+                <AddVisitModal
+                    siteName={detailSite.site_name}
+                    pendingSiteItems={pendingItems}
+                    onClose={() => setAddVisitModalOpen(false)}
+                    onSave={handleSaveVisit}
                 />
             )}
         </div>
