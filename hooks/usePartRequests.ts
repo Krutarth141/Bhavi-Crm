@@ -3,7 +3,7 @@ import { PartRequest, PartRequestFilter } from '@/types/partRequest';
 import { fetchPartRequests, approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { useSession } from 'next-auth/react';
 
-export const usePartRequests = (filter: PartRequestFilter = 'pending') => {
+export const usePartRequests = (filter: PartRequestFilter = 'PENDING') => {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? 'Admin';
 
@@ -32,9 +32,9 @@ export const usePartRequests = (filter: PartRequestFilter = 'pending') => {
         return r;
     };
 
-    const pending = requests.filter(r => r.status === 'pending').length;
-    const approved = requests.filter(r => r.status === 'approved').length;
-    const rejected = requests.filter(r => r.status === 'rejected').length;
+    const pending = requests.filter(r => r.status === 'PENDING').length;
+    const approved = requests.filter(r => r.status === 'APPROVED').length;
+    const rejected = requests.filter(r => r.status === 'REJECTED').length;
 
     return { requests, loading, error, pending, approved, rejected, approve, reject, refetch: load };
 };

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { PartRequest, PartRequestFilter } from '@/types/partRequest';
+import { PartItem, PartRequest, PartRequestFilter } from '@/types/partRequest';
 
 export const fetchPartRequests = async (filter: PartRequestFilter): Promise<PartRequest[]> => {
     try {
@@ -17,6 +17,30 @@ export const fetchPartRequests = async (filter: PartRequestFilter): Promise<Part
     }
 };
 
+// Engineer self-service: submit a new Request/Return, pending admin approval.
+export const submitPartRequest = async (params: {
+    engineer_id?: string;
+    engineer_name: string;
+    parts: PartItem[];
+    notes?: string;
+    type?: string;
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('eng_part_requests').insert([{
+            type: params.type || 'request',
+            status: 'PENDING',
+            engineer_id: params.engineer_id || null,
+            engineer_name: params.engineer_name,
+            parts: params.parts,
+            notes: params.notes || null,
+        }]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
 export const approvePartRequest = async (
     req: PartRequest,
     approvedBy: string
@@ -26,7 +50,7 @@ export const approvePartRequest = async (
         const { error: statusError } = await supabase
             .from('eng_part_requests')
             .update({
-                status: 'approved',
+                status: 'APPROVED',
                 approved_by: approvedBy,
                 approved_at: new Date().toISOString(),
             })
@@ -66,6 +90,13 @@ export const approvePartRequest = async (
                     .update({ qty_in_stock: (inv.qty_in_stock || 0) - (part.qty || 1) })
                     .eq('id', part.part_id);
             }
+
+            // Log to the real audit trail (eng_movements), matching HTML's approve flow.
+            await supabase.from('eng_movements').insert([{
+                type: 'ISSUE', part_id: part.part_id, qty: part.qty || 1,
+                from_owner: 'MAIN', to_owner: req.engineer_name,
+                notes: `Request by ${req.engineer_name}`, created_by: approvedBy,
+            }]).then(() => { }, () => { });
         }
 
         return { success: true };
@@ -83,7 +114,7 @@ export const rejectPartRequest = async (
         const { error } = await supabase
             .from('eng_part_requests')
             .update({
-                status: 'rejected',
+                status: 'REJECTED',
                 approved_by: approvedBy,
                 approved_at: new Date().toISOString(),
                 notes: reason || undefined,

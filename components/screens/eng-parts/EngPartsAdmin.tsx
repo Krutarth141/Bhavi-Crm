@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { EngStock, EngStockLog } from '@/types/engParts';
+import { useSession } from 'next-auth/react';
+import { EngStock, EngMovement } from '@/types/engParts';
+import { PartRequest } from '@/types/partRequest';
 import { InventoryItem } from '@/types/inventory';
 import IssueModal from './IssueModal';
 import UseModal from './UseModal';
@@ -10,9 +12,8 @@ import {
   recordUsage,
   engineerReturn,
   warrantyReturn,
-  approveRequest,
-  rejectRequest,
 } from '@/services/engPartsService';
+import { approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log';
@@ -21,20 +22,23 @@ type ModalType = 'issue' | 'use' | 'return' | 'warranty' | null;
 interface Props {
   inventory: InventoryItem[];
   engStock: EngStock[];
-  engStockLog: EngStockLog[];
+  movements: EngMovement[];
   engineers: string[];
-  pendingRequests: EngStockLog[];
+  pendingRequests: PartRequest[];
   onRefetch: () => void;
 }
 
 export default function EngPartsAdmin({
   inventory,
   engStock,
-  engStockLog,
+  movements,
   engineers,
   pendingRequests,
   onRefetch,
 }: Props) {
+  const { data: session } = useSession();
+  const approvedBy = (session?.user as any)?.name ?? 'Admin';
+
   const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [search, setSearch] = useState('');
@@ -49,24 +53,17 @@ export default function EngPartsAdmin({
     return sum + s.qty * (inv?.unit_price || 0);
   }, 0);
 
-  // ── Log action badge ─────────────────────────────────────────────────────
-  const actionBadgeStyle = (action: string): React.CSSProperties => {
+  // ── Movement type badge ──────────────────────────────────────────────────
+  const movementBadgeStyle = (type: string): React.CSSProperties => {
     const map: Record<string, React.CSSProperties> = {
-      Issue: { ...styles.badge, backgroundColor: '#dbeafe', color: '#1a56db' },
-      Use: { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' },
-      Return: { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' },
-      Request: { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' },
-      'Warranty Return': { ...styles.badge, backgroundColor: '#ccfbf1', color: '#0f766e' },
-      'Direct Warranty Issue': { ...styles.badge, backgroundColor: '#e0e7ff', color: '#4338ca' },
+      ISSUE: { ...styles.badge, backgroundColor: '#dbeafe', color: '#1a56db' },
+      USE: { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' },
+      ENG_RETURN: { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' },
+      WARRANTY_RETURN: { ...styles.badge, backgroundColor: '#ccfbf1', color: '#0f766e' },
+      WARRANTY_DIRECT_IN: { ...styles.badge, backgroundColor: '#e0e7ff', color: '#4338ca' },
+      ADJUST: { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' },
     };
-    return map[action] ?? { ...styles.badge, backgroundColor: '#f1f5f9', color: '#475569' };
-  };
-
-  const statusBadgeStyle = (status?: string): React.CSSProperties => {
-    if (status === 'pending') return { ...styles.badge, ...styles.badgePending };
-    if (status === 'approved') return { ...styles.badge, ...styles.badgeApprove };
-    if (status === 'rejected') return { ...styles.badge, ...styles.badgeReject };
-    return { ...styles.badge, ...styles.badgeCancel };
+    return map[type] ?? { ...styles.badge, backgroundColor: '#f1f5f9', color: '#475569' };
   };
 
   const stockColor = (item: InventoryItem) => {
@@ -312,30 +309,30 @@ export default function EngPartsAdmin({
                     <tr>
                       <th style={styles.tableHeader}>Date</th>
                       <th style={styles.tableHeader}>Engineer</th>
-                      <th style={styles.tableHeader}>Part</th>
-                      <th style={styles.tableHeader}>Qty</th>
-                      <th style={styles.tableHeader}>Note</th>
+                      <th style={styles.tableHeader}>Type</th>
+                      <th style={styles.tableHeader}>Parts</th>
+                      <th style={styles.tableHeader}>Notes</th>
                       <th style={styles.tableHeader}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingRequests.map(log => {
-                      const part = inventory.find(i => i.id === log.part_id);
+                    {pendingRequests.map(req => {
+                      const partsList = (req.parts || []).map(p => `${p.qty || 1}× ${p.part_name || p.part_id || '?'}`).join(', ');
                       return (
-                        <tr key={log.id} style={styles.tableRow}>
+                        <tr key={req.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
-                            {new Date(log.created_at ?? '').toLocaleDateString()}
+                            {req.created_at ? new Date(req.created_at).toLocaleDateString() : '—'}
                           </td>
-                          <td style={styles.tableCell}>{log.eng_name}</td>
-                          <td style={styles.tableCell}>{part?.item_name ?? log.part_id}</td>
-                          <td style={styles.tableCell}>{log.qty}</td>
-                          <td style={styles.tableCell}>{log.note ?? '—'}</td>
+                          <td style={styles.tableCell}>{req.engineer_name}</td>
+                          <td style={styles.tableCell}>{req.type || '—'}</td>
+                          <td style={styles.tableCell}>{partsList || '—'}</td>
+                          <td style={styles.tableCell}>{req.notes ?? '—'}</td>
                           <td style={styles.tableCell}>
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button
                                 style={{ ...styles.btn, ...styles.btnSm, backgroundColor: colors.success, color: '#fff', border: 'none' }}
                                 onClick={async () => {
-                                  await approveRequest(log.id, log.part_id, log.eng_name, log.qty);
+                                  await approvePartRequest(req, approvedBy);
                                   onRefetch();
                                 }}
                               >
@@ -344,7 +341,7 @@ export default function EngPartsAdmin({
                               <button
                                 style={{ ...styles.btn, ...styles.btnSm, backgroundColor: colors.danger, color: '#fff', border: 'none' }}
                                 onClick={async () => {
-                                  await rejectRequest(log.id);
+                                  await rejectPartRequest(req.id, approvedBy);
                                   onRefetch();
                                 }}
                               >
@@ -368,40 +365,36 @@ export default function EngPartsAdmin({
                 <thead>
                   <tr>
                     <th style={styles.tableHeader}>Date</th>
-                    <th style={styles.tableHeader}>Action</th>
-                    <th style={styles.tableHeader}>Engineer</th>
+                    <th style={styles.tableHeader}>Type</th>
                     <th style={styles.tableHeader}>Part</th>
                     <th style={styles.tableHeader}>Qty</th>
-                    <th style={styles.tableHeader}>Ticket ID</th>
-                    <th style={styles.tableHeader}>Note</th>
-                    <th style={styles.tableHeader}>Status</th>
+                    <th style={styles.tableHeader}>From</th>
+                    <th style={styles.tableHeader}>To</th>
+                    <th style={styles.tableHeader}>Job Sheet</th>
+                    <th style={styles.tableHeader}>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {engStockLog.map(log => {
-                    const part = inventory.find(i => i.id === log.part_id);
+                  {movements.map(mv => {
+                    const part = inventory.find(i => i.id === mv.part_id);
                     return (
-                      <tr key={log.id} style={styles.tableRow}>
+                      <tr key={mv.id} style={styles.tableRow}>
                         <td style={styles.tableCell}>
-                          {new Date(log.created_at ?? '').toLocaleDateString()}
+                          {mv.created_at ? new Date(mv.created_at).toLocaleDateString() : '—'}
                         </td>
                         <td style={styles.tableCell}>
-                          <span style={actionBadgeStyle(log.action)}>{log.action}</span>
+                          <span style={movementBadgeStyle(mv.type)}>{mv.type}</span>
                         </td>
-                        <td style={styles.tableCell}>{log.eng_name}</td>
-                        <td style={styles.tableCell}>{part?.item_name ?? log.part_id}</td>
-                        <td style={styles.tableCell}>{log.qty}</td>
-                        <td style={styles.tableCell}>{log.ticket_id ?? '—'}</td>
-                        <td style={styles.tableCell}>{log.note ?? '—'}</td>
-                        <td style={styles.tableCell}>
-                          {log.status ? (
-                            <span style={statusBadgeStyle(log.status)}>{log.status}</span>
-                          ) : '—'}
-                        </td>
+                        <td style={styles.tableCell}>{part?.item_name ?? mv.part_id}</td>
+                        <td style={styles.tableCell}>{mv.qty}</td>
+                        <td style={styles.tableCell}>{mv.from_owner ?? '—'}</td>
+                        <td style={styles.tableCell}>{mv.to_owner ?? '—'}</td>
+                        <td style={styles.tableCell}>{mv.job_sheet ?? '—'}</td>
+                        <td style={styles.tableCell}>{mv.notes ?? '—'}</td>
                       </tr>
                     );
                   })}
-                  {engStockLog.length === 0 && (
+                  {movements.length === 0 && (
                     <tr>
                       <td colSpan={8} style={styles.emptyMessage}>No log entries</td>
                     </tr>

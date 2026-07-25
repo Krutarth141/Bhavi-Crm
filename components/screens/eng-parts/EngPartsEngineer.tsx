@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { EngStockLog } from '@/types/engParts';
+import { PartRequest } from '@/types/partRequest';
 import { InventoryItem } from '@/types/inventory';
-import { requestParts } from '@/services/engPartsService';
+import { submitPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 type EngTabType = 'my-requests' | 'self-service';
@@ -10,11 +10,11 @@ type EngTabType = 'my-requests' | 'self-service';
 interface Props {
   engName: string;
   inventory: InventoryItem[];
-  engStockLog: EngStockLog[];
+  myRequests: PartRequest[];
   onRefetch: () => void;
 }
 
-export default function EngPartsEngineer({ engName, inventory, engStockLog, onRefetch }: Props) {
+export default function EngPartsEngineer({ engName, inventory, myRequests, onRefetch }: Props) {
   const [activeTab, setActiveTab] = useState<EngTabType>('my-requests');
   const [search, setSearch] = useState('');
 
@@ -24,9 +24,6 @@ export default function EngPartsEngineer({ engName, inventory, engStockLog, onRe
   const [requestNote, setRequestNote] = useState('');
   const [requestError, setRequestError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  // ── My Requests data ─────────────────────────────────────────────────────
-  const myLogs = engStockLog.filter(l => l.eng_name === engName);
 
   // ── Self Service data ────────────────────────────────────────────────────
   const availableItems = inventory.filter(item => {
@@ -38,23 +35,10 @@ export default function EngPartsEngineer({ engName, inventory, engStockLog, onRe
     );
   });
 
-  // ── Action badge ─────────────────────────────────────────────────────────
-  const actionBadgeStyle = (action: string): React.CSSProperties => {
-    const map: Record<string, React.CSSProperties> = {
-      Issue: { ...styles.badge, backgroundColor: '#dbeafe', color: '#1a56db' },
-      Use: { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' },
-      Return: { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' },
-      Request: { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' },
-      'Warranty Return': { ...styles.badge, backgroundColor: '#ccfbf1', color: '#0f766e' },
-      'Direct Warranty Issue': { ...styles.badge, backgroundColor: '#e0e7ff', color: '#4338ca' },
-    };
-    return map[action] ?? { ...styles.badge, backgroundColor: '#f1f5f9', color: '#475569' };
-  };
-
   const statusBadgeStyle = (status?: string): React.CSSProperties => {
-    if (status === 'pending') return { ...styles.badge, ...styles.badgePending };
-    if (status === 'approved') return { ...styles.badge, ...styles.badgeApprove };
-    if (status === 'rejected') return { ...styles.badge, ...styles.badgeReject };
+    if (status === 'PENDING') return { ...styles.badge, ...styles.badgePending };
+    if (status === 'APPROVED') return { ...styles.badge, ...styles.badgeApprove };
+    if (status === 'REJECTED') return { ...styles.badge, ...styles.badgeReject };
     return { ...styles.badge, ...styles.badgeCancel };
   };
 
@@ -94,11 +78,10 @@ export default function EngPartsEngineer({ engName, inventory, engStockLog, onRe
     }
     setSubmitting(true);
     try {
-      await requestParts({
-        part_id: item.id,
-        eng_name: engName,
-        qty: requestQty,
-        note: requestNote || undefined,
+      await submitPartRequest({
+        engineer_name: engName,
+        parts: [{ part_id: item.id, part_name: item.item_name, qty: requestQty }],
+        notes: requestNote || undefined,
       });
       onRefetch();
       setRequestingPartId(null);
@@ -124,39 +107,33 @@ export default function EngPartsEngineer({ engName, inventory, engStockLog, onRe
 
           {/* ── My Requests ── */}
           {activeTab === 'my-requests' && (
-            myLogs.length === 0 ? (
-              <div style={styles.emptyMessage}>No activity yet</div>
+            myRequests.length === 0 ? (
+              <div style={styles.emptyMessage}>No requests yet</div>
             ) : (
               <div style={{ overflowX: 'auto' as const }}>
                 <table style={styles.table}>
                   <thead>
                     <tr>
                       <th style={styles.tableHeader}>Date</th>
-                      <th style={styles.tableHeader}>Action</th>
-                      <th style={styles.tableHeader}>Part</th>
-                      <th style={styles.tableHeader}>Qty</th>
-                      <th style={styles.tableHeader}>Note</th>
+                      <th style={styles.tableHeader}>Type</th>
+                      <th style={styles.tableHeader}>Parts</th>
+                      <th style={styles.tableHeader}>Notes</th>
                       <th style={styles.tableHeader}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {myLogs.map(log => {
-                      const part = inventory.find(i => i.id === log.part_id);
+                    {myRequests.map(req => {
+                      const partsList = (req.parts || []).map(p => `${p.qty || 1}× ${p.part_name || p.part_id || '?'}`).join(', ');
                       return (
-                        <tr key={log.id} style={styles.tableRow}>
+                        <tr key={req.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
-                            {log.created_at ? new Date(log.created_at).toLocaleDateString() : '—'}
+                            {req.created_at ? new Date(req.created_at).toLocaleDateString() : '—'}
                           </td>
+                          <td style={styles.tableCell}>{req.type || '—'}</td>
+                          <td style={styles.tableCell}>{partsList || '—'}</td>
+                          <td style={styles.tableCell}>{req.notes ?? '—'}</td>
                           <td style={styles.tableCell}>
-                            <span style={actionBadgeStyle(log.action)}>{log.action}</span>
-                          </td>
-                          <td style={styles.tableCell}>{part?.item_name ?? log.part_id}</td>
-                          <td style={styles.tableCell}>{log.qty}</td>
-                          <td style={styles.tableCell}>{log.note ?? '—'}</td>
-                          <td style={styles.tableCell}>
-                            {log.status ? (
-                              <span style={statusBadgeStyle(log.status)}>{log.status}</span>
-                            ) : '—'}
+                            <span style={statusBadgeStyle(req.status)}>{req.status}</span>
                           </td>
                         </tr>
                       );

@@ -5,7 +5,7 @@ import { usePartRequests } from '@/hooks/usePartRequests';
 import { PartRequest, PartRequestFilter } from '@/types/partRequest';
 
 export default function PartRequestScreen() {
-    const [filter, setFilter] = useState<PartRequestFilter>('pending');
+    const [filter, setFilter] = useState<PartRequestFilter>('PENDING');
     const { requests, loading, error, pending, approved, rejected, approve, reject, refetch } = usePartRequests(filter);
     const [processing, setProcessing] = useState<string | null>(null);
 
@@ -53,9 +53,9 @@ export default function PartRequestScreen() {
             {/* Filter tabs */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 {([
-                    { id: 'pending', label: '⏳ Pending' },
-                    { id: 'approved', label: '✅ Approved' },
-                    { id: 'rejected', label: '❌ Rejected' },
+                    { id: 'PENDING', label: '⏳ Pending' },
+                    { id: 'APPROVED', label: '✅ Approved' },
+                    { id: 'REJECTED', label: '❌ Rejected' },
                     { id: 'all', label: 'All' },
                 ] as { id: PartRequestFilter; label: string }[]).map(tab => (
                     <button key={tab.id} onClick={() => setFilter(tab.id)} style={{ padding: '7px 14px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: filter === tab.id ? '#185FA5' : 'white', color: filter === tab.id ? '#fff' : '#374151', fontWeight: filter === tab.id ? 600 : 400 }}>
@@ -80,7 +80,7 @@ export default function PartRequestScreen() {
                                     </thead>
                                     <tbody>
                                         {requests.map(r => {
-                                            const isPending = r.status === 'pending';
+                                            const isPending = r.status === 'PENDING';
                                             const isProcessing = processing === r.id;
                                             const partsList = (r.parts || []).map(p => `${p.qty || 1}× ${p.part_name || p.part_id || '?'}`).join(', ');
                                             return (
@@ -96,8 +96,8 @@ export default function PartRequestScreen() {
                                                     <td style={{ padding: '10px 12px' }}>
                                                         <span style={{
                                                             padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                                                            background: r.status === 'pending' ? '#fef3c7' : r.status === 'approved' ? '#d1fae5' : '#fee2e2',
-                                                            color: r.status === 'pending' ? '#92400e' : r.status === 'approved' ? '#065f46' : '#991b1b',
+                                                            background: r.status === 'PENDING' ? '#fef3c7' : r.status === 'APPROVED' ? '#d1fae5' : '#fee2e2',
+                                                            color: r.status === 'PENDING' ? '#92400e' : r.status === 'APPROVED' ? '#065f46' : '#991b1b',
                                                         }}>
                                                             {r.status}
                                                         </span>

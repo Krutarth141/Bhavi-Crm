@@ -12,7 +12,7 @@ export interface PartItem {
 export interface PartRequest {
     id: string;
     type?: string;          // e.g. 'request', 'issue', 'return'
-    status: 'pending' | 'approved' | 'rejected';
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
     engineer_id?: string;
     engineer_name: string;
     parts?: PartItem[];     // jsonb array
@@ -22,4 +22,4 @@ export interface PartRequest {
     created_at?: string;
 }
 
-export type PartRequestFilter = 'pending' | 'approved' | 'rejected' | 'all';
+export type PartRequestFilter = 'PENDING' | 'APPROVED' | 'REJECTED' | 'all';

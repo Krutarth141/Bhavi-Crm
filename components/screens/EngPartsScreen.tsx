@@ -17,7 +17,8 @@ export default function EngPartsScreen({ isEngineerView }: Props) {
   const {
     inventory,
     engStock,
-    engPartRequests,   // ← renamed from engStockLog
+    movements,
+    requests,
     engineers,
     pendingRequests,
     loading,
@@ -35,7 +36,7 @@ export default function EngPartsScreen({ isEngineerView }: Props) {
       <EngPartsEngineer
         engName={userName}
         inventory={inventory}
-        engStockLog={engPartRequests}   // prop name stays same for child component
+        myRequests={requests.filter(r => r.engineer_name === userName)}
         onRefetch={refetch}
       />
     )
@@ -43,7 +44,7 @@ export default function EngPartsScreen({ isEngineerView }: Props) {
       <EngPartsAdmin
         inventory={inventory}
         engStock={engStock}
-        engStockLog={engPartRequests}   // prop name stays same for child component
+        movements={movements}
         engineers={engineers}
         pendingRequests={pendingRequests}
         onRefetch={refetch}
