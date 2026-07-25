@@ -174,3 +174,5 @@ export interface VisitTimelineEvent {
     at: string;
     note?: string;
 }
+
+export const AUTO_VISIT_ENG_IDS = ['ENG002', 'ENG008'];

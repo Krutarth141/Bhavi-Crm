@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Modal from '@/components/Modal';
-import { AutoSite, AutoSiteVisit } from '@/types/autoSites';
+import { AutoSite, AutoSiteVisit, AUTO_VISIT_ENG_IDS } from '@/types/autoSites';
 import {
     fetchActiveVisit, fetchVisit, fetchSitesForPicker, checkOpenLogBlock,
     startNewVisit, visitAction, confirmHold, finishVisit,
@@ -47,7 +47,7 @@ export default function SiteVisitTracker() {
     const [finishMaterial, setFinishMaterial] = useState('');
     const [finishPhotos, setFinishPhotos] = useState<string[]>([]);
 
-    const showButton = roleType === 'engineer' || roleType === 'work_controller';
+    const showButton = roleType === 'engineer' && AUTO_VISIT_ENG_IDS.includes(memberId);
 
     const refreshTracker = async (id: number) => {
         const v = await fetchVisit(id);
