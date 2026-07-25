@@ -9,6 +9,7 @@ import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryModals } from '@/components/inventory/InventoryModals';
 import PurchaseHistoryTab from '@/components/screens/inventory/PurchaseHistoryTab';
 import SalesHistoryTab from '@/components/screens/inventory/SalesHistoryTab';
+import PartHistoryModal from '@/components/screens/inventory/PartHistoryModal';
 
 type ModalMode = 'add' | 'edit' | 'view' | null;
 type InvTab = 'stock' | 'purchase' | 'sales';
@@ -23,6 +24,7 @@ export default function InventoryScreen() {
 
     // UI State
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+    const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null);
     const [modalMode, setModalMode] = useState<ModalMode>(null);
     const [showStockTransactionModal, setShowStockTransactionModal] = useState(false);
     const [transactionType, setTransactionType] = useState<'in' | 'out' | 'sell'>('in');
@@ -299,6 +301,7 @@ export default function InventoryScreen() {
                     onAdjustStock={openStockModal}
                     onEditItem={(item) => openAddForm(item)}
                     onDeleteItem={handleDeleteItem}
+                    onOpenHistory={setHistoryItem}
                 />
             )}
 
@@ -321,6 +324,7 @@ export default function InventoryScreen() {
                 onSaveForm={handleSaveForm}
                 onSaveTransaction={handleSaveTransaction}
             />
+            {historyItem && <PartHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}
         </div>
     );
 }

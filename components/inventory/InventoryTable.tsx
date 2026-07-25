@@ -7,6 +7,7 @@ interface InventoryTableProps {
     onAdjustStock: (item: InventoryItem) => void;
     onEditItem: (item: InventoryItem) => void;
     onDeleteItem: (item: InventoryItem) => void;
+    onOpenHistory: (item: InventoryItem) => void;
 }
 
 export function InventoryTable({
@@ -14,7 +15,8 @@ export function InventoryTable({
     onViewItem,
     onAdjustStock,
     onEditItem,
-    onDeleteItem
+    onDeleteItem,
+    onOpenHistory
 }: InventoryTableProps) {
     return (
         <div style={inventoryStyles.card}>
@@ -46,7 +48,13 @@ export function InventoryTable({
                                     <strong style={{ color: inventoryColors.primary }}>{item.part_code || item.item_code}</strong>
                                 </td>
                                 <td style={inventoryStyles.tableCell}>
-                                    <strong>{item.item_name}</strong>
+                                    <span
+                                        style={{ cursor: 'pointer', color: inventoryColors.primary, fontWeight: 600 }}
+                                        onClick={() => onOpenHistory(item)}
+                                        title="View history"
+                                    >
+                                        {item.item_name}
+                                    </span>
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, fontSize: '12px', color: inventoryColors.textMuted }}>
                                     {item.category || '—'}
@@ -55,6 +63,11 @@ export function InventoryTable({
                                     <strong style={{ color: isOutOfStock ? inventoryColors.danger : isLowStock ? inventoryColors.warning : inventoryColors.success }}>
                                         {item.qty_in_stock}
                                     </strong>
+                                    {(item.warranty_qty || 0) > 0 && (
+                                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                                            🛒 {Math.max(0, item.qty_in_stock - (item.warranty_qty || 0))} + 🏭 {item.warranty_qty}
+                                        </div>
+                                    )}
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center', fontSize: '12px' }}>
                                     {item.min_stock}
@@ -68,6 +81,7 @@ export function InventoryTable({
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center' }}>
                                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'nowrap' }}>
                                         <ActionButton emoji="👁" onClick={() => onViewItem(item)} color="#4338ca" bgColor="#e0e7ff" />
+                                        <ActionButton emoji="📋" onClick={() => onOpenHistory(item)} color="#1d4ed8" bgColor="#dbeafe" />
                                         <ActionButton emoji="📦" onClick={() => onAdjustStock(item)} color="#065f46" bgColor="#dcfce7" />
                                         <ActionButton emoji="✏️" onClick={() => onEditItem(item)} color="#92400e" bgColor="#fef3c7" />
                                         <ActionButton emoji="🗑" onClick={() => onDeleteItem(item)} color="#dc2626" bgColor="#fee2e2" />

@@ -7,6 +7,7 @@ export interface InventoryItem {
     min_stock: number;
     unit_price: number;
     purchase_price?: number;
+    warranty_qty?: number;
     brand_id: string | null;
     description: string | null;
     part_code: string | null;
@@ -68,5 +69,20 @@ export interface InventorySale {
     total_amount?: number;
     note?: string | null;
     added_by?: string;
+    created_at?: string;
+}
+
+export interface InventoryLogEntry {
+    id: string;
+    inventory_id: string;
+    type: 'in' | 'out' | 'sell';
+    qty: number;
+    note?: string | null;
+    supplier?: string | null;
+    invoice_no?: string | null;
+    customer_name?: string | null;
+    price_per_unit?: number | null;
+    done_by?: string | null;
+    txn_date?: string | null;
     created_at?: string;
 }
