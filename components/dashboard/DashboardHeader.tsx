@@ -2,6 +2,7 @@
 
 import { signOut } from 'next-auth/react';
 import { useSession } from 'next-auth/react';
+import SiteVisitTracker from '@/components/screens/site-visit/SiteVisitTracker';
 
 export default function DashboardHeader() {
     const { data: session } = useSession();
@@ -19,6 +20,7 @@ export default function DashboardHeader() {
             <div className="header-content">
                 <h1>BHAVI CRM</h1>
                 <div className="user-info">
+                    <SiteVisitTracker />
                     <span className="user-name">{session?.user?.name}</span>
                     <span className="user-role">{roleLabel}</span>
                     <button onClick={handleLogout} className="logout-btn">

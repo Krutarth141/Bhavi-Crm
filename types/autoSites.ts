@@ -40,7 +40,7 @@ export interface AutoSiteItem {
 
 export interface AutoSiteVisit {
     id: number;
-    site_id: number;
+    site_id?: number | null;
     visit_date?: string;
     visit_time?: string;
     work_done?: string;
@@ -51,6 +51,12 @@ export interface AutoSiteVisit {
     material_total?: number;
     delivery_details?: string;
     photos?: any[];
+    visit_status?: 'active' | 'completed';
+    timeline?: string;          // JSON-encoded VisitTimelineEvent[]
+    adhoc_label?: string;
+    adhoc_client_name?: string;
+    adhoc_address?: string;
+    adhoc_area?: string;
     created_at?: string;
 }
 
@@ -160,4 +166,11 @@ export interface VisitDeliveryDetails {
     contact_person?: string;
     porter_date?: string;
     contact_mobile?: string;
+}
+
+export interface VisitTimelineEvent {
+    action: string;
+    by: string;
+    at: string;
+    note?: string;
 }
