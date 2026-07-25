@@ -15,7 +15,7 @@ const StarRating = ({ rating }: { rating?: number }) => {
 };
 
 export default function FeedbackScreen() {
-    const { feedback, loading, error, avgRating, googleReviews, fiveStars } = useFeedback();
+    const { feedback, engineers, month, setMonth, engId, setEngId, loading, error, avgRating, googleReviews, fiveStars } = useFeedback();
     const [search, setSearch] = useState('');
     const [ratingFilter, setRatingFilter] = useState('');
     const [googleFilter, setGoogleFilter] = useState('');
@@ -49,6 +49,15 @@ export default function FeedbackScreen() {
                         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{s.label}</div>
                     </div>
                 ))}
+            </div>
+
+            {/* Engineer & Month */}
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <select value={engId} onChange={e => setEngId(e.target.value)} style={{ padding: '7px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}>
+                    <option value="">All Engineers</option>
+                    {engineers.map(e => <option key={e.user_id} value={e.user_id}>{e.name}</option>)}
+                </select>
+                <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '7px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }} />
             </div>
 
             {/* Filters */}

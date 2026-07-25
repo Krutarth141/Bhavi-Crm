@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AMCContract, AMCFormData, isExpired, isExpiringSoon } from '@/types/amc';
-import { fetchAMCContracts, createAMCContract, deleteAMCContract } from '@/services/amcService';
+import { fetchAMCContracts, createAMCContract, updateAMCContract, deleteAMCContract } from '@/services/amcService';
 
 export const useAMC = () => {
     const [contracts, setContracts] = useState<AMCContract[]>([]);
@@ -28,6 +28,12 @@ export const useAMC = () => {
         return result;
     };
 
+    const update = async (id: number, form: AMCFormData) => {
+        const result = await updateAMCContract(id, form);
+        if (result.success) await loadContracts();
+        return result;
+    };
+
     const remove = async (id: number) => {
         const result = await deleteAMCContract(id);
         if (result.success) await loadContracts();
@@ -48,6 +54,7 @@ export const useAMC = () => {
         expired,
         refetch: loadContracts,
         create,
+        update,
         remove,
     };
 };

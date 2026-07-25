@@ -5,6 +5,8 @@ import { AMCFormData, AMC_TYPES } from '@/types/amc';
 
 interface Props {
     isOpen: boolean;
+    title: string;
+    saveLabel: string;
     form: AMCFormData;
     saving: boolean;
     onClose: () => void;
@@ -15,18 +17,18 @@ interface Props {
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 const labelStyle = { display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '14px' };
 
-export default function AMCFormModal({ isOpen, form, saving, onClose, onSave, onChange }: Props) {
+export default function AMCFormModal({ isOpen, title, saveLabel, form, saving, onClose, onSave, onChange }: Props) {
     const footer = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
             <button onClick={onSave} disabled={saving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 14, opacity: saving ? 0.6 : 1 }}>
-                {saving ? 'Saving...' : '💾 Save Contract'}
+                {saving ? 'Saving...' : saveLabel}
             </button>
         </div>
     );
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="➕ Add AMC Contract" footer={footer}>
+        <Modal isOpen={isOpen} onClose={onClose} title={title} footer={footer}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div><label style={labelStyle}>Customer Name *</label><input type="text" value={form.customer_name} onChange={e => onChange('customer_name', e.target.value)} style={fieldStyle} placeholder="Full name" /></div>

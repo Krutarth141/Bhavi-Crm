@@ -14,6 +14,8 @@ import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
 import { approveWarrantyClaim, rejectWarrantyClaim } from '@/services/warrantyClaimService';
 import VoidWarrantyModal from '@/components/screens/tickets/VoidWarrantyModal';
+import { buildFeedbackWhatsAppLink } from '@/services/feedbackService';
+import { fetchCompanyInfo } from '@/services/settingsService';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -87,6 +89,15 @@ export default function TicketsScreen() {
     }
 
     return data;
+  };
+
+  const handleSendFeedbackRequest = async (t: Ticket) => {
+    const ci = await fetchCompanyInfo();
+    const link = buildFeedbackWhatsAppLink({
+      ticketId: t.id, customerName: t.cname, mobile: t.mobile, engineerName: t.assigned_name,
+      companyName: ci?.company_name, companyPhone: ci?.phone,
+    });
+    window.open(link, '_blank');
   };
 
   const handleAddClick = () => {
@@ -428,6 +439,11 @@ export default function TicketsScreen() {
                   {isInvoiceable(selectedTicket!) && canMarkInvoice && (
                     <button style={{ ...styles.btn, background: selectedTicket!.invoice_done ? '#6b7280' : '#f59e0b', color: 'white' }} onClick={() => setInvoiceModalTicket(selectedTicket)}>
                       {selectedTicket!.invoice_done ? `✏️ Edit Invoice #${selectedTicket!.invoice_no}` : '🧾 Add Invoice No.'}
+                    </button>
+                  )}
+                  {selectedTicket?.status === 'Closed' && (
+                    <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => handleSendFeedbackRequest(selectedTicket!)}>
+                      ⭐ Feedback
                     </button>
                   )}
                   {selectedTicket?.warranty_claim_pending && (currentUserRole === 'admin' || currentUserRole === 'work_controller') && (

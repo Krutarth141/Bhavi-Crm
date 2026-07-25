@@ -7,6 +7,8 @@ export interface CustomerFeedback {
     comment?: string;
     google_review?: boolean;
     engineer_name?: string;
+    eng_id?: string;
+    eng_name?: string;
     created_at?: string;
 }
 

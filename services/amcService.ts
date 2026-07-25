@@ -58,3 +58,30 @@ export const deleteAMCContract = async (
         return { success: false, error: (err as any).message };
     }
 };
+
+export const updateAMCContract = async (
+    id: number,
+    form: AMCFormData
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase.from('amc_contracts').update({
+            customer_name: form.customer_name.trim(),
+            mobile: form.mobile.trim() || null,
+            product: form.product.trim() || null,
+            serial_no: form.serial_no.trim() || null,
+            amc_start: form.amc_start || null,
+            amc_end: form.amc_end || null,
+            amc_amount: form.amc_amount ? Number(form.amc_amount) : null,
+            amc_type: form.amc_type || null,
+            visits_included: form.visits_included ? Number(form.visits_included) : null,
+            address: form.address.trim() || null,
+            notes: form.notes.trim() || null,
+            updated_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error('Failed to update AMC contract:', err);
+        return { success: false, error: (err as any).message };
+    }
+};
