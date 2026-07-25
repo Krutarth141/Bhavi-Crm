@@ -5,7 +5,7 @@ import { useState } from 'react';
 // Existing screens
 import TasksScreen from '@/components/screens/TasksScreen';
 import TicketsScreen from '@/components/screens/TicketsScreen';
-import ReportsScreen from '@/components/screens/ReportsScreen';
+import MyReportScreen from '@/components/screens/MyReportScreen';
 
 // New screens
 import MyCallsScreen from '@/components/screens/MyCallsScreen';
@@ -41,7 +41,7 @@ export default function EngineerDashboard() {
             case 'tasks': return <TasksScreen />;
             case 'tickets': return <TicketsScreen />;
             case 'eng-parts': return <EngPartsScreen />;
-            case 'reports': return <ReportsScreen />;
+            case 'reports': return <MyReportScreen />;
             case 'engineer-update': return <EngineerUpdateScreen />;
             default: return null;
         }

@@ -7,11 +7,12 @@ interface Props {
     brands: Brand[];
     problemTypes: ProblemType[];
     onAdd: (form: ProblemTypeForm) => Promise<void>;
+    onEdit: (id: string, problem: string) => Promise<void>;
     onToggle: (id: string, is_active: boolean) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
 }
 
-export default function ProblemTypesTab({ brands, problemTypes, onAdd, onToggle, onDelete }: Props) {
+export default function ProblemTypesTab({ brands, problemTypes, onAdd, onEdit, onToggle, onDelete }: Props) {
     const [form, setForm] = useState<ProblemTypeForm>(emptyProblemTypeForm);
     const [saving, setSaving] = useState(false);
     const [showInactive, setShowInactive] = useState(false);
@@ -22,6 +23,13 @@ export default function ProblemTypesTab({ brands, problemTypes, onAdd, onToggle,
         try { await onAdd(form); setForm(emptyProblemTypeForm); }
         catch (e: any) { alert(e.message); }
         finally { setSaving(false); }
+    };
+
+    const handleEdit = async (p: ProblemType) => {
+        const newProb = prompt('Edit Problem Type:', p.problem);
+        if (!newProb || newProb === p.problem) return;
+        try { await onEdit(p.id, newProb); }
+        catch (e: any) { alert(e.message); }
     };
 
     const handleDelete = async (id: string) => {
@@ -103,6 +111,7 @@ export default function ProblemTypesTab({ brands, problemTypes, onAdd, onToggle,
                                             </span>
                                         </td>
                                         <td>
+                                            <button className="btn-icon" onClick={() => handleEdit(p)}>✏️</button>
                                             <button className="btn-icon" onClick={() => handleDelete(p.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
                                         </td>
                                     </tr>

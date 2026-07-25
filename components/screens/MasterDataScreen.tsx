@@ -7,6 +7,8 @@ import BrandsTab from './masters/BrandsTab';
 import SubCategoriesTab from './masters/SubCategoriesTab';
 import ModelsTab from './masters/ModelsTab';
 import ProblemTypesTab from './masters/ProblemTypesTab';
+import PincodesTab from './masters/PincodesTab';
+import ServiceGalleryTab from './masters/ServiceGalleryTab';
 import InventoryMasterTab from './masters/InventoryMasterTab';
 
 const tabs: { id: MasterTabId; label: string }[] = [
@@ -14,6 +16,8 @@ const tabs: { id: MasterTabId; label: string }[] = [
     { id: 'subcategories', label: '📂 Sub-Categories' },
     { id: 'models', label: '📱 Models' },
     { id: 'problems', label: '🔧 Problem Types' },
+    { id: 'pincodes', label: '📍 Pincodes' },
+    { id: 'gallery', label: '📸 Service Gallery' },
     { id: 'inventory', label: '📦 Inventory' },
 ];
 
@@ -24,13 +28,13 @@ export default function MasterDataScreen() {
         brands, subcategories, models, problemTypes,
         loading, error, fetchAll,
         saveBrand, removeBrand,
-        saveSubCategory, removeSubCategory,
-        saveModel, removeModel,
-        saveProblemType, toggleProblem, removeProblemType,
+        saveSubCategory, editSubCategory, removeSubCategory,
+        saveModel, editModel, removeModel,
+        saveProblemType, editProblemType, toggleProblem, removeProblemType,
     } = useMasters();
 
     const renderTab = () => {
-        if (loading && activeTab !== 'inventory') {
+        if (loading && activeTab !== 'inventory' && activeTab !== 'pincodes' && activeTab !== 'gallery') {
             return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 30 }}>Loading...</p>;
         }
 
@@ -51,6 +55,7 @@ export default function MasterDataScreen() {
                         brands={brands}
                         subcategories={subcategories}
                         onAdd={saveSubCategory}
+                        onEdit={editSubCategory}
                         onDelete={removeSubCategory}
                         onRefresh={fetchAll}
                     />
@@ -63,6 +68,7 @@ export default function MasterDataScreen() {
                         subcategories={subcategories}
                         models={models}
                         onAdd={saveModel}
+                        onEdit={editModel}
                         onDelete={removeModel}
                         onRefresh={fetchAll}
                     />
@@ -74,10 +80,17 @@ export default function MasterDataScreen() {
                         brands={brands}
                         problemTypes={problemTypes}
                         onAdd={saveProblemType}
+                        onEdit={editProblemType}
                         onToggle={toggleProblem}
                         onDelete={removeProblemType}
                     />
                 );
+
+            case 'pincodes':
+                return <PincodesTab />;
+
+            case 'gallery':
+                return <ServiceGalleryTab />;
 
             case 'inventory':
                 return <InventoryMasterTab />;
@@ -95,7 +108,6 @@ export default function MasterDataScreen() {
                 <div className="alert alert-danger" style={{ marginBottom: 12 }}>{error}</div>
             )}
 
-            {/* Tabs */}
             <div className="tabs" style={{ marginBottom: 18 }}>
                 {tabs.map(tab => (
                     <button
@@ -108,7 +120,6 @@ export default function MasterDataScreen() {
                 ))}
             </div>
 
-            {/* Tab content */}
             {renderTab()}
         </div>
     );

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { Brand, SubCategory, Model, ProblemType, BrandForm, SubCategoryForm, ModelForm, ProblemTypeForm } from '@/types/masters';
 import {
     fetchBrands, addBrand, deleteBrand,
-    fetchSubCategories, addSubCategory, deleteSubCategory,
-    fetchModels, addModel, deleteModel,
-    fetchProblemTypes, addProblemType, toggleProblemType, deleteProblemType,
+    fetchSubCategories, addSubCategory, updateSubCategory, deleteSubCategory,
+    fetchModels, addModel, updateModel, deleteModel,
+    fetchProblemTypes, addProblemType, updateProblemType, toggleProblemType, deleteProblemType,
 } from '@/services/masterService';
 
 export const useMasters = () => {
@@ -38,7 +38,6 @@ export const useMasters = () => {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    // ── Brand actions ───────────────────────────────────────────────────────────
     const saveBrand = async (form: BrandForm) => {
         await addBrand(form);
         await fetchAll();
@@ -48,9 +47,12 @@ export const useMasters = () => {
         await fetchAll();
     };
 
-    // ── SubCategory actions ─────────────────────────────────────────────────────
     const saveSubCategory = async (form: SubCategoryForm) => {
         await addSubCategory(form);
+        await fetchAll();
+    };
+    const editSubCategory = async (id: string, form: SubCategoryForm) => {
+        await updateSubCategory(id, form);
         await fetchAll();
     };
     const removeSubCategory = async (id: string) => {
@@ -58,9 +60,12 @@ export const useMasters = () => {
         await fetchAll();
     };
 
-    // ── Model actions ───────────────────────────────────────────────────────────
     const saveModel = async (form: ModelForm) => {
         await addModel(form);
+        await fetchAll();
+    };
+    const editModel = async (id: string, form: ModelForm) => {
+        await updateModel(id, form);
         await fetchAll();
     };
     const removeModel = async (id: string) => {
@@ -68,9 +73,12 @@ export const useMasters = () => {
         await fetchAll();
     };
 
-    // ── Problem Type actions ────────────────────────────────────────────────────
     const saveProblemType = async (form: ProblemTypeForm) => {
         await addProblemType(form);
+        await fetchAll();
+    };
+    const editProblemType = async (id: string, problem: string) => {
+        await updateProblemType(id, problem);
         await fetchAll();
     };
     const toggleProblem = async (id: string, is_active: boolean) => {
@@ -86,8 +94,8 @@ export const useMasters = () => {
         brands, subcategories, models, problemTypes,
         loading, error, fetchAll,
         saveBrand, removeBrand,
-        saveSubCategory, removeSubCategory,
-        saveModel, removeModel,
-        saveProblemType, toggleProblem, removeProblemType,
+        saveSubCategory, editSubCategory, removeSubCategory,
+        saveModel, editModel, removeModel,
+        saveProblemType, editProblemType, toggleProblem, removeProblemType,
     };
 };

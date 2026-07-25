@@ -4,23 +4,25 @@ import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Brand, SubCategory, Model, ModelForm, emptyModelForm } from '@/types/masters';
 import { importModels } from '@/services/masterService';
+import ModelEditModal from './ModelEditModal';
 
 interface Props {
     brands: Brand[];
     subcategories: SubCategory[];
     models: Model[];
     onAdd: (form: ModelForm) => Promise<void>;
+    onEdit: (id: string, form: ModelForm) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onRefresh: () => Promise<void>;
 }
 
-export default function ModelsTab({ brands, subcategories, models, onAdd, onDelete, onRefresh }: Props) {
+export default function ModelsTab({ brands, subcategories, models, onAdd, onEdit, onDelete, onRefresh }: Props) {
     const [form, setForm] = useState<ModelForm>(emptyModelForm);
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
+    const [editingModel, setEditingModel] = useState<Model | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
-    // Filter subcategories by selected brand
     const filteredSubcats = form.brand_id
         ? subcategories.filter(s => s.brand_id === form.brand_id)
         : subcategories;
@@ -159,6 +161,7 @@ export default function ModelsTab({ brands, subcategories, models, onAdd, onDele
                                         <td>{m.subcategory?.name || '—'}</td>
                                         <td>{m.sale_price ? `₹${m.sale_price.toLocaleString()}` : '—'}</td>
                                         <td>
+                                            <button className="btn-icon" onClick={() => setEditingModel(m)}>✏️</button>
                                             <button className="btn-icon" onClick={() => handleDelete(m.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
                                         </td>
                                     </tr>
@@ -168,6 +171,10 @@ export default function ModelsTab({ brands, subcategories, models, onAdd, onDele
                     </div>
                 )}
             </div>
+
+            {editingModel && (
+                <ModelEditModal model={editingModel} brands={brands} subcategories={subcategories} onSave={onEdit} onClose={() => setEditingModel(null)} />
+            )}
         </div>
     );
 }

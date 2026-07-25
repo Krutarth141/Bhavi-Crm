@@ -189,3 +189,87 @@ export const fetchTicketsForUser = async (userRole: string, userId: string): Pro
         return [];
     }
 };
+
+export const REPORT_EDIT_FIELDS: { key: keyof Ticket; label: string }[] = [
+    { key: 'model', label: 'Model' },
+    { key: 'serial', label: 'Serial No' },
+    { key: 'call_type', label: 'Call Type' },
+    { key: 'service_type', label: 'Service Type' },
+    { key: 'cname', label: 'Customer Name' },
+    { key: 'mobile', label: 'Mobile' },
+    { key: 'alt_mobile', label: 'Alt Mobile' },
+    { key: 'problem', label: 'Problem' },
+    { key: 'description', label: 'Description' },
+    { key: 'condition', label: 'Condition' },
+    { key: 'city', label: 'City' },
+    { key: 'state', label: 'State' },
+    { key: 'pin', label: 'Pin' },
+    { key: 'area', label: 'Area' },
+    { key: 'address', label: 'Address' },
+    { key: 'se_call_id', label: 'SE Call ID' },
+    { key: 'labor', label: 'Labor ₹' },
+    { key: 'brand_name', label: 'Brand' },
+];
+
+export const submitReportEdit = async (
+    ticket: Ticket, newValues: Record<string, string>, reason: string, requestedBy: string, wcId: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const changes: Record<string, { old: string; new: string }> = {};
+        Object.entries(newValues).forEach(([k, nv]) => {
+            const ov = String((ticket as any)[k] || '').trim();
+            if (nv.trim() !== ov) changes[k] = { old: ov, new: nv.trim() };
+        });
+        if (!Object.keys(changes).length) return { success: false, error: 'No changes detected.' };
+        const pending_edit = { requested_by: requestedBy, wc_id: wcId, requested_at: new Date().toISOString(), reason, changes };
+        const { error } = await supabase.from('tickets').update({ pending_edit, updated_at: new Date().toISOString() }).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
+export const approveReportEdit = async (
+    ticket: Ticket, approvedBy: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const pe = ticket.pending_edit;
+        if (!pe) return { success: false, error: 'No pending edit found.' };
+        const ch = pe.changes || {};
+        const now = new Date().toISOString();
+        const patch: Record<string, any> = { pending_edit: null, updated_at: now };
+        ['cname', 'mobile', 'alt_mobile', 'city', 'address', 'area', 'pin', 'call_type', 'service_type', 'problem', 'description', 'model', 'serial', 'condition', 'se_call_id', 'labor', 'brand_name'].forEach(f => {
+            if (ch[f]) patch[f] = ch[f].new;
+        });
+        const tl = ticket.timeline || [];
+        const summary = Object.entries(ch).map(([k, v]) => `${k}: "${v.old}"→"${v.new}"`).join(' | ');
+        patch.timeline = [...tl, { action: 'Report Edit Approved', by: approvedBy, at: now, note: `Edited by ${pe.requested_by}. Reason: ${pe.reason}. ${summary}` }];
+        const { error } = await supabase.from('tickets').update(patch).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
+export const rejectReportEdit = async (
+    ticket: Ticket, rejectedBy: string, reason: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const pe = ticket.pending_edit;
+        if (!pe) return { success: false, error: 'No pending edit found.' };
+        const now = new Date().toISOString();
+        const tl = ticket.timeline || [];
+        const patch = {
+            pending_edit: null,
+            timeline: [...tl, { action: 'Report Edit Rejected', by: rejectedBy, at: now, note: `Edit by ${pe.requested_by} rejected. Reason: ${reason || 'No reason given'}` }],
+            updated_at: now,
+        };
+        const { error } = await supabase.from('tickets').update(patch).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};

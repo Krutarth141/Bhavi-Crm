@@ -16,6 +16,8 @@ import { approveWarrantyClaim, rejectWarrantyClaim } from '@/services/warrantyCl
 import VoidWarrantyModal from '@/components/screens/tickets/VoidWarrantyModal';
 import { buildFeedbackWhatsAppLink } from '@/services/feedbackService';
 import { fetchCompanyInfo } from '@/services/settingsService';
+import ReportEditRequestModal from '@/components/screens/tickets/ReportEditRequestModal';
+import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -37,6 +39,7 @@ export default function TicketsScreen() {
   const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'pending' | 'done'>('all');
   const [invoiceModalTicket, setInvoiceModalTicket] = useState<Ticket | null>(null);
   const [voidWarrantyTicket, setVoidWarrantyTicket] = useState<Ticket | null>(null);
+  const [reportEditTicket, setReportEditTicket] = useState<Ticket | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -244,6 +247,36 @@ export default function TicketsScreen() {
     else alert('Error: ' + r.error);
   };
 
+  const handleApproveReportEdit = async (t: Ticket) => {
+    if (!confirm(`Approve report edit for ${t.id} — ${t.cname}?`)) return;
+    const r = await approveReportEdit(t, (session?.user as any)?.name || 'Admin');
+    if (r.success) { alert('✅ Edit approved! Report has been updated.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleRejectReportEdit = async (t: Ticket) => {
+    const reason = prompt('Reason for rejection (will be added to history):');
+    if (reason === null) return;
+    const r = await rejectReportEdit(t, (session?.user as any)?.name || 'Admin', reason);
+    if (r.success) { alert('❌ Edit request rejected. Original report remains unchanged.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleViewEditDiff = (t: Ticket) => {
+    const pe = t.pending_edit;
+    if (!pe) return;
+    const fieldLabels: Record<string, string> = { cname: 'Customer Name', mobile: 'Mobile', alt_mobile: 'Alt Mobile', city: 'City', address: 'Address', area: 'Area', pin: 'Pin', call_type: 'Call Type', service_type: 'Service Type', problem: 'Problem', description: 'Description', model: 'Model', serial: 'Serial No', condition: 'Condition', se_call_id: 'SE Call ID', labor: 'Labor ₹', brand_name: 'Brand' };
+    const rows = Object.entries(pe.changes || {}).map(([k, v]) => `<tr><td style="padding:6px 10px;font-weight:600;font-size:12px;color:#6b7280;white-space:nowrap;">${fieldLabels[k] || k}</td><td style="padding:6px 10px;font-size:13px;background:#fef2f2;color:#991b1b;">${String(v.old || '—')}</td><td style="padding:6px 10px;font-size:13px;background:#f0fdf4;color:#166534;">${String(v.new || '—')}</td></tr>`).join('');
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`<html><head><title>Report Edit Diff — ${t.id}</title><style>body{font-family:Arial;padding:20px;font-size:13px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #e5e7eb;padding:6px 10px;}th{background:#f8fafc;}h2{margin-bottom:4px;}p{color:#6b7280;font-size:12px;margin-top:4px;}</style></head><body>
+      <h2>Report Edit Request — ${t.id} | ${t.cname}</h2>
+      <p>Requested by: <b>${pe.requested_by}</b> at ${new Date(pe.requested_at).toLocaleString('en-IN')}<br/>Reason: <b>${pe.reason}</b></p>
+      <table><thead><tr><th>Field</th><th style="background:#fef2f2;color:#991b1b;">Old Value</th><th style="background:#f0fdf4;color:#166534;">New Value</th></tr></thead><tbody>${rows}</tbody></table>
+    </body></html>`);
+    win.document.close();
+  };
+
   const screenTitle = currentUserRole === 'engineer' ? '🎫 My Tickets' : '🎫 All Tickets';
 
   return (
@@ -341,6 +374,19 @@ export default function TicketsScreen() {
             </div>
 
             <div style={styles.modalBody}>
+              {modalMode === 'view' && selectedTicket?.pending_edit && (
+                <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
+                  ⏳ <b>Edit Pending Approval</b> — Requested by <b>{selectedTicket.pending_edit.requested_by}</b><br />
+                  <span style={{ fontSize: 12, color: '#92400e' }}>Reason: {selectedTicket.pending_edit.reason}</span>
+                  {currentUserRole === 'admin' && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveReportEdit(selectedTicket)}>✅ Approve</button>
+                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectReportEdit(selectedTicket)}>❌ Reject</button>
+                      <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onClick={() => handleViewEditDiff(selectedTicket)}>🔍 View Changes</button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>👤 Customer</h3>
                 <div style={styles.formGrid}>
@@ -446,6 +492,11 @@ export default function TicketsScreen() {
                       ⭐ Feedback
                     </button>
                   )}
+                  {selectedTicket?.status !== 'Closed' && currentUserRole === 'work_controller' && !selectedTicket?.pending_edit && (
+                    <button style={{ ...styles.btn, background: '#0ea5e9', color: 'white' }} onClick={() => setReportEditTicket(selectedTicket)}>
+                      ✏️ Edit Report
+                    </button>
+                  )}
                   {selectedTicket?.warranty_claim_pending && (currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
                     <>
                       <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => handleApproveWarrantyClaim(selectedTicket!)}>✅ Approve Claim</button>
@@ -485,6 +536,15 @@ export default function TicketsScreen() {
           byUser={(session?.user as any)?.name || currentUserRole || ''}
           onClose={() => setVoidWarrantyTicket(null)}
           onDone={async () => { setVoidWarrantyTicket(null); setModalOpen(false); await fetchTickets(); }}
+        />
+      )}
+      {reportEditTicket && (
+        <ReportEditRequestModal
+          ticket={reportEditTicket}
+          requestedBy={(session?.user as any)?.name || currentUserRole || ''}
+          wcId={currentUserId || ''}
+          onClose={() => setReportEditTicket(null)}
+          onSubmitted={fetchTickets}
         />
       )}
     </div>

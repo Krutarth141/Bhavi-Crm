@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Brand, SubCategory, Model, ProblemType, BrandForm, SubCategoryForm, ModelForm, ProblemTypeForm } from '@/types/masters';
+import { Brand, SubCategory, Model, ProblemType, BrandForm, SubCategoryForm, ModelForm, ProblemTypeForm, ServiceGalleryPhoto } from '@/types/masters';
 
 // ─── Helper: Supabase returns brand as array for joins, normalize it ──────────
 const normBrand = (b: any): { name: string } | null => {
@@ -180,4 +180,100 @@ export const importModels = async (
         } catch (_) { }
     }
     return count;
+};
+
+// ─── Edit (update) ────────────────────────────────────────────────────────────
+
+export const updateSubCategory = async (id: string, form: SubCategoryForm): Promise<void> => {
+    const { error } = await supabase
+        .from('subcategories')
+        .update({ name: form.name.trim(), brand_id: form.brand_id || null })
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const updateModel = async (id: string, form: ModelForm): Promise<void> => {
+    const { error } = await supabase
+        .from('models')
+        .update({
+            model_no: form.model_no.trim(),
+            model_name: form.model_name.trim() || null,
+            brand_id: form.brand_id || null,
+            subcategory_id: form.subcategory_id || null,
+            sale_price: form.sale_price ? Number(form.sale_price) : null,
+            printer_type: form.printer_type || null,
+        })
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const updateProblemType = async (id: string, problem: string): Promise<void> => {
+    const { error } = await supabase
+        .from('problem_types')
+        .update({ problem })
+        .eq('id', id);
+    if (error) throw error;
+};
+
+// ─── Pincodes (bulk import only — matches legacy app, no per-row CRUD) ────────
+
+export const fetchPincodeCount = async (): Promise<number> => {
+    const { count, error } = await supabase.from('pincodes').select('pincode', { count: 'exact', head: true });
+    if (error) throw error;
+    return count || 0;
+};
+
+export const importPincodes = async (
+    rows: { pincode: string; area: string; district: string; state: string }[],
+    clearFirst: boolean
+): Promise<number> => {
+    if (clearFirst) {
+        const { error } = await supabase.from('pincodes').delete().gte('pincode', '100000');
+        if (error) throw error;
+    }
+    const BATCH = 500;
+    let done = 0;
+    for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH);
+        const { error } = await supabase.from('pincodes').upsert(batch, { onConflict: 'pincode' });
+        if (error) throw error;
+        done += batch.length;
+    }
+    return done;
+};
+
+// ─── Service Gallery ───────────────────────────────────────────────────────────
+
+export const fetchServiceGalleryPhotos = async (): Promise<ServiceGalleryPhoto[]> => {
+    const { data, error } = await supabase
+        .from('service_gallery')
+        .select('*')
+        .order('service_id')
+        .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+};
+
+export const uploadServiceGalleryPhoto = async (
+    serviceId: string, file: File, caption: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const ext = file.name.split('.').pop() || 'jpg';
+        const fname = `svc_${serviceId}_${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('service-photos').upload(fname, file, { upsert: true, contentType: file.type });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from('service-photos').getPublicUrl(fname);
+        const { error } = await supabase.from('service_gallery').insert([{
+            service_id: serviceId, image_url: pub.publicUrl, caption: caption || null, created_at: new Date().toISOString(),
+        }]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
+export const deleteServiceGalleryPhoto = async (id: string): Promise<void> => {
+    const { error } = await supabase.from('service_gallery').delete().eq('id', id);
+    if (error) throw error;
 };

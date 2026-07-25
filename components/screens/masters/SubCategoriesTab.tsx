@@ -4,18 +4,21 @@ import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Brand, SubCategory, SubCategoryForm, emptySubCategoryForm } from '@/types/masters';
 import { importSubCategories } from '@/services/masterService';
+import SubCategoryEditModal from './SubCategoryEditModal';
 
 interface Props {
     brands: Brand[];
     subcategories: SubCategory[];
     onAdd: (form: SubCategoryForm) => Promise<void>;
+    onEdit: (id: string, form: SubCategoryForm) => Promise<void>;
     onDelete: (id: string) => Promise<void>;
     onRefresh: () => Promise<void>;
 }
 
-export default function SubCategoriesTab({ brands, subcategories, onAdd, onDelete, onRefresh }: Props) {
+export default function SubCategoriesTab({ brands, subcategories, onAdd, onEdit, onDelete, onRefresh }: Props) {
     const [form, setForm] = useState<SubCategoryForm>(emptySubCategoryForm);
     const [saving, setSaving] = useState(false);
+    const [editingSc, setEditingSc] = useState<SubCategory | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
     const handleAdd = async () => {
@@ -105,6 +108,7 @@ export default function SubCategoriesTab({ brands, subcategories, onAdd, onDelet
                                         <td><strong>{sc.name}</strong></td>
                                         <td>{sc.brand?.name || '—'}</td>
                                         <td>
+                                            <button className="btn-icon" onClick={() => setEditingSc(sc)}>✏️</button>
                                             <button className="btn-icon" onClick={() => handleDelete(sc.id)} style={{ color: 'var(--danger)' }}>🗑️</button>
                                         </td>
                                     </tr>
@@ -114,6 +118,10 @@ export default function SubCategoriesTab({ brands, subcategories, onAdd, onDelet
                     </div>
                 )}
             </div>
+
+            {editingSc && (
+                <SubCategoryEditModal subcategory={editingSc} brands={brands} onSave={onEdit} onClose={() => setEditingSc(null)} />
+            )}
         </div>
     );
 }

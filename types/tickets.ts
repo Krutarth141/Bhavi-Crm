@@ -6,6 +6,14 @@ export interface TicketSpare {
     gst_pct?: number;
 }
 
+export interface PendingEdit {
+    requested_by: string;
+    wc_id: string;
+    requested_at: string;
+    reason: string;
+    changes: Record<string, { old: string; new: string }>;
+}
+
 export interface Ticket {
     id: string;
     call_type: string;
@@ -18,6 +26,7 @@ export interface Ticket {
     mobile: string;
     city: string;
     state?: string;
+    pending_edit?: PendingEdit | null;
     pin?: string;
     area?: string;
     address?: string;

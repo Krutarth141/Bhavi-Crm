@@ -43,7 +43,7 @@ export interface ProblemType {
     brand?: { name: string } | null;
 }
 
-export type MasterTabId = 'brands' | 'subcategories' | 'models' | 'problems' | 'inventory';
+export type MasterTabId = 'brands' | 'subcategories' | 'models' | 'problems' | 'pincodes' | 'gallery' | 'inventory';
 
 // ─── Form states ──────────────────────────────────────────────────────────────
 
@@ -80,3 +80,20 @@ export const emptyModelForm: ModelForm = {
 export const emptyProblemTypeForm: ProblemTypeForm = {
     problem: '', brand_id: '', is_active: true,
 };
+
+export interface ServiceGalleryPhoto {
+    id: string;
+    service_id: string;
+    image_url: string;
+    caption?: string;
+    created_at?: string;
+}
+
+export const SERVICE_GALLERY_OPTIONS: { id: string; name: string }[] = [
+    { id: 'camera-repair', name: 'Camera Repair' },
+    { id: 'home-automation', name: 'Home Automation' },
+    { id: 'cctv-install', name: 'CCTV Install' },
+    { id: 'printer-amc', name: 'Printer AMC' },
+    { id: 'printer-repair', name: 'Printer Repair' },
+    { id: 'scanner-repair', name: 'Scanner Service' },
+];
