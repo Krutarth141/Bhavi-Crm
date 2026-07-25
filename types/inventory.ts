@@ -53,3 +53,20 @@ export interface InventoryPurchase {
     added_by?: string;
     created_at?: string;
 }
+
+export interface InventorySale {
+    id: string;
+    sale_date: string;
+    part_code: string;
+    part_name: string;
+    sale_type: 'call' | 'dealer' | 'customer';
+    customer_name?: string;
+    mobile?: string | null;
+    reference?: string;
+    qty: number;
+    unit_price: number;
+    total_amount?: number;
+    note?: string | null;
+    added_by?: string;
+    created_at?: string;
+}

@@ -8,9 +8,10 @@ import { InventoryTable } from '@/components/inventory/InventoryTable';
 import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryModals } from '@/components/inventory/InventoryModals';
 import PurchaseHistoryTab from '@/components/screens/inventory/PurchaseHistoryTab';
+import SalesHistoryTab from '@/components/screens/inventory/SalesHistoryTab';
 
 type ModalMode = 'add' | 'edit' | 'view' | null;
-type InvTab = 'stock' | 'purchase';
+type InvTab = 'stock' | 'purchase' | 'sales';
 
 export default function InventoryScreen() {
     const { data: session } = useSession();
@@ -205,7 +206,7 @@ export default function InventoryScreen() {
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
-                    {([{ id: 'stock', label: '📦 Stock' }, { id: 'purchase', label: '🛒 Purchase' }] as { id: InvTab; label: string }[]).map(tab => (
+                    {([{ id: 'stock', label: '📦 Stock' }, { id: 'purchase', label: '🛒 Purchase' }, { id: 'sales', label: '💰 Sales' }] as { id: InvTab; label: string }[]).map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400, color: activeTab === tab.id ? '#185FA5' : '#6b7280', borderBottom: activeTab === tab.id ? '2px solid #185FA5' : '2px solid transparent', marginBottom: -1 }}>
                             {tab.label}
                         </button>
@@ -213,6 +214,7 @@ export default function InventoryScreen() {
                 </div>
 
                 {activeTab === 'purchase' && <PurchaseHistoryTab inventory={inventory} addedBy={userName} />}
+                {activeTab === 'sales' && <SalesHistoryTab inventory={inventory} addedBy={userName} />}
 
                 {activeTab === 'stock' && (
                     <>
