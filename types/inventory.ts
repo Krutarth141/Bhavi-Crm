@@ -6,6 +6,7 @@ export interface InventoryItem {
     qty_in_stock: number;
     min_stock: number;
     unit_price: number;
+    purchase_price?: number;
     brand_id: string | null;
     description: string | null;
     part_code: string | null;
@@ -36,4 +37,19 @@ export interface TransactionData {
     invoice: string;
     customer: string;
     sell_price: number;
+}
+
+export interface InventoryPurchase {
+    id: string;
+    purchase_date: string;
+    part_code: string;
+    part_name: string;
+    supplier: string;
+    qty: number;
+    unit_cost: number;
+    invoice_no: string;
+    total_cost?: number;
+    note?: string | null;
+    added_by?: string;
+    created_at?: string;
 }

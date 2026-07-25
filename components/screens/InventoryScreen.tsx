@@ -1,15 +1,22 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import { useInventory } from '@/hooks/useInventory';
 import { InventoryItem, TransactionData } from '@/types/inventory';
 import { InventoryTable } from '@/components/inventory/InventoryTable';
 import { InventoryStats } from '@/components/inventory/InventoryStats';
 import { InventoryModals } from '@/components/inventory/InventoryModals';
+import PurchaseHistoryTab from '@/components/screens/inventory/PurchaseHistoryTab';
 
 type ModalMode = 'add' | 'edit' | 'view' | null;
+type InvTab = 'stock' | 'purchase';
 
 export default function InventoryScreen() {
+    const { data: session } = useSession();
+    const userName = (session?.user as any)?.name ?? 'Admin';
+    const [activeTab, setActiveTab] = useState<InvTab>('stock');
+
     // Data fetching
     const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem } = useInventory();
 
@@ -196,84 +203,102 @@ export default function InventoryScreen() {
                 {/* KPI Cards */}
                 <InventoryStats inventory={inventory} />
 
-                {/* Search & Filters */}
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 200px 200px auto',
-                        gap: '12px',
-                        marginBottom: '16px',
-                    }}
-                >
-                    <input
-                        type="text"
-                        placeholder="🔍 Search items by name, code, or part..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            padding: '10px 12px',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px',
-                            fontSize: '14px',
-                        }}
-                    />
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        style={{
-                            padding: '10px 12px',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px',
-                            fontSize: '14px',
-                        }}
-                    >
-                        <option value="">All Categories</option>
-                        {categories.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
-                    <select
-                        style={{
-                            padding: '10px 12px',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px',
-                            fontSize: '14px',
-                        }}
-                    >
-                        <option>Sort: A-Z</option>
-                        <option>Sort: Low Stock</option>
-                        <option>Sort: Price High</option>
-                    </select>
-                    <button
-                        onClick={() => openAddForm()}
-                        style={{
-                            padding: '10px 16px',
-                            background: '#3b82f6',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        ➕ Add New
-                    </button>
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
+                    {([{ id: 'stock', label: '📦 Stock' }, { id: 'purchase', label: '🛒 Purchase' }] as { id: InvTab; label: string }[]).map(tab => (
+                        <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400, color: activeTab === tab.id ? '#185FA5' : '#6b7280', borderBottom: activeTab === tab.id ? '2px solid #185FA5' : '2px solid transparent', marginBottom: -1 }}>
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
-                {/* Results */}
-                <div style={{ marginBottom: '8px', fontSize: '13px', color: '#64748b' }}>
-                    Showing {filteredInventory.length} of {inventory.length} items
-                </div>
+                {activeTab === 'purchase' && <PurchaseHistoryTab inventory={inventory} addedBy={userName} />}
+
+                {activeTab === 'stock' && (
+                    <>
+                        {/* Search & Filters */}
+                        <div
+                            style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1fr 200px 200px auto',
+                                gap: '12px',
+                                marginBottom: '16px',
+                            }}
+                        >
+                            <input
+                                type="text"
+                                placeholder="🔍 Search items by name, code, or part..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    padding: '10px 12px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '14px',
+                                }}
+                            />
+                            <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                style={{
+                                    padding: '10px 12px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '14px',
+                                }}
+                            >
+                                <option value="">All Categories</option>
+                                {categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                            <select
+                                style={{
+                                    padding: '10px 12px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    fontSize: '14px',
+                                }}
+                            >
+                                <option>Sort: A-Z</option>
+                                <option>Sort: Low Stock</option>
+                                <option>Sort: Price High</option>
+                            </select>
+                            <button
+                                onClick={() => openAddForm()}
+                                style={{
+                                    padding: '10px 16px',
+                                    background: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                ➕ Add New
+                            </button>
+                        </div>
+
+                        {/* Results */}
+                        {/* Results */}
+                        <div style={{ marginBottom: '8px', fontSize: '13px', color: '#64748b' }}>
+                            Showing {filteredInventory.length} of {inventory.length} items
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* Inventory Table */}
-            <InventoryTable
-                filteredInventory={filteredInventory}
-                onViewItem={openViewModal}
-                onAdjustStock={openStockModal}
-                onEditItem={(item) => openAddForm(item)}
-                onDeleteItem={handleDeleteItem}
-            />
+            {activeTab === 'stock' && (
+                <InventoryTable
+                    filteredInventory={filteredInventory}
+                    onViewItem={openViewModal}
+                    onAdjustStock={openStockModal}
+                    onEditItem={(item) => openAddForm(item)}
+                    onDeleteItem={handleDeleteItem}
+                />
+            )}
 
             {/* Modals */}
             <InventoryModals
