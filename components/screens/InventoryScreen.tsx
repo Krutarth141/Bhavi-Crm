@@ -10,6 +10,8 @@ import { InventoryModals } from '@/components/inventory/InventoryModals';
 import PurchaseHistoryTab from '@/components/screens/inventory/PurchaseHistoryTab';
 import SalesHistoryTab from '@/components/screens/inventory/SalesHistoryTab';
 import PartHistoryModal from '@/components/screens/inventory/PartHistoryModal';
+import BulkActionsBar from '@/components/screens/inventory/BulkActionsBar';
+import { useMasters } from '@/hooks/useMasters';
 
 type ModalMode = 'add' | 'edit' | 'view' | null;
 type InvTab = 'stock' | 'purchase' | 'sales';
@@ -20,7 +22,8 @@ export default function InventoryScreen() {
     const [activeTab, setActiveTab] = useState<InvTab>('stock');
 
     // Data fetching
-    const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem } = useInventory();
+    const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem, fetchInventory } = useInventory();
+    const { brands } = useMasters();
 
     // UI State
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -29,6 +32,7 @@ export default function InventoryScreen() {
     const [showStockTransactionModal, setShowStockTransactionModal] = useState(false);
     const [transactionType, setTransactionType] = useState<'in' | 'out' | 'sell'>('in');
     const [submitting, setSubmitting] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     // Form State
     const [formData, setFormData] = useState<Partial<InventoryItem>>({});
@@ -60,6 +64,14 @@ export default function InventoryScreen() {
             return matchesSearch && matchesCategory;
         });
     }, [inventory, searchTerm, selectedCategory]);
+
+    const toggleSelectOne = (id: string) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = (checked: boolean) => {
+        setSelectedIds(checked ? filteredInventory.map(i => i.id) : []);
+    };
 
     // Modal Handlers
     const openAddForm = (item?: InventoryItem) => {
@@ -220,6 +232,14 @@ export default function InventoryScreen() {
 
                 {activeTab === 'stock' && (
                     <>
+                        <BulkActionsBar
+                            inventory={inventory}
+                            brands={brands}
+                            selectedIds={selectedIds}
+                            addedBy={userName}
+                            onClearSelection={() => setSelectedIds([])}
+                            onRefresh={fetchInventory}
+                        />
                         {/* Search & Filters */}
                         <div
                             style={{
@@ -297,6 +317,9 @@ export default function InventoryScreen() {
             {activeTab === 'stock' && (
                 <InventoryTable
                     filteredInventory={filteredInventory}
+                    selectedIds={selectedIds}
+                    onToggleOne={toggleSelectOne}
+                    onToggleAll={toggleSelectAll}
                     onViewItem={openViewModal}
                     onAdjustStock={openStockModal}
                     onEditItem={(item) => openAddForm(item)}

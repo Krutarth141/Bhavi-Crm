@@ -3,6 +3,9 @@ import { inventoryStyles, inventoryColors } from '@/styles/inventoryStyles';
 
 interface InventoryTableProps {
     filteredInventory: InventoryItem[];
+    selectedIds: string[];
+    onToggleOne: (id: string) => void;
+    onToggleAll: (checked: boolean) => void;
     onViewItem: (item: InventoryItem) => void;
     onAdjustStock: (item: InventoryItem) => void;
     onEditItem: (item: InventoryItem) => void;
@@ -12,6 +15,9 @@ interface InventoryTableProps {
 
 export function InventoryTable({
     filteredInventory,
+    selectedIds,
+    onToggleOne,
+    onToggleAll,
     onViewItem,
     onAdjustStock,
     onEditItem,
@@ -23,6 +29,14 @@ export function InventoryTable({
             <table style={inventoryStyles.table}>
                 <thead>
                     <tr>
+                        <th style={{ ...inventoryStyles.tableHeader, width: 36 }}>
+                            <input
+                                type="checkbox"
+                                ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < filteredInventory.length; }}
+                                checked={filteredInventory.length > 0 && selectedIds.length === filteredInventory.length}
+                                onChange={(e) => onToggleAll(e.target.checked)}
+                            />
+                        </th>
                         <th style={inventoryStyles.tableHeader}>Part Code</th>
                         <th style={inventoryStyles.tableHeader}>Item Name</th>
                         <th style={inventoryStyles.tableHeader}>Category</th>
@@ -44,6 +58,9 @@ export function InventoryTable({
                                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = inventoryColors.bg)}
                                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = inventoryColors.card)}
                             >
+                                <td style={{ ...inventoryStyles.tableCell, textAlign: 'center' }}>
+                                    <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggleOne(item.id)} />
+                                </td>
                                 <td style={inventoryStyles.tableCell}>
                                     <strong style={{ color: inventoryColors.primary }}>{item.part_code || item.item_code}</strong>
                                 </td>
