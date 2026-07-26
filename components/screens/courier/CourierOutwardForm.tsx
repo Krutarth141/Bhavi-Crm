@@ -42,7 +42,7 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
 
   useEffect(() => {
     supabase.from('models').select('model_no').order('model_no').limit(500).then(({ data }) => {
-      setModelOptions((data || []).map((m: any) => m.model_no));
+      setModelOptions(Array.from(new Set((data || []).map((m: any) => m.model_no))));
     });
   }, []);
 
