@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useInquiries } from '@/hooks/useInquiries';
 import Modal from '@/components/Modal';
 import { InquiryFormData, emptyInquiryForm, INQUIRY_TYPES, INQUIRY_STATUSES, AutoInquiry } from '@/types/inquiries';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 const statusColor: Record<string, { bg: string; color: string }> = {
@@ -152,7 +153,13 @@ export default function InquiriesScreen() {
                         <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Follow-up Date</label><input type="date" value={form.followup_date} onChange={e => setForm(f => ({ ...f, followup_date: e.target.value }))} style={fieldStyle} /></div>
                     </div>
                     <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Address</label><input type="text" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} style={fieldStyle} /></div>
-                    <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
+                            <AIWriteButton type="inquiry" onInsert={(text) => setForm(f => ({ ...f, description: text }))} />
+                        </div>
+                        <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
+                    </div>
                     <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Notes</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
                 </div>
             </Modal>

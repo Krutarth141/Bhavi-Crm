@@ -273,3 +273,30 @@ export const rejectReportEdit = async (
         return { success: false, error: (err as any).message };
     }
 };
+
+export const backdateCloseTicket = async (
+    ticket: Ticket,
+    params: { date: string; engineerId: string; engineerName: string; reason: string; workDone?: string },
+    byName: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const now = new Date().toISOString();
+        const existing = ticket.timeline || [];
+        const { error } = await supabase
+            .from('tickets')
+            .update({
+                status: 'Closed',
+                assigned_to: params.engineerId,
+                assigned_name: params.engineerName,
+                work_done: params.workDone || ticket.work_done || '',
+                visit_date: params.date,
+                timeline: [...existing, { action: 'Closed (Back-Date)', by: byName, at: now, note: `Back-date close for ${params.date}. Engineer: ${params.engineerName}. Reason: ${params.reason}` }],
+                updated_at: now,
+            })
+            .eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};

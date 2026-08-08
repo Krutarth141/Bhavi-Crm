@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchFeedbackByTicket, submitFeedback } from '@/services/feedbackService';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 export default function PublicFeedbackPage() {
     const params = useParams();
@@ -63,7 +64,10 @@ export default function PublicFeedbackPage() {
                     ))}
                 </div>
                 <input type="text" placeholder="Your name" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, marginBottom: 10, boxSizing: 'border-box' }} />
-                <textarea placeholder="Any comments? (optional)" rows={3} value={comment} onChange={e => setComment(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, marginBottom: 10, boxSizing: 'border-box', resize: 'none' }} />
+                <textarea placeholder="Any comments? (optional)" rows={3} value={comment} onChange={e => setComment(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, marginBottom: 6, boxSizing: 'border-box', resize: 'none' }} />
+                <div style={{ marginBottom: 10, textAlign: 'right' }}>
+                    <AIWriteButton type="feedback" onInsert={(text) => setComment(text)} label="✨ AI Comment" />
+                </div>
                 <button onClick={handleSubmit} disabled={submitting} style={{ width: '100%', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: 11, fontSize: 15, fontWeight: 700, cursor: submitting ? 'default' : 'pointer', opacity: submitting ? 0.7 : 1 }}>
                     {submitting ? 'Submitting...' : 'Submit Feedback'}
                 </button>

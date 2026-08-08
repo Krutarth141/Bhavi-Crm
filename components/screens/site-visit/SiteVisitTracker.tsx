@@ -9,6 +9,7 @@ import {
     startNewVisit, visitAction, confirmHold, finishVisit,
     deriveVisitState, visitLabel, VisitState,
 } from '@/services/siteVisitTrackerService';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 type ViewState = 'closed' | 'picker' | 'tracker' | 'hold' | 'finish';
 
@@ -255,7 +256,10 @@ export default function SiteVisitTracker() {
                 </div>
             }>
                 <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Work Done 🔧</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Work Done 🔧</label>
+                        <AIWriteButton type="visit" onInsert={(text) => setFinishWork(text)} />
+                    </div>
                     <textarea value={finishWork} onChange={e => setFinishWork(e.target.value)} rows={3} placeholder="Describe the work done..." style={{ width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 10 }}>

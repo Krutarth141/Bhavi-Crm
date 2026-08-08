@@ -19,6 +19,7 @@ import { fetchCompanyInfo } from '@/services/settingsService';
 import ReportEditRequestModal from '@/components/screens/tickets/ReportEditRequestModal';
 import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
 import { isCspManager } from '@/lib/permissions';
+import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -42,6 +43,7 @@ export default function TicketsScreen() {
   const [invoiceModalTicket, setInvoiceModalTicket] = useState<Ticket | null>(null);
   const [voidWarrantyTicket, setVoidWarrantyTicket] = useState<Ticket | null>(null);
   const [reportEditTicket, setReportEditTicket] = useState<Ticket | null>(null);
+  const [backdateTicket, setBackdateTicket] = useState<Ticket | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -479,6 +481,11 @@ export default function TicketsScreen() {
                       🔒 Close Ticket
                     </button>
                   )}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || cspMgr) && (
+                    <button style={{ ...styles.btn, background: '#374151', color: 'white' }} onClick={() => setBackdateTicket(selectedTicket)}>
+                      📅 Back-Date Close
+                    </button>
+                  )}
                   {isInvoiceable(selectedTicket!) && (
                     <button style={{ ...styles.btn, background: '#7c3aed', color: 'white' }} onClick={() => generateInvoice(selectedTicket!)}>
                       🧾 Invoice
@@ -547,6 +554,19 @@ export default function TicketsScreen() {
           wcId={currentUserId || ''}
           onClose={() => setReportEditTicket(null)}
           onSubmitted={fetchTickets}
+        />
+      )}
+      {backdateTicket && (
+        <BackdateCloseModal
+          ticket={backdateTicket}
+          engineers={engineers}
+          byUser={(session?.user as any)?.name || currentUserRole || ''}
+          onClose={() => setBackdateTicket(null)}
+          onDone={async () => {
+            setBackdateTicket(null);
+            setModalOpen(false);
+            await fetchTickets();
+          }}
         />
       )}
     </div>

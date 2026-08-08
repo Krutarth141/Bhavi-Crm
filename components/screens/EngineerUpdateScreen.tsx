@@ -8,6 +8,7 @@ import { EngineerTicket, UpdateForm } from '@/types/engineerUpdate';
 import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketStatus';
 import WarrantyClaimModal from '@/components/screens/tickets/WarrantyClaimModal';
 import EngVoidWarrantyModal from '@/components/screens/tickets/EngVoidWarrantyModal';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -161,7 +162,10 @@ export default function EngineerUpdateScreen() {
                                     </div>
                                 )}
                                 <div>
-                                    <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Update Note</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Update Note</label>
+                                        <AIWriteButton type="update" onInsert={(text) => setForm(f => ({ ...f, note: text }))} />
+                                    </div>
                                     <textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...fieldStyle, resize: 'vertical' }} />
                                 </div>
                             </>
