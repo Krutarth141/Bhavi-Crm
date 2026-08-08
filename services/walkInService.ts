@@ -7,7 +7,7 @@ export const getNextToken = async (date: string): Promise<number> => {
             .from('walkin_log')
             .select('token_no')
             .eq('visit_date', date)
-            .order('token_no', { ascending: false })
+            .order('token_no', { ascending: false, nullsFirst: false })
             .limit(1);
 
         if (error) throw error;
