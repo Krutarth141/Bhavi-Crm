@@ -53,12 +53,14 @@ export const updateTicketStatus = async (
                 note: note || undefined,
             }],
         };
-        notifyStatusChange(ticket, newStatus, note ? `📝 ${note}` : undefined);
         if (labour && newStatus === 'Closed') updateData.labor = Number(labour);
         if (note) updateData.eng_remarks = note;
 
         const { error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id);
         if (error) throw error;
+
+        notifyStatusChange(ticket, newStatus, note ? `📝 ${note}` : undefined);
+
         return { success: true };
     } catch (err) {
         return { success: false, error: (err as any).message };
