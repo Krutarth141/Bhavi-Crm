@@ -31,7 +31,7 @@ export function useMyCalls(engId: string, engName: string) {
                     .from('punch_logs')
                     .select('*')
                     .eq('eng_id', engId)
-                    .eq('punch_in_date', today)   // ← was log_date
+                    .eq('status', 'active')   // catches an unclosed punch from a prior day too
                     .maybeSingle(),
                 supabase
                     .from('work_logs')

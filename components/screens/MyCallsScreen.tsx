@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
+import PunchModal from './PunchModal';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -68,42 +69,41 @@ export default function MyCallsScreen() {
   // Route table "show all" toggle
   const [showAllTickets, setShowAllTickets] = useState(false);
 
-  // ── Punch In ───────────────────────────────────────────────────────────────
-  const handlePunchIn = async () => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const currentTime = new Date().toTimeString().slice(0, 5);
-    const meterStr = window.prompt('Enter start meter reading (optional):');
-    const meter = meterStr ? meterStr.trim() : '';
-    const result = await punchIn({
-      eng_id: engId,
-      eng_name: engName,
-      log_date: today,
-      punch_in_time: currentTime,
-      start_meter: meter ? Number(meter) : undefined,
-    });
-    if (result.success) {
-      refetch();
-    } else {
-      alert('❌ ' + result.error);
-    }
-  };
+  // ── Punch In / Out ───────────────────────────────────────────────────────────
+  const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
 
-  // ── Punch Out ─────────────────────────────────────────────────────────────
-  const handlePunchOut = async () => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const currentTime = new Date().toTimeString().slice(0, 5);
-    const meterStr = window.prompt('Enter end meter reading (optional):');
-    const meter = meterStr ? meterStr.trim() : '';
-    const result = await punchOut({
-      eng_id: engId,
-      log_date: today,
-      punch_out_time: currentTime,
-      end_meter: meter ? Number(meter) : undefined,
-    });
-    if (result.success) {
-      refetch();
+  const handlePunchIn = () => setPunchModalMode('in');
+  const handlePunchOut = () => setPunchModalMode('out');
+
+  const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
+    if (punchModalMode === 'in') {
+      const today = new Date().toLocaleDateString('en-CA');
+      const currentTime = new Date().toTimeString().slice(0, 5);
+      const result = await punchIn({
+        eng_id: engId,
+        eng_name: engName,
+        punch_in_date: today,
+        punch_in_time: currentTime,
+        start_meter: data.meter ? Number(data.meter) : undefined,
+        photo: data.photo,
+        lat: data.lat,
+        lng: data.lng,
+      });
+      if (result.success) refetch();
+      return result;
     } else {
-      alert('❌ ' + result.error);
+      const currentTime = new Date().toTimeString().slice(0, 5);
+      const result = await punchOut({
+        eng_id: engId,
+        punch_out_time: currentTime,
+        end_meter: data.meter ? Number(data.meter) : undefined,
+        photo: data.photo,
+        lat: data.lat,
+        lng: data.lng,
+        lateRemark: data.remark,
+      });
+      if (result.success) refetch();
+      return result;
     }
   };
 
@@ -266,6 +266,10 @@ export default function MyCallsScreen() {
           </div>
         )}
       </div>
+
+      {punchModalMode && (
+        <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
+      )}
 
       {/* 3. KPI Row */}
       <div
