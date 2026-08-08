@@ -4,7 +4,7 @@ import { getToken } from 'next-auth/jwt';
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const publicRoutes = ['/login', '/', '/auth/error', '/service-request', '/walk-in', '/account', '/my-orders', '/feedback'];
+  const publicRoutes = ['/login', '/', '/auth/error', '/service-request', '/walk-in', '/account', '/my-orders', '/feedback', '/shop'];
 
   const token = await getToken({
     req,
