@@ -88,9 +88,12 @@ export default function PublicWalkInScreen() {
                         brand: form.brand || selectedCategory.label,
                         model: form.model.trim(),
                         serial: form.serial.trim(),
-                        problem: form.problem.trim() || selectedPurpose.label,
+                        warranty: '',
+                        subtype: selectedPurpose.id,
+                        remarks: form.problem.trim() || selectedPurpose.label,
                     },
                 ],
+                product_count: 1,
             });
 
             if (!result.success) {

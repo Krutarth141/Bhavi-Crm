@@ -71,3 +71,48 @@ export const deleteWalkIn = async (
         return { success: false, error: String(err) };
     }
 };
+
+export interface WalkInCustomerMatch {
+    name: string;
+    address?: string;
+    area?: string;
+    pin?: string;
+    state?: string;
+    city?: string;
+}
+
+export const fetchWalkInCustomer = async (mobile: string): Promise<WalkInCustomerMatch | null> => {
+    const { data: custs } = await supabase.from('customers').select('*').eq('mobile', mobile).limit(1);
+    if (custs && custs.length) {
+        const c = custs[0];
+        return { name: c.name || c.cname || '', address: c.address || '', area: c.area || '', pin: c.pin || '', state: c.state || '', city: c.city || '' };
+    }
+    const { data: tkts } = await supabase.from('tickets').select('*').eq('mobile', mobile).order('created_at', { ascending: false }).limit(1);
+    if (tkts && tkts.length) {
+        const t = tkts[0];
+        return { name: t.cname || '', address: t.address || '', area: t.area || '', pin: t.pin || '' };
+    }
+    return null;
+};
+
+export interface PincodeMatch {
+    pincode: string;
+    area: string;
+    district: string;
+}
+
+export const searchPincodes = async (query: string, state?: string): Promise<PincodeMatch[]> => {
+    const q = query.trim();
+    if (!q) return [];
+    const isNum = /^\d+$/.test(q);
+    let req = supabase.from('pincodes').select('pincode, area, district').order('pincode').limit(60);
+    if (isNum) {
+        req = req.like('pincode', `${q}%`);
+    } else {
+        req = req.ilike('area', `%${q}%`);
+        if (state) req = req.eq('state', state);
+    }
+    const { data, error } = await req;
+    if (error) return [];
+    return data || [];
+};

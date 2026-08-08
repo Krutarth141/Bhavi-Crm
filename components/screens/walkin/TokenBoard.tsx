@@ -1,11 +1,13 @@
 'use client';
 
-import { WalkInEntry } from '@/types/walkin';
+import { useState, useEffect } from 'react';
+import { getEnglishVoices, getSavedVoiceName, setSavedVoiceName } from '@/utils/tokenVoice';
 
 interface TokenBoardProps {
   nowServing: number;
   queue: { token: number; name: string }[];
   onCallNext: () => void;
+  onCallAgain: () => void;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -16,7 +18,33 @@ const cardStyle: React.CSSProperties = {
   marginBottom: '14px',
 };
 
-export default function TokenBoard({ nowServing, queue, onCallNext }: TokenBoardProps) {
+export default function TokenBoard({ nowServing, queue, onCallNext, onCallAgain }: TokenBoardProps) {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, setVoiceName] = useState('');
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const populate = () => {
+      const list = getEnglishVoices();
+      setVoices(list);
+      const saved = getSavedVoiceName();
+      if (saved) {
+        setVoiceName(saved);
+      } else if (list.length) {
+        setSavedVoiceName(list[0].name);
+        setVoiceName(list[0].name);
+      }
+    };
+    populate();
+    window.speechSynthesis.onvoiceschanged = populate;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+
+  const handleVoiceChange = (name: string) => {
+    setVoiceName(name);
+    setSavedVoiceName(name);
+  };
+
   const maxToken = queue.length > 0 ? Math.max(...queue.map((q) => q.token)) : 0;
   const allServed = queue.length > 0 && nowServing > maxToken;
   const currentEntry = queue.find((q) => q.token === nowServing);
@@ -52,29 +80,41 @@ export default function TokenBoard({ nowServing, queue, onCallNext }: TokenBoard
           )}
         </div>
 
-        {!allServed && (
-          <button
-            onClick={onCallNext}
-            style={{
-              width: '100%',
-              padding: '10px',
-              background: '#1d4ed8',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#1e40af')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = '#1d4ed8')}
-          >
-            ▶ Call Next
-          </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!allServed && (
+            <button
+              onClick={onCallNext}
+              style={{
+                flex: 1, padding: '10px', background: '#1d4ed8', color: '#fff', border: 'none',
+                borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#1e40af')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = '#1d4ed8')}
+            >
+              ▶ Call Next
+            </button>
+          )}
+          {nowServing > 0 && (
+            <button
+              onClick={onCallAgain}
+              style={{
+                flex: allServed ? 1 : undefined, padding: '10px 14px', background: '#eff6ff', color: '#1d4ed8',
+                border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              🔁 Call Again
+            </button>
+          )}
+        </div>
+
+        {voices.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>🔊 Announcement Voice</label>
+            <select value={voiceName} onChange={(e) => handleVoiceChange(e.target.value)} style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', fontSize: 12 }}>
+              {voices.map((v) => <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>)}
+            </select>
+          </div>
         )}
       </div>
 
