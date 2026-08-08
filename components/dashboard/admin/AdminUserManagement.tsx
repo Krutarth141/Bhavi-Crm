@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { AppUser, UserFormData } from '@/types/users';
 import { useUsers } from '@/hooks/useUsers';
+import { changeOwnPassword } from '@/services/userService';
 
 // User management sub-components
 import EngineersTab from './user-management/EngineersTab';
@@ -17,8 +18,9 @@ import ShiftSettingsCard from './user-management/ShiftSettingsCard';
 import MSCCentersTab from './user-management/MSCCentersTab';
 import PortalServicesTab from './user-management/PortalServicesTab';
 import TelegramTab from './user-management/TelegramTab';
+import NavPermissionsTab from './user-management/NavPermissionsTab';
 
-type TabId = 'engineers' | 'wc' | 'admin' | 'logo' | 'company' | 'portal' | 'msc' | 'telegram';
+type TabId = 'engineers' | 'wc' | 'admin' | 'logo' | 'company' | 'portal' | 'msc' | 'telegram' | 'navperms';
 
 const TABS: { id: TabId; label: string }[] = [
     { id: 'engineers', label: '👷 Engineers' },
@@ -29,6 +31,7 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'portal', label: '🌐 Portal Services' },
     { id: 'msc', label: '📊 MSC Centers' },
     { id: 'telegram', label: '📱 Telegram' },
+    { id: 'navperms', label: '🔐 Nav Permissions' },
 ];
 
 export default function AdminUserManagement() {
@@ -84,8 +87,8 @@ export default function AdminUserManagement() {
         catch (e: any) { alert(e.message); }
     };
 
-    const handlePasswordChange = async (password: string) => {
-        await updatePassword(currentUserId, password);
+    const handlePasswordChange = async (currentPassword: string, newPassword: string) => {
+        await changeOwnPassword(currentPassword, newPassword);
     };
 
     const renderTab = () => {
@@ -117,6 +120,8 @@ export default function AdminUserManagement() {
                 return <MSCCentersTab />;
             case 'telegram':
                 return <TelegramTab />;
+            case 'navperms':
+                return <NavPermissionsTab />;
             default:
                 return null;
         }

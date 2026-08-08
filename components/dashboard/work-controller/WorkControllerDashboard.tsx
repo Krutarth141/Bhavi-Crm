@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useNavVisibility } from '@/hooks/useNavVisibility';
 
 // Existing screens
 import TicketsScreen from '@/components/screens/TicketsScreen';
@@ -39,6 +41,11 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
 ];
 
 export default function WorkControllerDashboard() {
+    const { data: session } = useSession();
+    const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
+    const { isVisible } = useNavVisibility(uid);
+    const visibleNavItems = NAV_ITEMS.filter((item) => item.id === 'overview' || isVisible(item.id));
+
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -84,7 +91,7 @@ export default function WorkControllerDashboard() {
                         <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
                     </div>
                     <ul>
-                        {NAV_ITEMS.map(item => (
+                        {visibleNavItems.map(item => (
                             <li key={item.id}>
                                 <button
                                     className={activeTab === item.id ? 'active' : ''}

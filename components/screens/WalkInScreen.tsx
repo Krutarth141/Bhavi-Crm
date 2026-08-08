@@ -187,6 +187,7 @@ export default function WalkInScreen() {
             entries={todayLogs}
             onEdit={handleEditEntry}
             onDelete={handleDelete}
+            onJobCreated={refetch}
           />
         )}
       </div>

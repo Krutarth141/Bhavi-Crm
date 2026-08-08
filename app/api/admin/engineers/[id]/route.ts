@@ -32,7 +32,7 @@ export async function PATCH(
         }
 
         const { error } = await supabaseAdmin
-            .from('users').update(updatePayload).eq('id', id).eq('role_type', 'engineer');
+            .from('users').update(updatePayload).eq('id', id).in('role_type', ['engineer', 'work_controller']);
 
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
         return NextResponse.json({ message: 'Engineer updated' }, { status: 200 });
@@ -54,7 +54,7 @@ export async function DELETE(
         if (!id) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
         const { error } = await supabaseAdmin
-            .from('users').delete().eq('id', id).eq('role_type', 'engineer');
+            .from('users').delete().eq('id', id).in('role_type', ['engineer', 'work_controller']);
 
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
         return NextResponse.json({ message: 'Engineer deleted' }, { status: 200 });

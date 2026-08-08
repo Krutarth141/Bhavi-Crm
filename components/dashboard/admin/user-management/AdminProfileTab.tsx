@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 interface Props {
     currentUserName: string;
-    onChangePassword: (password: string) => Promise<void>;
+    onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const fieldStyle = {
@@ -14,6 +14,7 @@ const fieldStyle = {
 const labelStyle = { display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '14px' };
 
 export default function AdminProfileTab({ currentUserName, onChangePassword }: Props) {
+    const [curPass, setCurPass] = useState('');
     const [newPass, setNewPass] = useState('');
     const [confirm, setConfirm] = useState('');
     const [saving, setSaving] = useState(false);
@@ -21,13 +22,15 @@ export default function AdminProfileTab({ currentUserName, onChangePassword }: P
     const [error, setError] = useState('');
 
     const handleChange = async () => {
+        if (!curPass) { setError('Enter current password'); return; }
         if (!newPass) { setError('Enter new password'); return; }
         if (newPass !== confirm) { setError('Passwords do not match'); return; }
         setSaving(true);
         setError('');
         try {
-            await onChangePassword(newPass);
+            await onChangePassword(curPass, newPass);
             setSuccess('✅ Password changed successfully!');
+            setCurPass('');
             setNewPass('');
             setConfirm('');
             setTimeout(() => setSuccess(''), 3000);
@@ -42,7 +45,6 @@ export default function AdminProfileTab({ currentUserName, onChangePassword }: P
         <div className="card" style={{ maxWidth: 480 }}>
             <h3 style={{ marginTop: 0, marginBottom: 16 }}>👑 Admin Profile</h3>
 
-            {/* Current user info */}
             <div style={{ background: 'var(--bg, #f8fafc)', borderRadius: 8, padding: 14, marginBottom: 20 }}>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>{currentUserName}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Administrator</div>
@@ -54,6 +56,14 @@ export default function AdminProfileTab({ currentUserName, onChangePassword }: P
             {success && <div style={{ background: '#d1fae5', color: '#065f46', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 10 }}>{success}</div>}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                    <label style={labelStyle}>Current Password *</label>
+                    <input
+                        type="password" placeholder="Enter current password"
+                        value={curPass} onChange={e => setCurPass(e.target.value)}
+                        style={fieldStyle}
+                    />
+                </div>
                 <div>
                     <label style={labelStyle}>New Password *</label>
                     <input

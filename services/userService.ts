@@ -68,3 +68,16 @@ export const deleteUser = async (id: number): Promise<void> => {
 export const changePassword = async (id: number, password: string): Promise<void> => {
     await updateUser(id, { password } as any);
 };
+
+export const changeOwnPassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+    const res = await fetch('/api/admin/profile/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to change password');
+    }
+};
