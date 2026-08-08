@@ -285,7 +285,7 @@ export default function TicketsScreen() {
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
         <h2 style={styles.sectionTitle}>{screenTitle}</h2>
-        {(currentUserRole !== 'engineer' || cspMgr) && (
+        {currentUserRole !== 'engineer' && (
           <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
             ➕ New Call
           </button>
