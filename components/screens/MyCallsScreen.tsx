@@ -6,6 +6,7 @@ import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -453,7 +454,10 @@ export default function MyCallsScreen() {
 
         {/* Task Description */}
         <div style={{ ...styles.formGroup, marginBottom: '12px' }}>
-          <label style={styles.formLabel}>Task Description *</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label style={styles.formLabel}>Task Description *</label>
+            <AIWriteButton type="worklog" onInsert={(text) => setWlTask(text)} />
+          </div>
           <input
             type="text"
             placeholder="What did you work on?"

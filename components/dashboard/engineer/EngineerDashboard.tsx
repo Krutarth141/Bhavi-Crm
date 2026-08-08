@@ -14,8 +14,11 @@ import MyCallsScreen from '@/components/screens/MyCallsScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
 import EngineerUpdateScreen from '@/components/screens/EngineerUpdateScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
+import { isCspManager } from '@/lib/permissions';
+import AttendanceScreen from '@/components/screens/AttendanceScreen';
+import ReportsScreen from '@/components/screens/ReportsScreen';
 
-type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'engineer-update';
+type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -24,11 +27,13 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'tickets', label: '🎫 My Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'reports', label: '📈 My Reports' },
+    { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
 ];
 
 export default function EngineerDashboard() {
     const { data: session } = useSession();
+    const cspMgr = isCspManager(session);
     const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
     const { isVisible } = useNavVisibility(uid);
     const visibleNavItems = NAV_ITEMS.filter((item) => item.id === 'overview' || isVisible(item.id));
@@ -48,7 +53,8 @@ export default function EngineerDashboard() {
             case 'tasks': return <TasksScreen />;
             case 'tickets': return <TicketsScreen />;
             case 'eng-parts': return <EngPartsScreen />;
-            case 'reports': return <MyReportScreen />;
+            case 'reports': return cspMgr ? <ReportsScreen /> : <MyReportScreen />;
+            case 'attendance': return <AttendanceScreen />;
             case 'engineer-update': return <EngineerUpdateScreen />;
             default: return null;
         }

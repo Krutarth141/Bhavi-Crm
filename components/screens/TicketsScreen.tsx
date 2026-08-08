@@ -18,14 +18,16 @@ import { buildFeedbackWhatsAppLink } from '@/services/feedbackService';
 import { fetchCompanyInfo } from '@/services/settingsService';
 import ReportEditRequestModal from '@/components/screens/tickets/ReportEditRequestModal';
 import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
+import { isCspManager } from '@/lib/permissions';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
   const currentUserId = (session?.user as any)?.id;
+  const cspMgr = isCspManager(session);
 
   const { tickets, loading, fetchTickets } = useTickets({
-    userRole: currentUserRole,
+    userRole: cspMgr ? undefined : currentUserRole,
     userId: currentUserId,
   });
   const { engineers, loading: engineersLoading, error: engineersError, loadEngineers: refetchEngineers } = useEngineers()
@@ -43,7 +45,7 @@ export default function TicketsScreen() {
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
-    if (currentUserRole === 'admin' || currentUserRole === 'work_controller') {
+    if (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) {
       return true;
     }
     if (currentUserRole === 'engineer') {
@@ -53,7 +55,7 @@ export default function TicketsScreen() {
   };
 
   const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && t.status === 'Closed';
-  const canMarkInvoice = currentUserRole === 'admin' || currentUserRole === 'work_controller';
+  const canMarkInvoice = currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr;
 
   const allowedStatusOptions = useMemo(() => {
     if (modalMode !== 'edit' || !selectedTicket) return statusOptions;
@@ -277,13 +279,13 @@ export default function TicketsScreen() {
     win.document.close();
   };
 
-  const screenTitle = currentUserRole === 'engineer' ? '🎫 My Tickets' : '🎫 All Tickets';
+  const screenTitle = currentUserRole === 'engineer' && !cspMgr ? '🎫 My Tickets' : '🎫 All Tickets';
 
   return (
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
         <h2 style={styles.sectionTitle}>{screenTitle}</h2>
-        {currentUserRole !== 'engineer' && (
+        {(currentUserRole !== 'engineer' || cspMgr) && (
           <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
             ➕ New Call
           </button>
@@ -378,7 +380,7 @@ export default function TicketsScreen() {
                 <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
                   ⏳ <b>Edit Pending Approval</b> — Requested by <b>{selectedTicket.pending_edit.requested_by}</b><br />
                   <span style={{ fontSize: 12, color: '#92400e' }}>Reason: {selectedTicket.pending_edit.reason}</span>
-                  {currentUserRole === 'admin' && (
+                  {(currentUserRole === 'admin' || cspMgr) && (
                     <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
                       <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveReportEdit(selectedTicket)}>✅ Approve</button>
                       <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectReportEdit(selectedTicket)}>❌ Reject</button>

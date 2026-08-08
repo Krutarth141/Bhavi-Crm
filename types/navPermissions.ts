@@ -20,6 +20,7 @@ export const ENGINEER_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'tickets', label: '🎫 My Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'reports', label: '📈 My Reports' },
+    { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
 ];
 

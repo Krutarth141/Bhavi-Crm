@@ -10,6 +10,7 @@ import { computeAttExtras, computeLeaves, fmtAttMin, parsePendingEdit } from '@/
 import AttAddModal from '@/components/screens/attendance/AttAddModal';
 import AttEditModal from '@/components/screens/attendance/AttEditModal';
 import AttEditRequestModal from '@/components/screens/attendance/AttEditRequestModal';
+import { isCspManager } from '@/lib/permissions';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
@@ -18,7 +19,7 @@ export default function AttendanceScreen() {
     const adminName = (session?.user as any)?.name ?? 'Admin';
     const role = (session?.user as any)?.roleType;
     const myId = ((session?.user as any)?.email || ''); // holds user_id
-    const isAdmin = role === 'admin';
+    const isAdmin = role === 'admin' || isCspManager(session);
 
     const [from, setFrom] = useState(todayStr());
     const [to, setTo] = useState(todayStr());
