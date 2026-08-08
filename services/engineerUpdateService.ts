@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { EngineerTicket } from '@/types/engineerUpdate';
+import { notifyStatusChange } from './telegramNotify';
 
 export const fetchEngineerTickets = async (
     engineerName: string,
@@ -52,6 +53,7 @@ export const updateTicketStatus = async (
                 note: note || undefined,
             }],
         };
+        notifyStatusChange(ticket, newStatus, note ? `📝 ${note}` : undefined);
         if (labour && newStatus === 'Closed') updateData.labor = Number(labour);
         if (note) updateData.eng_remarks = note;
 

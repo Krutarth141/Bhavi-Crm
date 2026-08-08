@@ -20,6 +20,7 @@ import ReportEditRequestModal from '@/components/screens/tickets/ReportEditReque
 import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
 import { isCspManager } from '@/lib/permissions';
 import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal';
+import { printLabel } from '@/utils/printLabel';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -283,6 +284,10 @@ export default function TicketsScreen() {
 
   const screenTitle = currentUserRole === 'engineer' && !cspMgr ? '🎫 My Tickets' : '🎫 All Tickets';
 
+  const handlePrintLabel = () => {
+    if (selectedTicket) printLabel(selectedTicket);
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
@@ -371,6 +376,11 @@ export default function TicketsScreen() {
                 {modalMode === 'view' && (
                   <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={handlePrintTicket}>
                     🖨️ Print
+                  </button>
+                )}
+                {modalMode === 'view' && (
+                  <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={handlePrintLabel}>
+                    🏷️ Label
                   </button>
                 )}
                 <button style={styles.closeBtn} onClick={() => setModalOpen(false)}>✕</button>

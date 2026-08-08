@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { WorkLog } from '@/types/myCalls';
+import { notifyPunchIn } from './telegramNotify';
 
 // Punch in for the day. Blocks a second punch-in while one is already active,
 // regardless of date (handles the case of not having punched out yesterday).
@@ -39,6 +40,7 @@ export const punchIn = async (params: {
             }]);
 
         if (error) throw error;
+        notifyPunchIn(eng_name, punch_in_time);
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };

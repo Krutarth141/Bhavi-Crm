@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Ticket } from '@/types/tickets';
+import { notifyNewTicket, notifyStatusChange } from './telegramNotify';
 
 export const fetchAllTickets = async (): Promise<Ticket[]> => {
     try {
@@ -75,6 +76,7 @@ export const createTicket = async (ticketData: Partial<Ticket>): Promise<{ succe
         const { error } = await supabase.from('tickets').insert([dataToInsert]);
 
         if (error) throw error;
+        notifyNewTicket({ ...dataToInsert, id: newId });
         return { success: true, id: newId };
     } catch (err) {
         return { success: false, error: String(err) };
@@ -102,6 +104,13 @@ export const updateTicket = async (ticketId: string, updates: Partial<Ticket>): 
             .eq('id', ticketId);
 
         if (error) throw error;
+
+        if (finalUpdates.status) {
+            supabase.from('tickets').select('id,cname,model').eq('id', ticketId).single().then(({ data }) => {
+                if (data) notifyStatusChange(data, finalUpdates.status!);
+            });
+        }
+
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
@@ -149,6 +158,11 @@ export const closeTicket = async (ticketId: string, finalRemarks?: string): Prom
             .eq('id', ticketId);
 
         if (error) throw error;
+
+        supabase.from('tickets').select('id,cname,model').eq('id', ticketId).single().then(({ data }) => {
+            if (data) notifyStatusChange(data, 'Closed');
+        });
+
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
