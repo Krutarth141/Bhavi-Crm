@@ -68,9 +68,6 @@ export default function MyCallsScreen() {
   const [wlSubmitted, setWlSubmitted] = useState(false);
   const [wlSaving, setWlSaving] = useState(false);
 
-  // Route table "show all" toggle
-  const [showAllTickets, setShowAllTickets] = useState(false);
-
   // ── Punch In / Out ───────────────────────────────────────────────────────────
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
 
@@ -174,9 +171,6 @@ export default function MyCallsScreen() {
     .filter((t) => t.planned_date === todayDateStr)
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
   const closedTickets = myTickets.filter((t) => t.status === 'Closed');
-
-  // ── Route table slice ─────────────────────────────────────────────────────
-  const visibleTickets = showAllTickets ? myTickets : myTickets.slice(0, 10);
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
