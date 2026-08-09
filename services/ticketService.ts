@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Ticket } from '@/types/tickets';
 import { notifyNewTicket, notifyStatusChange } from './telegramNotify';
+import { notifyReportEditSubmitted, notifyReportEditResult } from './brightActionService';
 
 export const fetchAllTickets = async (): Promise<Ticket[]> => {
     try {
@@ -238,6 +239,7 @@ export const submitReportEdit = async (
         const pending_edit = { requested_by: requestedBy, wc_id: wcId, requested_at: new Date().toISOString(), reason, changes };
         const { error } = await supabase.from('tickets').update({ pending_edit, updated_at: new Date().toISOString() }).eq('id', ticket.id);
         if (error) throw error;
+        notifyReportEditSubmitted(String(ticket.id), ticket.cname, ticket.model, '', pending_edit);
         return { success: true };
     } catch (err) {
         return { success: false, error: (err as any).message };
@@ -261,6 +263,7 @@ export const approveReportEdit = async (
         patch.timeline = [...tl, { action: 'Report Edit Approved', by: approvedBy, at: now, note: `Edited by ${pe.requested_by}. Reason: ${pe.reason}. ${summary}` }];
         const { error } = await supabase.from('tickets').update(patch).eq('id', ticket.id);
         if (error) throw error;
+        notifyReportEditResult(String(ticket.id), 'approved', ticket.cname, ticket.model, pe.wc_id, pe);
         return { success: true };
     } catch (err) {
         return { success: false, error: (err as any).message };
@@ -282,6 +285,7 @@ export const rejectReportEdit = async (
         };
         const { error } = await supabase.from('tickets').update(patch).eq('id', ticket.id);
         if (error) throw error;
+        notifyReportEditResult(String(ticket.id), 'rejected', ticket.cname, ticket.model, pe.wc_id, pe, reason);
         return { success: true };
     } catch (err) {
         return { success: false, error: (err as any).message };

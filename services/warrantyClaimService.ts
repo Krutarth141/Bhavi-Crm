@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { notifyWarrantyClaim } from './brightActionService';
 
 // Minimal shared shape — both `Ticket` and `EngineerTicket` satisfy this,
 // so these functions work from both TicketsScreen and EngineerUpdateScreen
@@ -28,6 +29,7 @@ export const submitWarrantyClaim = async (ticket: WarrantyTicketLike, invoice: s
             updated_at: new Date().toISOString(),
         }).eq('id', ticket.id);
         if (error) throw error;
+        notifyWarrantyClaim({ ticketId: ticket.id, customer: ticket.cname || '', model: ticket.model || '', engineer: submittedBy, invoice, note, callType: ticket.call_type || '' });
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };

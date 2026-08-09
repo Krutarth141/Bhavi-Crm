@@ -86,18 +86,20 @@ export const REPAIR_CATS = ['camera', 'printer', 'electronics', 'automation', 'o
 // Table: telegram_settings (id=1, single row)
 
 export interface TelegramSettings {
-    id?: number;
     bot_token: string;
-    chat_id: string;
+    admin_chat: string;
+    owner_chat: string;
+    eng_map: Record<string, string>;
     notify_new_ticket: boolean;
     notify_status_change: boolean;
     notify_punch_in: boolean;
-    updated_at?: string;
 }
 
 export const defaultTelegramSettings: TelegramSettings = {
     bot_token: '',
-    chat_id: '',
+    admin_chat: '',
+    owner_chat: '',
+    eng_map: {},
     notify_new_ticket: true,
     notify_status_change: true,
     notify_punch_in: false,

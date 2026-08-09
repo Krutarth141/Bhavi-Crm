@@ -3,7 +3,7 @@ import {
     EmployeeShift, DEFAULT_SHIFT,
     MSCCenter, MSCCenterForm,
     PortalService, PortalServiceForm,
-    TelegramSettings,
+    TelegramSettings, defaultTelegramSettings
 } from '@/types/settings';
 import { CompanyInfo } from '@/types/companyInfo';
 
@@ -153,35 +153,122 @@ export const deletePortalService = async (id: string): Promise<void> => {
 
 // ─── Telegram Settings ────────────────────────────────────────────────────────
 
-export const fetchTelegramSettings = async (): Promise<TelegramSettings | null> => {
-    const { data, error } = await supabase
-        .from('telegram_settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
-    if (error) return null;
-    return data;
+const tgGet = async (key: string): Promise<string | null> => {
+    const { data, error } = await supabase.from('telegram_settings').select('value').eq('key', key).maybeSingle();
+    if (error || !data) return null;
+    return data.value;
 };
 
-export const saveTelegramSettings = async (settings: TelegramSettings): Promise<void> => {
-    const { error } = await supabase
-        .from('telegram_settings')
-        .upsert([{ id: 1, ...settings, updated_at: new Date().toISOString() }]);
-    if (error) throw error;
+const tgSet = async (key: string, value: string): Promise<void> => {
+    const { data: existing } = await supabase.from('telegram_settings').select('key').eq('key', key);
+    if (existing && existing.length) {
+        const { error } = await supabase.from('telegram_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase.from('telegram_settings').insert([{ key, value, updated_at: new Date().toISOString() }]);
+        if (error) throw error;
+    }
 };
 
-export const sendTelegramTest = async (botToken: string, chatId: string): Promise<void> => {
-    const res = await fetch(
-        `https://api.telegram.org/bot${botToken}/sendMessage`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: chatId,
-                text: '✅ Bhavi CRM — Telegram notification test successful!',
-            }),
-        }
-    );
+export const fetchTelegramSettings = async (): Promise<TelegramSettings> => {
+    try {
+        const { data, error } = await supabase.from('telegram_settings').select('key, value');
+        if (error) throw error;
+        const map: Record<string, string> = {};
+        (data || []).forEach((r: any) => { map[r.key] = r.value; });
+        let engMap: Record<string, string> = {};
+        if (map['tg_eng_map']) { try { engMap = JSON.parse(map['tg_eng_map']); } catch { engMap = {}; } }
+        return {
+            bot_token: map['tg_bot_token'] || '',
+            admin_chat: map['tg_admin_chat'] || '',
+            owner_chat: map['tg_owner_chat'] || '',
+            eng_map: engMap,
+            notify_new_ticket: map['tg_notify_new_ticket'] !== undefined ? map['tg_notify_new_ticket'] === 'true' : true,
+            notify_status_change: map['tg_notify_status_change'] !== undefined ? map['tg_notify_status_change'] === 'true' : true,
+            notify_punch_in: map['tg_notify_punch_in'] === 'true',
+        };
+    } catch (err) { console.error('fetchTelegramSettings:', err); return defaultTelegramSettings; }
+};
+
+export const saveTelegramToken = async (token: string): Promise<void> => tgSet('tg_bot_token', token.trim());
+export const saveTelegramAdminChat = async (chatId: string): Promise<void> => tgSet('tg_admin_chat', chatId.trim());
+export const saveTelegramOwnerChat = async (chatId: string): Promise<void> => tgSet('tg_owner_chat', chatId.trim());
+
+export const saveTelegramEngChat = async (engUserId: string, chatId: string, currentMap: Record<string, string>): Promise<Record<string, string>> => {
+    const next = { ...currentMap };
+    if (chatId.trim()) next[engUserId] = chatId.trim(); else delete next[engUserId];
+    await tgSet('tg_eng_map', JSON.stringify(next));
+    return next;
+};
+
+export const saveTelegramPreferences = async (prefs: { notify_new_ticket: boolean; notify_status_change: boolean; notify_punch_in: boolean }): Promise<void> => {
+    await Promise.all([
+        tgSet('tg_notify_new_ticket', String(prefs.notify_new_ticket)),
+        tgSet('tg_notify_status_change', String(prefs.notify_status_change)),
+        tgSet('tg_notify_punch_in', String(prefs.notify_punch_in)),
+    ]);
+};
+
+export const sendTelegramTest = async (botToken: string, chatId: string, label?: string): Promise<void> => {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: `✅ Test from Bhavi CRM\n\nBot connected! – ${label || 'Test'}` }),
+    });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || 'Telegram error');
+};
+
+export const fetchBotContacts = async (botToken: string): Promise<{ id: string; name: string; username: string }[]> => {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=100&timeout=0`);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.description || 'Telegram error');
+    const seen: Record<string, boolean> = {};
+    const contacts: { id: string; name: string; username: string }[] = [];
+    (json.result || []).forEach((u: any) => {
+        const chat = (u.message?.chat) || (u.callback_query?.message?.chat) || (u.my_chat_member?.chat) || {};
+        if (!chat.id || chat.type !== 'private' || seen[chat.id]) return;
+        seen[chat.id] = true;
+        contacts.push({ id: String(chat.id), name: [chat.first_name, chat.last_name].filter(Boolean).join(' '), username: chat.username || '' });
+    });
+    return contacts;
+};
+
+export const sendDailyTelegramReport = async (): Promise<void> => {
+    const s = await fetchTelegramSettings();
+    if (!s.admin_chat) throw new Error('Admin Chat ID not set');
+    if (!s.bot_token) throw new Error('Bot Token not set');
+    const today = new Date().toLocaleDateString('en-CA');
+    const dateLabel = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const [ticketsRes, inquiriesRes, walkinsRes] = await Promise.all([
+        supabase.from('tickets').select('id, status, assigned_name, cname').gte('created_at', `${today}T00:00:00`),
+        supabase.from('auto_inquiries').select('id, status, assigned_name, inquiry_type').gte('created_at', `${today}T00:00:00`),
+        supabase.from('walkin_log').select('id, products').eq('visit_date', today),
+    ]);
+    const tickets = ticketsRes.data || [];
+    const inquiries = inquiriesRes.data || [];
+    const walkins = walkinsRes.data || [];
+    const engMap: Record<string, { total: number; closed: number }> = {};
+    tickets.forEach((t: any) => {
+        const en = t.assigned_name || 'Unassigned';
+        if (!engMap[en]) engMap[en] = { total: 0, closed: 0 };
+        engMap[en].total++;
+        if (t.status === 'Closed' || t.status === 'Delivered') engMap[en].closed++;
+    });
+    const engLines = Object.entries(engMap).map(([n, v]) => `  👷 ${n}: ${v.total} tickets (${v.closed} closed)`).join('\n');
+    let wiProds = 0;
+    walkins.forEach((w: any) => {
+        let p = w.products || [];
+        if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = []; } }
+        wiProds += p.length;
+    });
+    const inqOpen = inquiries.filter((i: any) => i.status === 'Open' || i.status === 'In Progress').length;
+    const inqWon = inquiries.filter((i: any) => i.status === 'Converted').length;
+    const msg = `📊 <b>Daily Report — ${dateLabel}</b>\n\n`
+        + `🎫 <b>Tickets Today: ${tickets.length}</b>\n${engLines || '  No tickets'}\n\n`
+        + `🔔 <b>Inquiries Today: ${inquiries.length}</b>\n`
+        + `  Open/In Progress: ${inqOpen}\n`
+        + `  Converted (Won): ${inqWon}\n\n`
+        + `🚶 <b>Walk-ins: ${walkins.length} customers | ${wiProds} products</b>`;
+    const res = await fetch(`https://api.telegram.org/bot${s.bot_token}/sendMessage?chat_id=${encodeURIComponent(s.admin_chat)}&text=${encodeURIComponent(msg)}&parse_mode=HTML`);
+    if (!res.ok) throw new Error('Failed to send report');
 };
