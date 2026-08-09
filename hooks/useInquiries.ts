@@ -1,36 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AutoInquiry, InquiryFormData } from '@/types/inquiries';
-import { fetchInquiries, createInquiry, updateInquiryStatus } from '@/services/inquiriesService';
+import { fetchInquiries, createInquiry, updateInquiry, deleteInquiry, updateInquiryProgress } from '@/services/inquiriesService';
 
-export const useInquiries = () => {
+export const useInquiries = (userId: string, isAdmin: boolean) => {
     const [inquiries, setInquiries] = useState<AutoInquiry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const load = async () => {
+    const load = useCallback(async () => {
+        if (!userId) return;
         setLoading(true); setError(null);
-        try { setInquiries(await fetchInquiries()); }
+        try { setInquiries(await fetchInquiries(userId, isAdmin)); }
         catch (err) { setError((err as any).message); }
         finally { setLoading(false); }
-    };
+    }, [userId, isAdmin]);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(); }, [load]);
 
-    const add = async (form: InquiryFormData, createdBy: string, createdByName: string) => {
-        const r = await createInquiry(form, createdBy, createdByName);
+    const add = async (form: InquiryFormData, createdBy: string, createdByName: string, assignedName: string) => {
+        const r = await createInquiry(form, createdBy, createdByName, assignedName);
         if (r.success) await load();
         return r;
     };
 
-    const updateStatus = async (id: number, status: string, notes?: string) => {
-        const r = await updateInquiryStatus(id, status, notes);
+    const edit = async (id: number, form: InquiryFormData, assignedName: string) => {
+        const r = await updateInquiry(id, form, assignedName);
         if (r.success) await load();
         return r;
     };
 
-    const open = inquiries.filter(i => i.status === 'open').length;
-    const followup = inquiries.filter(i => i.status === 'followup').length;
-    const converted = inquiries.filter(i => i.status === 'converted').length;
+    const remove = async (id: number) => {
+        const r = await deleteInquiry(id);
+        if (r.success) await load();
+        return r;
+    };
 
-    return { inquiries, loading, error, open, followup, converted, add, updateStatus, refetch: load };
+    const progress = async (id: number, existingNotes: string, status: string, followupDate: string | null, remark: string, byName: string) => {
+        const r = await updateInquiryProgress(id, existingNotes, status, followupDate, remark, byName);
+        if (r.success) await load();
+        return r;
+    };
+
+    return { inquiries, loading, error, add, edit, remove, progress, refetch: load };
 };
