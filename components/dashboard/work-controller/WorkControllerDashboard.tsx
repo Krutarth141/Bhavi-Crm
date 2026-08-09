@@ -103,15 +103,12 @@ export default function WorkControllerDashboard() {
                                 </button>
                             </li>
                         ))}
+                        <li>
+                            <button onClick={() => { setShowWCReport(true); setSidebarOpen(false); }}>
+                                📋 WC Report
+                            </button>
+                        </li>
                     </ul>
-                    <div style={{ padding: '8px 16px 16px' }}>
-                        <button
-                            onClick={() => { setShowWCReport(true); setSidebarOpen(false); }}
-                            style={{ width: '100%', padding: '10px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-                        >
-                            📋 WC Report
-                        </button>
-                    </div>
                 </nav>
             </div>
 
