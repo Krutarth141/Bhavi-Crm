@@ -23,6 +23,7 @@ import DispatchModal from '@/components/screens/auto-sites/DispatchModal';
 import SiteContactsModal from '@/components/screens/auto-sites/SiteContactsModal';
 import TCSelectorModal from '@/components/screens/auto-sites/TCSelectorModal';
 import AddVisitModal from '@/components/screens/auto-sites/AddVisitModal';
+import DCSignatureModal from '@/components/screens/auto-sites/DCSignatureModal';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: '2px 5px' } as const;
@@ -53,6 +54,7 @@ export default function AutoSitesScreen() {
     const [contactsSite, setContactsSite] = useState<AutoSite | null>(null);
     const [siteContacts, setSiteContacts] = useState<SiteContact[]>([]);
     const [tcSelectorOpen, setTcSelectorOpen] = useState(false);
+    const [dcPrintParams, setDcPrintParams] = useState<Parameters<typeof printDeliveryChallan>[0] | null>(null);
 
     const filtered = sites.filter(s => {
         if (!search.trim()) return true;
@@ -198,7 +200,7 @@ export default function AutoSitesScreen() {
             setSiteItems(items);
             setSiteDispatches(dispatches);
             refetch();
-            printDeliveryChallan({
+            setDcPrintParams({
                 siteName: detailSite.site_name,
                 dcNumber: r.dcNumber || '',
                 dispatchDate: params.date,
@@ -214,7 +216,7 @@ export default function AutoSitesScreen() {
     const handleReprintDC = (d: AutoSiteDispatch) => {
         let its: any[] = [];
         try { its = JSON.parse(d.items || '[]'); } catch { /* ignore */ }
-        printDeliveryChallan({
+        setDcPrintParams({
             siteName: detailSite?.site_name || '',
             dcNumber: d.dc_number || '',
             dispatchDate: d.dispatch_date || '',
@@ -522,6 +524,15 @@ export default function AutoSitesScreen() {
                     pendingSiteItems={pendingItems}
                     onClose={() => setAddVisitModalOpen(false)}
                     onSave={handleSaveVisit}
+                />
+            )}
+            {dcPrintParams && (
+                <DCSignatureModal
+                    onClose={() => setDcPrintParams(null)}
+                    onConfirm={(custSig, mgrSig) => {
+                        printDeliveryChallan({ ...dcPrintParams, customerSignature: custSig, managerSignature: mgrSig });
+                        setDcPrintParams(null);
+                    }}
                 />
             )}
         </div>

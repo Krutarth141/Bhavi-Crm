@@ -23,6 +23,7 @@ import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal'
 import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import SetTATModal from '@/components/screens/tickets/SetTATModal';
+import SignatureModal from '@/components/screens/tickets/SignatureModal';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -49,6 +50,7 @@ export default function TicketsScreen() {
   const [backdateTicket, setBackdateTicket] = useState<Ticket | null>(null);
   const [tatTicket, setTatTicket] = useState<Ticket | null>(null);
   const [tatPreview, setTatPreview] = useState('');
+  const [sigTicket, setSigTicket] = useState<Ticket | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -506,6 +508,21 @@ export default function TicketsScreen() {
                 <h3 style={styles.sectionHeader2}>📝 Remarks</h3>
                 <textarea name="remarks" value={formData.remarks} onChange={handleFormChange} rows={3} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
               </div>
+
+              {modalMode === 'view' && selectedTicket && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>✍️ Signature</h3>
+                  {selectedTicket.customer_signature ? (
+                    <img src={selectedTicket.customer_signature} alt="Signature" style={{ maxHeight: 60, border: '1px solid #e5e7eb', borderRadius: 8 }} />
+                  ) : selectedTicket.status === 'Closed' && currentUserRole === 'engineer' ? (
+                    <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }} onClick={() => setSigTicket(selectedTicket)}>
+                      ✍️ Get Customer Signature
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>No signature captured</span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={styles.modalFooter}>
@@ -623,6 +640,15 @@ export default function TicketsScreen() {
           byUser={(session?.user as any)?.name || currentUserRole || ''}
           onClose={() => setTatTicket(null)}
           onDone={async () => { setTatTicket(null); await fetchTickets(); }}
+        />
+      )}
+      {sigTicket && (
+        <SignatureModal
+          ticketId={sigTicket.id}
+          isCarryIn={sigTicket.service_type === 'Carry In'}
+          byUser={(session?.user as any)?.name || currentUserRole || ''}
+          onClose={() => setSigTicket(null)}
+          onDone={async () => { setSigTicket(null); await fetchTickets(); }}
         />
       )}
     </div>

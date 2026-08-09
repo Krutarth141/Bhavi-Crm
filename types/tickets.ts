@@ -62,6 +62,7 @@ export interface Ticket {
     parts_cost?: number;
     eng_remarks?: string;
     work_done?: string;
+    customer_signature?: string;
     invoice_done?: boolean;
     invoice_no?: string;
     warranty_claim_pending?: boolean;

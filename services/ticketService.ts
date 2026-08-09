@@ -329,3 +329,15 @@ export const saveTAT = async (ticketId: string, tatIso: string | null, canonRece
         return { success: false, error: String(err) };
     }
 };
+
+export const saveSignature = async (ticketId: string, dataUrl: string, byName: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { data: t } = await supabase.from('tickets').select('timeline').eq('id', ticketId).single();
+        const tl = [...(t?.timeline || []), { action: 'Customer Signed', by: byName, at: new Date().toISOString() }];
+        const { error } = await supabase.from('tickets').update({ customer_signature: dataUrl, timeline: tl, updated_at: new Date().toISOString() }).eq('id', ticketId);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};

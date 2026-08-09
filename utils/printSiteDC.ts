@@ -8,6 +8,8 @@ export const printDeliveryChallan = async (params: {
     deliveryDetail?: string;
     engineerName: string;
     items: { item_name: string; qty: number; unit?: string; note?: string; model_no?: string; brand?: string; made_in?: string; category?: string; description?: string }[];
+    customerSignature?: string;
+    managerSignature?: string;
 }): Promise<void> => {
     const win = window.open('', '_blank', 'width=900,height=700');
     if (!win) { alert('Popup blocked — please allow popups in your browser'); return; }
@@ -47,9 +49,13 @@ ${params.deliveryDetail ? `<br><b>Delivery Mode:</b> ${esc(params.deliveryDetail
 <tbody>${rows}</tbody>
 </table>
 <div style="margin-bottom:16px;font-size:12px;"><b>Receiver Name:</b> ${esc(params.receiverName) || '_______________________'}</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:40px;text-align:center;">
-<div><div style="height:60px;border:1px dashed #ccc;border-radius:6px;margin-bottom:8px;"></div><div style="border-top:1.5px solid #000;padding-top:6px;font-size:11px;">Receiver Signature</div></div>
-<div><div style="height:60px;border:1px dashed #ccc;border-radius:6px;margin-bottom:8px;"></div><div style="border-top:1.5px solid #000;padding-top:6px;font-size:11px;">Authorized Signatory<br><span style="font-size:10px;color:#555;">${esc(coName)}</span></div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px;">
+<div style="border-top:2px solid #1d4ed8;padding-top:8px;text-align:center;font-size:11px;color:#555;">
+${params.customerSignature ? `<img src="${params.customerSignature}" style="max-height:50px;margin-bottom:4px;"><br>` : '<br><br>'}
+Customer Signature</div>
+<div style="border-top:2px solid #1d4ed8;padding-top:8px;text-align:center;font-size:11px;color:#555;">
+${params.managerSignature ? `<img src="${params.managerSignature}" style="max-height:50px;margin-bottom:4px;"><br>` : '<br><br>'}
+Site Manager / Engineer</div>
 </div>
 <div style="border-top:2px solid #cc0000;margin-top:16px;padding-top:8px;text-align:center;font-size:10px;color:#555;">${esc(coName)} | This is a computer generated delivery challan.</div>
 <script>window.onload=function(){window.print();};</script>
