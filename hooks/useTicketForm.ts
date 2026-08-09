@@ -34,6 +34,7 @@ export interface TicketFormData {
     fault_code: string;
     action: string;
     remarks: string;
+    tat_date: string;
 }
 
 const initialFormData: TicketFormData = {
@@ -70,6 +71,7 @@ const initialFormData: TicketFormData = {
     fault_code: '',
     action: '',
     remarks: '',
+    tat_date: '',
 };
 
 export const useTicketForm = () => {

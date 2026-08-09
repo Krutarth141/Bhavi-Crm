@@ -314,3 +314,18 @@ export const backdateCloseTicket = async (
         return { success: false, error: String(err) };
     }
 };
+
+export const saveTAT = async (ticketId: string, tatIso: string | null, canonReceivedIso: string | null, byName: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { data: t } = await supabase.from('tickets').select('timeline').eq('id', ticketId).single();
+        const tatDisplay = tatIso ? new Date(tatIso).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+        const recvNote = canonReceivedIso ? ` | Canon received: ${new Date(canonReceivedIso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}` : '';
+        const note = tatIso ? `TAT deadline: ${tatDisplay}${recvNote}` : 'TAT cleared';
+        const tl = [...(t?.timeline || []), { action: 'TAT Updated', by: byName, at: new Date().toISOString(), note }];
+        const { error } = await supabase.from('tickets').update({ tat_date: tatIso, timeline: tl, updated_at: new Date().toISOString() }).eq('id', ticketId);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};

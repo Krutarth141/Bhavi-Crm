@@ -22,6 +22,7 @@ import { isCspManager } from '@/lib/permissions';
 import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal';
 import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
+import SetTATModal from '@/components/screens/tickets/SetTATModal';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -46,6 +47,8 @@ export default function TicketsScreen() {
   const [voidWarrantyTicket, setVoidWarrantyTicket] = useState<Ticket | null>(null);
   const [reportEditTicket, setReportEditTicket] = useState<Ticket | null>(null);
   const [backdateTicket, setBackdateTicket] = useState<Ticket | null>(null);
+  const [tatTicket, setTatTicket] = useState<Ticket | null>(null);
+  const [tatPreview, setTatPreview] = useState('');
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -428,6 +431,24 @@ export default function TicketsScreen() {
                 <div style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
                   <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={modalMode === 'view'} />
+                  {modalMode === 'add' && (
+                    <div style={{ ...styles.formGroup, gridColumn: '1 / -1', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 12 }}>
+                      <label style={{ ...styles.formLabel, color: '#166534' }}>📅 Canon Portal — Call Received Date &amp; Time (optional)</label>
+                      <input
+                        type="datetime-local"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) { handleFormChange({ target: { name: 'tat_date', value: '' } } as any); setTatPreview(''); return; }
+                          const d = new Date(v);
+                          d.setTime(d.getTime() + 24 * 3600000);
+                          handleFormChange({ target: { name: 'tat_date', value: d.toISOString() } } as any);
+                          setTatPreview(`⏱ TAT Deadline: ${d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })} (Canon received + 24h)`);
+                        }}
+                        style={{ border: '1px solid #86efac', borderRadius: 8, padding: '7px 12px', fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                      />
+                      {tatPreview && <div style={{ fontSize: 11, color: '#166534', marginTop: 5, fontWeight: 600 }}>{tatPreview}</div>}
+                    </div>
+                  )}
                   {(currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
                     <div style={{ ...styles.formGroup }}>
                       <label style={styles.formLabel}>
@@ -506,6 +527,11 @@ export default function TicketsScreen() {
                   {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || cspMgr) && (
                     <button style={{ ...styles.btn, background: '#374151', color: 'white' }} onClick={() => setBackdateTicket(selectedTicket)}>
                       📅 Back-Date Close
+                    </button>
+                  )}
+                  {selectedTicket?.wc_type === 'CSP' && !['Closed', 'Customer Reject', 'Call Cancel'].includes(selectedTicket?.status || '') && (
+                    <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={() => setTatTicket(selectedTicket)}>
+                      ⏱ Set TAT
                     </button>
                   )}
                   {isInvoiceable(selectedTicket!) && (
@@ -589,6 +615,14 @@ export default function TicketsScreen() {
             setModalOpen(false);
             await fetchTickets();
           }}
+        />
+      )}
+      {tatTicket && (
+        <SetTATModal
+          ticket={tatTicket}
+          byUser={(session?.user as any)?.name || currentUserRole || ''}
+          onClose={() => setTatTicket(null)}
+          onDone={async () => { setTatTicket(null); await fetchTickets(); }}
         />
       )}
     </div>

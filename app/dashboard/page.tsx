@@ -8,6 +8,7 @@ import EngineerDashboard from '@/components/dashboard/engineer/EngineerDashboard
 import WorkControllerDashboard from '@/components/dashboard/work-controller/WorkControllerDashboard';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import PeonDashboard from '@/components/dashboard/peon/PeonDashboard';
+import TATReminder from '@/components/TATReminder';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -47,6 +48,7 @@ export default function DashboardPage() {
     return (
         <div>
             <DashboardHeader />
+            <TATReminder />
             {renderDashboard()}
         </div>
     );

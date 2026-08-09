@@ -7,6 +7,7 @@ import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCall
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
 import AIWriteButton from '@/components/shared/AIWriteButton';
+import { tatLabel } from '@/utils/tatHelpers';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -168,6 +169,10 @@ export default function MyCallsScreen() {
   // ── Derived KPIs ──────────────────────────────────────────────────────────
   const closedStatuses = ['Closed', 'Cancelled'];
   const activeTickets = myTickets.filter((t) => !closedStatuses.includes(t.status));
+  const todayDateStr = new Date().toLocaleDateString('en-CA');
+  const todayRoute = myTickets
+    .filter((t) => t.planned_date === todayDateStr)
+    .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
   const closedTickets = myTickets.filter((t) => t.status === 'Closed');
 
   // ── Route table slice ─────────────────────────────────────────────────────
@@ -306,45 +311,40 @@ export default function MyCallsScreen() {
       </div>
 
       {/* 4. Today's Route */}
-      {myTickets.length > 0 && (
+      {todayRoute.length > 0 && (
         <div style={{ ...styles.card, marginBottom: '20px' }}>
           <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
             <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🗺️ Today's Route</span>
-            {myTickets.length > 10 && (
-              <button
-                onClick={() => setShowAllTickets((v) => !v)}
-                style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}
-              >
-                {showAllTickets ? 'Show less' : `Show all (${myTickets.length})`}
-              </button>
-            )}
+            <span style={{ fontSize: '12px', color: colors.textMuted }}>{todayRoute.length} calls planned</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={styles.table}>
               <thead>
                 <tr>
-                  {['Ticket ID', 'Customer', 'Mobile', 'Area', 'Status', 'Seq #'].map((h) => (
+                  {['Seq #', 'Ticket ID', 'Customer', 'Mobile', 'Area', 'Status', 'TAT'].map((h) => (
                     <th key={h} style={styles.tableHeader}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {visibleTickets.map((ticket) => (
-                  <tr key={ticket.id} style={styles.tableRow}>
-                    <td style={{ ...styles.tableCell, fontWeight: 600, color: colors.primary }}>
-                      {ticket.ticket_id ?? ticket.id}
-                    </td>
-                    <td style={styles.tableCell}>{ticket.customer_name ?? '—'}</td>
-                    <td style={styles.tableCell}>{ticket.mobile ?? '—'}</td>
-                    <td style={styles.tableCell}>{ticket.area ?? ticket.pin_code ?? '—'}</td>
-                    <td style={styles.tableCell}>
-                      <span style={getStatusBadgeStyle(ticket.status)}>{ticket.status}</span>
-                    </td>
-                    <td style={{ ...styles.tableCell, textAlign: 'center' }}>
-                      {ticket.sequence_no ?? '—'}
-                    </td>
-                  </tr>
-                ))}
+                {todayRoute.map((ticket) => {
+                  const tat = tatLabel(ticket.tat_date);
+                  return (
+                    <tr key={ticket.id} style={styles.tableRow}>
+                      <td style={{ ...styles.tableCell, textAlign: 'center' }}>{ticket.sequence_no ?? '—'}</td>
+                      <td style={{ ...styles.tableCell, fontWeight: 600, color: colors.primary }}>{ticket.id}</td>
+                      <td style={styles.tableCell}>{ticket.cname ?? '—'}</td>
+                      <td style={styles.tableCell}>{ticket.mobile ?? '—'}</td>
+                      <td style={styles.tableCell}>{ticket.area ?? '—'}</td>
+                      <td style={styles.tableCell}>
+                        <span style={getStatusBadgeStyle(ticket.status)}>{ticket.status}</span>
+                      </td>
+                      <td style={{ ...styles.tableCell, fontSize: 11, fontWeight: 700, color: tat.overdue ? '#dc2626' : '#166534' }}>
+                        {tat.text}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
