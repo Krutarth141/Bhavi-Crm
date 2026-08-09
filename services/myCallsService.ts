@@ -175,3 +175,20 @@ export const deleteWorkLog = async (
         return { success: false, error: String(err) };
     }
 };
+
+export const fetchWorkLogsByDate = async (
+    engId: string, date: string
+): Promise<{ success: boolean; data?: WorkLog[]; error?: string }> => {
+    try {
+        const { data, error } = await supabase
+            .from('work_logs')
+            .select('*')
+            .eq('eng_id', engId)
+            .eq('log_date', date)
+            .order('from_time');
+        if (error) throw error;
+        return { success: true, data: data || [] };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};

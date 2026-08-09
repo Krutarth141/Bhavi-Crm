@@ -19,6 +19,7 @@ import PendingListScreen from '@/components/screens/PendingListScreen';
 import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
+import WCDailyReportModal from '@/components/screens/WCDailyReportModal';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
@@ -48,6 +49,7 @@ export default function WorkControllerDashboard() {
 
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showWCReport, setShowWCReport] = useState(false);
 
     const handleNavClick = (id: WorkControllerTab) => {
         setActiveTab(id);
@@ -102,6 +104,14 @@ export default function WorkControllerDashboard() {
                             </li>
                         ))}
                     </ul>
+                    <div style={{ padding: '8px 16px 16px' }}>
+                        <button
+                            onClick={() => { setShowWCReport(true); setSidebarOpen(false); }}
+                            style={{ width: '100%', padding: '10px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                        >
+                            📋 WC Report
+                        </button>
+                    </div>
                 </nav>
             </div>
 
@@ -120,7 +130,14 @@ export default function WorkControllerDashboard() {
                     {renderContent()}
                 </div>
             </div>
-
+            {showWCReport && (
+                <WCDailyReportModal
+                    wcId={(session?.user as any)?.email || ''}
+                    wcName={(session?.user as any)?.name || 'WC'}
+                    onClose={() => setShowWCReport(false)}
+                    onSaved={() => setShowWCReport(false)}
+                />
+            )}
         </div>
     );
 }

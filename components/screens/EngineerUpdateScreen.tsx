@@ -33,14 +33,14 @@ export default function EngineerUpdateScreen() {
     const [selected, setSelected] = useState<EngineerTicket | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [form, setForm] = useState<UpdateForm>({ newStatus: '', note: '', labour: '' });
+    const [form, setForm] = useState<UpdateForm>({ newStatus: '', note: '', labour: '', faultCode: '' });
     const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
     const [voidModalOpen, setVoidModalOpen] = useState(false);
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
         const allowed = getAllowedStatuses(ticket.status, 'engineer', ticket.service_type, ticket.call_type, ticket.warranty_coverage);
-        setForm({ newStatus: allowed[0] || '', note: '', labour: String(ticket.labor || ticket.service_charges || '') });
+        setForm({ newStatus: allowed[0] || '', note: '', labour: String(ticket.labor || ticket.service_charges || ''), faultCode: ticket.fault_code || '' });
         setModalOpen(true);
     };
 
@@ -55,7 +55,7 @@ export default function EngineerUpdateScreen() {
         }
 
         setSaving(true);
-        const r = await update(selected, form.newStatus, note, form.labour, userName);
+        const r = await update(selected, form.newStatus, note, form.labour, userName, form.faultCode);
         if (r.success) { setModalOpen(false); }
         else alert('Error: ' + r.error);
         setSaving(false);
@@ -165,6 +165,10 @@ export default function EngineerUpdateScreen() {
                                         <input type="number" value={form.labour} onChange={e => setForm(f => ({ ...f, labour: e.target.value }))} style={fieldStyle} placeholder="0" />
                                     </div>
                                 )}
+                                <div>
+                                    <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Fault Code</label>
+                                    <input type="text" value={form.faultCode} onChange={e => setForm(f => ({ ...f, faultCode: e.target.value }))} style={fieldStyle} />
+                                </div>
                                 <div>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Update Note</label>

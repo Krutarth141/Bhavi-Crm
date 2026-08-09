@@ -122,6 +122,7 @@ export interface WCDailyReport {
     google_reviews?: GoogleReview[];
     remarks?: string;
     created_at?: string;
+    wc_id?: string;
 }
 
 // ─── Import ───────────────────────────────────────────────────────────────────

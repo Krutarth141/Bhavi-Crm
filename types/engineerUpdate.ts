@@ -21,10 +21,12 @@ export interface EngineerTicket {
     created_at?: string;
     updated_at?: string;
     warranty_claim_pending?: boolean;
+    fault_code?: string;
 }
 
 export interface UpdateForm {
     newStatus: string;
     note: string;
     labour: string;
+    faultCode: string;
 }

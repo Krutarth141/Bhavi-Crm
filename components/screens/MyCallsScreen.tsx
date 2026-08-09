@@ -8,6 +8,8 @@ import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
+import { fetchWorkLogsByDate } from '@/services/myCallsService';
+import WorkLogShareModal from './WorkLogShareModal';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -67,6 +69,17 @@ export default function MyCallsScreen() {
   const [wlLogType, setWlLogType] = useState('work');
   const [wlSubmitted, setWlSubmitted] = useState(false);
   const [wlSaving, setWlSaving] = useState(false);
+  const [shareLogs, setShareLogs] = useState<{ date: string; logs: typeof workLogs } | null>(null);
+  const [searchDate, setSearchDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [searchResults, setSearchResults] = useState<typeof workLogs | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  const handleSearchLogs = async () => {
+    setSearching(true);
+    const r = await fetchWorkLogsByDate(engId, searchDate);
+    setSearchResults(r.data || []);
+    setSearching(false);
+  };
 
   // ── Punch In / Out ───────────────────────────────────────────────────────────
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
@@ -484,9 +497,17 @@ export default function MyCallsScreen() {
       </div>
 
       {/* 7. Today's Work Log List */}
-      <div style={styles.card}>
-        <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '14px' }}>
-          🗒️ Today's Work Log
+      <div style={{ ...styles.card, marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <div style={{ ...styles.sectionTitle, fontSize: '15px' }}>🗒️ Today's Work Log</div>
+          {workLogs.length > 0 && (
+            <button
+              onClick={() => setShareLogs({ date: new Date().toLocaleDateString('en-CA'), logs: workLogs })}
+              style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              📲 Share
+            </button>
+          )}
         </div>
         {workLogs.length === 0 ? (
           <div style={styles.emptyMessage}>No work log entries for today</div>
@@ -549,6 +570,55 @@ export default function MyCallsScreen() {
           </div>
         )}
       </div>
+
+      {/* 8. Search Past Logs */}
+      <div style={styles.card}>
+        <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '14px' }}>
+          🔍 Search Past Logs
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '12px' }}>
+          <div style={{ flex: 1, minWidth: '140px' }}>
+            <label style={{ fontSize: '12px', color: colors.textMuted, display: 'block', marginBottom: '4px' }}>Date</label>
+            <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} style={{ ...styles.formInput, width: '100%' }} />
+          </div>
+          <button onClick={handleSearchLogs} disabled={searching} style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSm, opacity: searching ? 0.6 : 1 }}>
+            {searching ? 'Loading...' : '🔍 Search'}
+          </button>
+        </div>
+        {searchResults !== null && (
+          searchResults.length === 0 ? (
+            <div style={styles.emptyMessage}>No logs found for this date</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.primary, padding: '4px 10px', background: '#eff6ff', borderRadius: '6px' }}>
+                  {new Date(searchDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — {searchResults.length} entries
+                </div>
+                <button
+                  onClick={() => setShareLogs({ date: searchDate, logs: searchResults })}
+                  style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  📲 Share
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {searchResults.map((l) => (
+                  <div key={l.id} style={{ display: 'flex', gap: '10px', padding: '8px 10px', background: colors.bg, borderRadius: '8px' }}>
+                    <div style={{ flexShrink: 0, fontSize: '11px', fontWeight: 700, color: '#4c1d95', background: '#ede9fe', padding: '3px 8px', borderRadius: '99px', whiteSpace: 'nowrap' }}>
+                      {l.from_time}–{l.to_time}
+                    </div>
+                    <div style={{ fontSize: '13px', color: colors.text }}>{l.task_description}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        )}
+      </div>
+
+      {shareLogs && (
+        <WorkLogShareModal date={shareLogs.date} logs={shareLogs.logs} name={engName} onClose={() => setShareLogs(null)} />
+      )}
     </div>
   );
 }

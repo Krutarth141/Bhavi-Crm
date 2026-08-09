@@ -178,3 +178,34 @@ export async function importTickets(
 
     return { success, fail, errors };
 }
+
+export async function saveWCDailyReport(payload: {
+    wc_id: string; wc_name: string; report_date: string;
+    inward: { warranty: number; non_warranty: number; other: number };
+    outward: { warranty: number; non_warranty: number; other: number };
+    reviews: { customer: string; stars: number }[];
+    remarks: string;
+}): Promise<{ success: boolean; error?: string }> {
+    try {
+        const inwardTotal = payload.inward.warranty + payload.inward.non_warranty + payload.inward.other;
+        const outwardTotal = payload.outward.warranty + payload.outward.non_warranty + payload.outward.other;
+        const { error } = await supabase.from('wc_daily_reports').insert([{
+            wc_id: payload.wc_id,
+            wc_name: payload.wc_name,
+            report_date: payload.report_date,
+            customer_inward: inwardTotal,
+            customer_outward: outwardTotal,
+            other_inquiry: 0,
+            total_inquiries: inwardTotal + outwardTotal,
+            inward_breakdown: payload.inward,
+            outward_breakdown: payload.outward,
+            google_reviews: payload.reviews,
+            total_reviews: payload.reviews.length,
+            remarks: payload.remarks,
+        }]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+}

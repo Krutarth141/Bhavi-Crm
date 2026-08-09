@@ -22,9 +22,10 @@ export const useEngineerUpdate = (engineerName: string, statusFilter: 'active' |
         newStatus: string,
         note: string,
         labour: string,
-        updatedBy: string
+        updatedBy: string,
+        faultCode: string
     ) => {
-        const r = await updateTicketStatus(ticket, newStatus, note, labour, updatedBy);
+        const r = await updateTicketStatus(ticket, newStatus, note, labour, updatedBy, faultCode);
         if (r.success) await load();
         return r;
     };
