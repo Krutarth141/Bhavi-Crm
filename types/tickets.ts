@@ -4,8 +4,9 @@ export interface TicketSpare {
     qty?: number;
     price?: number;      // MRP, GST-inclusive
     gst_pct?: number;
+    requested?: boolean;
+    stock_deducted?: boolean;
 }
-
 export interface PendingEdit {
     requested_by: string;
     wc_id: string;
@@ -71,6 +72,8 @@ export interface Ticket {
     warranty_claim_approved?: boolean;
     warranty_claim_approved_by?: string;
     coverage_remark?: string;
+    follow_up_date?: string;
+    follow_up_note?: string;
 }
 
 export const statusBadges: Record<string, string> = {

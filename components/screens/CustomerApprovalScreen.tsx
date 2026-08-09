@@ -12,16 +12,18 @@ export default function CustomerApprovalScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? 'Admin';
 
-    const { tickets, loading, error, approve, reject, refetch } = useCustomerApproval();
+    const { tickets, loading, error, approve, reject, removePart, refetch } = useCustomerApproval();
 
     const [modalOpen, setModalOpen] = useState(false);
     const [selected, setSelected] = useState<ApprovalTicket | null>(null);
     const [processing, setProcessing] = useState(false);
     const [form, setForm] = useState<EstimateForm>(emptyEstimateForm);
+    const [inspCharges, setInspCharges] = useState('300');
 
     const openApproval = (ticket: ApprovalTicket) => {
         setSelected(ticket);
         setForm({ ...emptyEstimateForm, labourAmt: String(ticket.service_charges || ticket.labor || 0) });
+        setInspCharges(String(ticket.service_charges || ticket.labor || 300));
         setModalOpen(true);
     };
 
@@ -45,11 +47,27 @@ export default function CustomerApprovalScreen() {
     const handleReject = async () => {
         if (!selected) return;
         if (!form.remark.trim()) { alert('Remark is required'); return; }
+        const charges = Number(inspCharges);
+        if (isNaN(charges) || charges < 0) { alert('Enter valid Inspection/Visit Charges'); return; }
+        if (!confirm(`Customer Reject — Inspection/Visit Charges will be finalized at ₹${charges}. Continue?`)) return;
         setProcessing(true);
-        const r = await reject(selected, form.remark, userName);
+        const r = await reject(selected, form.remark, charges, userName);
         if (r.success) { setModalOpen(false); }
         else alert('Error: ' + r.error);
         setProcessing(false);
+    };
+
+    const handleRemovePart = async (idx: number) => {
+        if (!selected) return;
+        if (!confirm('Remove this part?')) return;
+        const r = await removePart(selected, idx, userName);
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        if (r.allRemoved) {
+            alert('✅ All parts removed. Call is back to In Progress — Engineer will close it.');
+            setModalOpen(false);
+        } else {
+            setSelected(s => s ? { ...s, spares: r.spares } : s);
+        }
     };
 
     const modalFooter = (
@@ -119,10 +137,13 @@ export default function CustomerApprovalScreen() {
                         {(selected.spares || []).filter((s: any) => s.requested).length > 0 && (
                             <div>
                                 <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Parts Required:</div>
-                                {(selected.spares || []).filter((s: any) => s.requested).map((s: any, i: number) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
-                                        <span>{s.name} × {s.qty}</span>
-                                        <span style={{ fontWeight: 600 }}>₹{((s.qty || 0) * (s.price || 0)).toFixed(0)}</span>
+                                {(selected.spares || []).map((s: any, i: number) => s.requested && (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
+                                        <span>{s.code ? `${s.code} ` : ''}{s.name} × {s.qty}</span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{ fontWeight: 600 }}>₹{((s.qty || 0) * (s.price || 0)).toFixed(0)}</span>
+                                            <button onClick={() => handleRemovePart(i)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 11 }}>✕ Remove</button>
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -157,6 +178,11 @@ export default function CustomerApprovalScreen() {
                                 <span style={{ color: '#065f46' }}>₹{final.toFixed(0)}</span>
                             </div>
                             {saved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{saved.toFixed(0)}</div>}
+                        </div>
+
+                        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12 }}>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', display: 'block', marginBottom: 4 }}>Inspection / Visit Charges ₹ <span style={{ fontWeight: 400 }}>(billed if customer rejects)</span></label>
+                            <input type="number" value={inspCharges} onChange={e => setInspCharges(e.target.value)} style={fieldStyle} />
                         </div>
 
                         <div>

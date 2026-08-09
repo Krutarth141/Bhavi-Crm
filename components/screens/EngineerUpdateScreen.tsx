@@ -10,6 +10,7 @@ import WarrantyClaimModal from '@/components/screens/tickets/WarrantyClaimModal'
 import EngVoidWarrantyModal from '@/components/screens/tickets/EngVoidWarrantyModal';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
+import PartIndentModal from '@/components/screens/tickets/PartIndentModal';
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -36,6 +37,7 @@ export default function EngineerUpdateScreen() {
     const [form, setForm] = useState<UpdateForm>({ newStatus: '', note: '', labour: '', faultCode: '' });
     const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
     const [voidModalOpen, setVoidModalOpen] = useState(false);
+    const [partIndentOpen, setPartIndentOpen] = useState(false);
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
@@ -150,6 +152,21 @@ export default function EngineerUpdateScreen() {
                             <MSCDispatchPanel ticketId={selected.id} readOnly byUser={userName} />
                         )}
 
+                        {(selected.spares && selected.spares.length > 0) && (
+                            <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12 }}>
+                                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>🔩 Requested Parts</div>
+                                {selected.spares.map((s, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
+                                        <span>{s.code} {s.name} × {s.qty}</span>
+                                        <span style={{ fontWeight: 600 }}>₹{((s.qty || 0) * (s.price || 0)).toFixed(0)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {!['Closed', 'Call Cancel', 'Customer Reject', 'Pending Customer Approval'].includes(selected.status || '') && (
+                            <button onClick={() => setPartIndentOpen(true)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, alignSelf: 'flex-start' }}>📦 Request Part</button>
+                        )}
+
                         {allowed.length > 0 ? (
                             <>
                                 <div>
@@ -199,6 +216,15 @@ export default function EngineerUpdateScreen() {
                     byUser={userName}
                     onClose={() => setVoidModalOpen(false)}
                     onDone={async () => { setVoidModalOpen(false); setModalOpen(false); await refetch(); }}
+                />
+            )}
+            {partIndentOpen && selected && (
+                <PartIndentModal
+                    ticket={selected}
+                    byUser={userName}
+                    isEngineerOnSite={selected.service_type === 'On Site'}
+                    onClose={() => setPartIndentOpen(false)}
+                    onDone={async () => { setPartIndentOpen(false); setModalOpen(false); await refetch(); }}
                 />
             )}
         </div>

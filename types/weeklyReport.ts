@@ -1,39 +1,34 @@
-export interface DailyReport {
-    id: string;
-    eng_name: string;
-    report_date: string;
-    calls_done?: number;
-    calls_closed?: number;
-    google_reviews?: number;
-    remarks?: string;
-    created_at?: string;
-}
+import { DailyReport, WCDailyReport } from '@/types/reports';
 
-export interface WCDailyReport {
-    id: string;
-    wc_name: string;
-    report_date: string;
-    calls_registered?: number;
-    calls_allocated?: number;
-    pending_calls?: number;
-    walkin_count?: number;
-    remarks?: string;
-    created_at?: string;
-}
+export type { DailyReport, WCDailyReport };
 
 export interface WeeklyFilter {
     from: string;
     to: string;
 }
 
-export const getWeekRange = () => {
+export const getWeekRange = (): WeeklyFilter => {
     const today = new Date();
+    const day = today.getDay() || 7; // Mon=1..Sun=7
     const mon = new Date(today);
-    mon.setDate(today.getDate() - today.getDay() + 1);
+    mon.setDate(today.getDate() - (day - 1));
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
     return {
         from: mon.toLocaleDateString('en-CA'),
         to: sun.toLocaleDateString('en-CA'),
+    };
+};
+
+export const getLastWeekRange = (): WeeklyFilter => {
+    const { from } = getWeekRange();
+    const thisMonday = new Date(from + 'T00:00:00');
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+    const lastSunday = new Date(thisMonday);
+    lastSunday.setDate(thisMonday.getDate() - 1);
+    return {
+        from: lastMonday.toLocaleDateString('en-CA'),
+        to: lastSunday.toLocaleDateString('en-CA'),
     };
 };

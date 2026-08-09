@@ -43,6 +43,8 @@ import ReportEditScreen from '@/components/screens/ReportEditScreen';
 import AIAgentScreen from '@/components/screens/AIAgentScreen';
 import AIAnalysisScreen from '@/components/screens/AIAnalysisScreen';
 import PeonActivityScreen from '@/components/screens/PeonActivityScreen';
+import FollowupScreen from '@/components/screens/FollowupScreen';
+import PartsReorderScreen from '@/components/screens/PartsReorderScreen';
 
 import '@/styles/dashboard.css';
 
@@ -54,7 +56,8 @@ type AdminTab =
     | 'feedback' | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
-    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity';
+    | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
+    | 'followup' | 'reorder';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -95,6 +98,8 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'customer-approval', label: '✅ Customer Approval' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
     { id: 'part-request', label: '🧰 Part Request' },
+    { id: 'followup', label: '📞 Follow-up Tracker' },
+    { id: 'reorder', label: '📦 Parts Reorder Alert' },
 ];
 
 export default function AdminDashboard() {
@@ -146,6 +151,8 @@ export default function AdminDashboard() {
             case 'customer-approval': return <CustomerApprovalScreen />;
             case 'engineer-update': return <EngineerUpdateScreen />;
             case 'part-request': return <PartRequestScreen />;
+            case 'followup': return <FollowupScreen />;
+            case 'reorder': return <PartsReorderScreen />;
             default: return null;
         }
     };

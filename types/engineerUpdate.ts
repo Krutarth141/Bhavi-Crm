@@ -1,3 +1,5 @@
+import { TicketSpare } from '@/types/tickets';
+
 // Exact tickets table columns used in engineer update
 export interface EngineerTicket {
     id: string;
@@ -22,6 +24,9 @@ export interface EngineerTicket {
     updated_at?: string;
     warranty_claim_pending?: boolean;
     fault_code?: string;
+    spares?: TicketSpare[];
+    rerepair?: boolean;
+    rerepair_foc?: boolean;
 }
 
 export interface UpdateForm {

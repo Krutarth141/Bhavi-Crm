@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ApprovalTicket } from '@/types/customerApproval';
-import { fetchPendingApprovals, approveTicket, rejectTicket } from '@/services/customerApprovalService';
+import { fetchPendingApprovals, approveTicket, rejectTicket, removeApprovalPart } from '@/services/customerApprovalService';
 
 export const useCustomerApproval = () => {
     const [tickets, setTickets] = useState<ApprovalTicket[]>([]);
@@ -28,11 +28,17 @@ export const useCustomerApproval = () => {
         return r;
     };
 
-    const reject = async (ticket: ApprovalTicket, remark: string, rejectedBy: string) => {
-        const r = await rejectTicket(ticket, remark, rejectedBy);
+    const reject = async (ticket: ApprovalTicket, remark: string, inspectionCharges: number, rejectedBy: string) => {
+        const r = await rejectTicket(ticket, remark, inspectionCharges, rejectedBy);
         if (r.success) await load();
         return r;
     };
 
-    return { tickets, loading, error, approve, reject, refetch: load };
+    const removePart = async (ticket: ApprovalTicket, idx: number, byUser: string) => {
+        const r = await removeApprovalPart(ticket, idx, byUser);
+        if (r.success) await load();
+        return r;
+    };
+
+    return { tickets, loading, error, approve, reject, removePart, refetch: load };
 };
