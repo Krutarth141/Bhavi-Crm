@@ -21,6 +21,7 @@ import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
 import { isCspManager } from '@/lib/permissions';
 import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal';
 import { printLabel } from '@/utils/printLabel';
+import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -468,6 +469,17 @@ export default function TicketsScreen() {
                   )}
                 </div>
               </div>
+              {selectedTicket?.status === 'Sent to MSC' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>📦 MSC Dispatch</h3>
+                  <MSCDispatchPanel
+                    ticketId={selectedTicket.id}
+                    readOnly={false}
+                    byUser={(session?.user as any)?.name || currentUserRole || ''}
+                    onUpdated={async () => { setModalOpen(false); await fetchTickets(); }}
+                  />
+                </div>
+              )}
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>📝 Remarks</h3>

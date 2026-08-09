@@ -44,19 +44,21 @@ export const useInventory = () => {
     const fetchStockMovements = async () => {
         try {
             const { data, error } = await supabase
-                .from('inventory_movements')
+                .from('inventory_log')
                 .select('*')
                 .order('created_at', { ascending: false })
                 .limit(50);
 
-            if (error?.code === 'PGRST205') {
-                console.debug('Stock movements table not available');
-                setStockMovements([]);
-                return;
-            }
-
             if (error) throw error;
-            setStockMovements(data || []);
+            setStockMovements((data || []).map((r: any) => ({
+                id: r.id,
+                inventory_id: r.inventory_id,
+                movement_type: r.type,
+                quantity: r.qty,
+                note: r.note,
+                created_at: r.created_at,
+                created_by: r.done_by,
+            })));
         } catch (err) {
             console.warn('Stock movements not available:', err);
             setStockMovements([]);
@@ -120,7 +122,7 @@ export const useInventory = () => {
         }
     };
 
-    const saveStockTransaction = async (selectedItem: InventoryItem, transactionData: TransactionData, transactionType: 'in' | 'out' | 'sell') => {
+    const saveStockTransaction = async (selectedItem: InventoryItem, transactionData: TransactionData, transactionType: 'in' | 'out' | 'sell', by: string) => {
         try {
             let newQty = selectedItem.qty_in_stock;
 
@@ -139,16 +141,13 @@ export const useInventory = () => {
 
             // Log transaction
             try {
-                await supabase.from('inventory_movements').insert({
+                const noteParts = [transactionData.note, transactionData.supplier ? `Supplier: ${transactionData.supplier}` : '', transactionData.invoice ? `Invoice: ${transactionData.invoice}` : '', transactionData.customer ? `Customer: ${transactionData.customer}` : ''].filter(Boolean);
+                await supabase.from('inventory_log').insert({
                     inventory_id: selectedItem.id,
-                    movement_type: transactionType,
-                    quantity: transactionData.quantity,
-                    note: transactionData.note || null,
-                    supplier: transactionData.supplier || null,
-                    invoice: transactionData.invoice || null,
-                    customer: transactionData.customer || null,
-                    sell_price: transactionData.sell_price || null,
-                    created_at: new Date().toISOString(),
+                    type: transactionType === 'sell' ? 'out' : transactionType,
+                    qty: transactionData.quantity,
+                    note: noteParts.join(' | ') || null,
+                    done_by: by,
                 });
             } catch (e) {
                 console.warn('Could not log transaction:', e);

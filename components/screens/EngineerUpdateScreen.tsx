@@ -9,6 +9,7 @@ import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketSt
 import WarrantyClaimModal from '@/components/screens/tickets/WarrantyClaimModal';
 import EngVoidWarrantyModal from '@/components/screens/tickets/EngVoidWarrantyModal';
 import AIWriteButton from '@/components/shared/AIWriteButton';
+import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -144,6 +145,9 @@ export default function EngineerUpdateScreen() {
                         )}
                         {selected.warranty_coverage !== 'Out of Coverage' && (
                             <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>
+                        )}
+                        {selected.status === 'Sent to MSC' && (
+                            <MSCDispatchPanel ticketId={selected.id} readOnly byUser={userName} />
                         )}
 
                         {allowed.length > 0 ? (

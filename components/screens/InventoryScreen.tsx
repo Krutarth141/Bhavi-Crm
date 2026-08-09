@@ -177,7 +177,7 @@ export default function InventoryScreen() {
 
         setSubmitting(true);
         try {
-            const result = await saveStockTransaction(selectedItem, transactionData, transactionType);
+            const result = await saveStockTransaction(selectedItem, transactionData, transactionType, userName);
             if (result.success) {
                 alert('✅ Stock updated successfully');
                 closeStockModal();

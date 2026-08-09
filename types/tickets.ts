@@ -53,6 +53,9 @@ export interface Ticket {
     priority?: string;
     fault_code?: string;
     action?: string;
+    sequence_no?: number;
+    planned_date?: string;
+    tat_date?: string;
     timeline?: any[];
     spares?: TicketSpare[];
     other_charge?: number;

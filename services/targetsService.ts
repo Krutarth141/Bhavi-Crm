@@ -34,13 +34,13 @@ export const deleteTarget = async (id: number): Promise<{ success: boolean; erro
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
-// Fetch actual call counts + revenue from service_tickets for comparison
+// Fetch actual call counts + revenue from tickets for comparison
 export const fetchActualPerformance = async (month: string): Promise<Record<string, { calls: number; revenue: number }>> => {
     try {
         const from = month + '-01';
         const to = month + '-31';
         const { data } = await supabase
-            .from('service_tickets')
+            .from('tickets')
             .select('assigned_name, status, service_charges, final_charges, call_type')
             .gte('created_at', from)
             .lte('created_at', to);

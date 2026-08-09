@@ -1,160 +1,186 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState } from 'react';
+import { useEngineers } from '@/hooks/useEngineers';
+import { Ticket } from '@/types/tickets';
+import { fetchEngineerActiveTickets, saveRoutePlan } from '@/services/routePlanningService';
 
-interface EngLocation {
-    id: string;
-    eng_id?: string;
-    eng_name?: string;
-    lat?: number;
-    lng?: number;
-    address?: string;
-    pincode?: string;
-    timestamp?: string;
-    created_at?: string;
-}
+const todayStr = () => new Date().toLocaleDateString('en-CA');
 
-interface Ticket {
-    id: string;
-    cname?: string;
-    mobile?: string;
-    address?: string;
-    pin?: string;
-    assigned_name?: string;
-    status?: string;
-}
+const badgeStyle = (bg: string, color: string): React.CSSProperties => ({ background: bg, color, padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700, display: 'inline-block' });
+
+const priorityBadge = (p?: string) => {
+    if (p === 'Urgent') return <span style={badgeStyle('#fef2f2', '#dc2626')}>🔴 Urgent</span>;
+    if (p === 'High') return <span style={badgeStyle('#fef9c3', '#d97706')}>🟡 High</span>;
+    return <span style={badgeStyle('#f1f5f9', '#64748b')}>⚪ Normal</span>;
+};
+
+const moveBtnStyle: React.CSSProperties = { background: '#f1f5f9', border: '1px solid #e5e7eb', borderRadius: 4, width: 26, height: 26, cursor: 'pointer', fontSize: 12, marginRight: 4 };
 
 export default function RoutePlanningScreen() {
-    const [locations, setLocations] = useState<EngLocation[]>([]);
+    const { engineers } = useEngineers();
+    const [engId, setEngId] = useState('');
+    const [date, setDate] = useState(todayStr());
     const [tickets, setTickets] = useState<Ticket[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [engFilter, setEngFilter] = useState('');
-    const [engineers, setEngineers] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [loaded, setLoaded] = useState(false);
 
-    const load = useCallback(async () => {
+    const handleLoad = async () => {
+        if (!engId) { alert('Please select an engineer'); return; }
+        if (!date) { alert('Please select a date'); return; }
         setLoading(true);
-        try {
-            const [locRes, tixRes] = await Promise.all([
-                supabase.from('engineer_locations').select('*').order('timestamp', { ascending: false }).limit(100),
-                supabase.from('service_tickets').select('id, cname, mobile, address, pin, assigned_name, status').in('status', ['Pending Allocation', 'In Progress', 'Pending Parts', 'Pending Repair']).order('created_at', { ascending: false }),
-            ]);
-            const locs = locRes.data || [];
-            const tix = tixRes.data || [];
-            setLocations(locs);
-            setTickets(tix);
-            setEngineers([...new Set([
-                ...locs.map((l: any) => l.eng_name).filter(Boolean),
-                ...tix.map((t: any) => t.assigned_name).filter(Boolean),
-            ])].sort());
-        } catch (err) { console.error('RoutePlanning load error:', err); }
-        finally { setLoading(false); }
-    }, []);
+        const data = await fetchEngineerActiveTickets(engId);
+        const forDate = data.filter((t) => t.planned_date === date).sort((a, b) => (a.sequence_no || 999) - (b.sequence_no || 999));
+        const other = data.filter((t) => t.planned_date !== date);
+        setTickets([...forDate, ...other]);
+        setLoaded(true);
+        setLoading(false);
+    };
 
-    useEffect(() => { load(); }, [load]);
+    const move = (id: string, dir: number) => {
+        setTickets((prev) => {
+            const arr = [...prev];
+            const idx = arr.findIndex((t) => t.id === id);
+            if (idx === -1) return prev;
+            const ni = idx + dir;
+            if (ni < 0 || ni >= arr.length) return prev;
+            [arr[idx], arr[ni]] = [arr[ni], arr[idx]];
+            return arr;
+        });
+    };
 
-    const filteredLocations = engFilter ? locations.filter(l => l.eng_name === engFilter) : locations;
-    const filteredTickets = engFilter ? tickets.filter(t => t.assigned_name === engFilter) : tickets;
+    const reorder = (id: string, newSeqStr: string) => {
+        setTickets((prev) => {
+            const arr = [...prev];
+            const idx = arr.findIndex((t) => t.id === id);
+            if (idx === -1) return prev;
+            const ns = parseInt(newSeqStr, 10) - 1;
+            if (isNaN(ns) || ns < 0 || ns >= arr.length) return prev;
+            const [item] = arr.splice(idx, 1);
+            arr.splice(ns, 0, item);
+            return arr;
+        });
+    };
 
-    // Group latest location per engineer
-    const latestLocations: Record<string, EngLocation> = {};
-    locations.forEach(l => {
-        if (l.eng_name && !latestLocations[l.eng_name]) latestLocations[l.eng_name] = l;
-    });
+    const handleSave = async () => {
+        if (!tickets.length || !date) { alert('Please select an engineer and date to load calls first'); return; }
+        setSaving(true);
+        const r = await saveRoutePlan(tickets, date);
+        setSaving(false);
+        if (r.success) alert('✅ Route saved!\nEngineer will see calls in this sequence.');
+        else alert('Error: ' + r.error);
+    };
 
-    // Group pending tickets per engineer
-    const ticketsByEng: Record<string, Ticket[]> = {};
-    tickets.forEach(t => {
-        const k = t.assigned_name || 'Unassigned';
-        if (!ticketsByEng[k]) ticketsByEng[k] = [];
-        ticketsByEng[k].push(t);
-    });
+    const dateLabel = date ? new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
     return (
         <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🗺️ Route Planning</h1>
-                <button onClick={load} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: 'white' }}>🔄 Refresh</button>
-            </div>
-
-            {/* Filter */}
-            <div style={{ marginBottom: 16 }}>
-                <select value={engFilter} onChange={e => setEngFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }}>
-                    <option value="">All Engineers</option>
-                    {engineers.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
-            </div>
-
-            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p> : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    {/* Engineer Last Locations */}
-                    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 14 }}>
-                            📍 Engineer Last Locations ({Object.keys(latestLocations).length})
-                        </div>
-                        {Object.keys(latestLocations).length === 0 ? (
-                            <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>No location data available</p>
-                        ) : (
-                            <div>
-                                {Object.entries(latestLocations)
-                                    .filter(([name]) => !engFilter || name === engFilter)
-                                    .map(([name, loc]) => (
-                                        <div key={name} style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
-                                            <div style={{ fontWeight: 600, marginBottom: 4 }}>{name}</div>
-                                            {loc.address && <div style={{ fontSize: 12, color: '#374151', marginBottom: 2 }}>📍 {loc.address}</div>}
-                                            {loc.pincode && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>PIN: {loc.pincode}</div>}
-                                            {loc.lat && loc.lng && (
-                                                <a href={`https://maps.google.com/?q=${loc.lat},${loc.lng}`} target="_blank" rel="noreferrer"
-                                                    style={{ fontSize: 11, color: '#185FA5', textDecoration: 'none' }}>
-                                                    🗺️ View on Map
-                                                </a>
-                                            )}
-                                            {loc.timestamp && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Last seen: {new Date(loc.timestamp).toLocaleString('en-IN')}</div>}
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginBottom: 14 }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🗺️ Route Planning</h1>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, marginBottom: 10 }}>Set the call sequence for the engineer</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Engineer</label>
+                        <select value={engId} onChange={(e) => setEngId(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, width: '100%' }}>
+                            <option value="">-- Select Engineer --</option>
+                            {engineers.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+                        </select>
                     </div>
-
-                    {/* Pending Tickets by Engineer */}
-                    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', fontWeight: 600, fontSize: 14 }}>
-                            🎫 Pending Tickets by Engineer ({tickets.length})
-                        </div>
-                        {Object.keys(ticketsByEng).length === 0 ? (
-                            <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>No pending tickets</p>
-                        ) : (
-                            <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-                                {Object.entries(ticketsByEng)
-                                    .filter(([name]) => !engFilter || name === engFilter)
-                                    .sort((a, b) => b[1].length - a[1].length)
-                                    .map(([name, tix]) => (
-                                        <div key={name} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                            <div style={{ padding: '10px 16px', background: '#f9fafb', fontWeight: 600, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-                                                <span>{name}</span>
-                                                <span style={{ background: '#dbeafe', color: '#1e40af', padding: '1px 8px', borderRadius: 10, fontSize: 11 }}>{tix.length} pending</span>
-                                            </div>
-                                            {tix.map(t => (
-                                                <div key={t.id} style={{ padding: '8px 16px', borderBottom: '1px solid #f9f9f9' }}>
-                                                    <div style={{ fontSize: 13, fontWeight: 500 }}>{t.cname || '—'}</div>
-                                                    {t.address && <div style={{ fontSize: 11, color: '#6b7280' }}>📍 {t.address} {t.pin ? `(${t.pin})` : ''}</div>}
-                                                    <div style={{ fontSize: 11, color: '#374151', marginTop: 2 }}>
-                                                        <span style={{ padding: '1px 6px', borderRadius: 8, background: '#fef3c7', color: '#92400e', fontSize: 10 }}>{t.status}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
+                    <div style={{ minWidth: 160 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Date</label>
+                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, width: '100%', boxSizing: 'border-box' }} />
                     </div>
+                    <button onClick={handleLoad} disabled={loading} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+                        {loading ? 'Loading...' : '📥 Load Calls'}
+                    </button>
                 </div>
-            )}
-
-            {/* Note about maps */}
-            <div style={{ marginTop: 16, padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, color: '#1e40af' }}>
-                💡 For live map tracking, engineers must have location tracking enabled on their device. Location data updates automatically during field visits.
             </div>
+
+            {loaded && (
+                tickets.length === 0 ? (
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 30, color: '#6b7280' }}>No active calls for this engineer</div>
+                ) : (
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
+                            <div>
+                                <div style={{ fontWeight: 700, fontSize: 15 }}>Active Calls ({tickets.length})</div>
+                                <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>▲▼ to set order → Save → Engineer will see calls in this sequence</div>
+                            </div>
+                            <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+                                {saving ? 'Saving...' : `💾 Save Route — ${dateLabel}`}
+                            </button>
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                <thead>
+                                    <tr style={{ background: '#f8fafc' }}>
+                                        <th style={{ width: 55, textAlign: 'center', padding: 8 }}># Seq</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Ticket / Customer</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Area</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Model</th>
+                                        <th style={{ padding: 8 }}>Priority</th>
+                                        <th style={{ padding: 8 }}>TAT</th>
+                                        <th style={{ padding: 8 }}>Status</th>
+                                        <th style={{ width: 70, padding: 8 }}>Move</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {tickets.map((t, i) => {
+                                        let tatHtml: React.ReactNode = '—';
+                                        if (t.tat_date) {
+                                            const hrs = Math.round((new Date(t.tat_date).getTime() - Date.now()) / 3600000);
+                                            tatHtml = hrs < 0
+                                                ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>⚠️ Overdue</span>
+                                                : hrs < 4
+                                                    ? <span style={{ color: '#ca8a04', fontWeight: 700, fontSize: 11 }}>⏰ {hrs}h</span>
+                                                    : <span style={{ color: '#15803d', fontSize: 11 }}>✅ {hrs}h</span>;
+                                        }
+                                        const isPlanned = t.planned_date === date;
+                                        const isPendingParts = t.status === 'Pending Parts' || t.status === 'Pending Engineer Stock';
+                                        const isPartsArrived = t.status === 'Pending Repair On Site';
+                                        const rowBg = isPendingParts ? '#f3f4f6' : isPartsArrived ? '#dcfce7' : isPlanned ? '#eff6ff' : undefined;
+                                        return (
+                                            <tr key={t.id} style={{ background: rowBg, borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ textAlign: 'center', padding: 8 }}>
+                                                    <input
+                                                        key={`${t.id}-seq-${i}`}
+                                                        type="number"
+                                                        defaultValue={i + 1}
+                                                        min={1}
+                                                        max={tickets.length}
+                                                        onBlur={(e) => reorder(t.id, e.target.value)}
+                                                        style={{ width: 46, border: '1px solid #cbd5e1', borderRadius: 6, padding: 4, fontSize: 13, textAlign: 'center' }}
+                                                    />
+                                                </td>
+                                                <td style={{ padding: 8 }}>
+                                                    <b style={{ fontSize: 13 }}>{t.id}</b>
+                                                    {isPlanned && <span style={{ ...badgeStyle('#dbeafe', '#1d4ed8'), marginLeft: 4 }}>PLANNED</span>}
+                                                    <br /><span style={{ fontSize: 12 }}>{t.cname || '-'}</span>
+                                                    <br /><span style={{ fontSize: 11, color: '#6b7280' }}>📞 {t.mobile || '-'}</span>
+                                                </td>
+                                                <td style={{ padding: 8, fontSize: 12 }}>{t.area || t.city || <span style={{ color: '#9ca3af' }}>—</span>}</td>
+                                                <td style={{ padding: 8, fontSize: 12 }}>{t.model || '-'}</td>
+                                                <td style={{ padding: 8, textAlign: 'center' }}>{priorityBadge(t.priority)}</td>
+                                                <td style={{ padding: 8, textAlign: 'center' }}>{tatHtml}</td>
+                                                <td style={{ padding: 8, textAlign: 'center' }}>
+                                                    <span style={{ fontSize: 11 }}>{t.status}</span>
+                                                    {isPendingParts && <span style={{ ...badgeStyle('#fee2e2', '#b91c1c'), marginLeft: 4, fontSize: 9 }} title="Parts not ready — do not schedule">⛔ HOLD</span>}
+                                                    {isPartsArrived && <span style={{ ...badgeStyle('#bbf7d0', '#15803d'), marginLeft: 4, fontSize: 9 }}>✅ READY</span>}
+                                                </td>
+                                                <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
+                                                    <button onClick={() => move(t.id, -1)} title="Up" style={moveBtnStyle}>▲</button>
+                                                    <button onClick={() => move(t.id, 1)} title="Down" style={moveBtnStyle}>▼</button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )
+            )}
         </div>
     );
 }
