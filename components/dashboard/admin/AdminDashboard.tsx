@@ -45,6 +45,7 @@ import AIAnalysisScreen from '@/components/screens/AIAnalysisScreen';
 import PeonActivityScreen from '@/components/screens/PeonActivityScreen';
 import FollowupScreen from '@/components/screens/FollowupScreen';
 import PartsReorderScreen from '@/components/screens/PartsReorderScreen';
+import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
 
 import '@/styles/dashboard.css';
 
@@ -57,7 +58,7 @@ type AdminTab =
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
-    | 'followup' | 'reorder';
+    | 'followup' | 'reorder' | 'km-report';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -100,6 +101,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'part-request', label: '🧰 Part Request' },
     { id: 'followup', label: '📞 Follow-up Tracker' },
     { id: 'reorder', label: '📦 Parts Reorder Alert' },
+    { id: 'km-report', label: '🛣️ KM Tracking' },
 ];
 
 export default function AdminDashboard() {
@@ -153,6 +155,7 @@ export default function AdminDashboard() {
             case 'part-request': return <PartRequestScreen />;
             case 'followup': return <FollowupScreen />;
             case 'reorder': return <PartsReorderScreen />;
+            case 'km-report': return <KmTrackingScreen />;
             default: return null;
         }
     };

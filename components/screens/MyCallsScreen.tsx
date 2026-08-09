@@ -6,6 +6,8 @@ import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
+import KmCaptureModal from './tickets/KmCaptureModal';
+import { hasKmEntryToday } from '@/services/kmTrackingService';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
 import { fetchWorkLogsByDate } from '@/services/myCallsService';
@@ -83,9 +85,18 @@ export default function MyCallsScreen() {
 
   // ── Punch In / Out ───────────────────────────────────────────────────────────
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
+  const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
 
-  const handlePunchIn = () => setPunchModalMode('in');
-  const handlePunchOut = () => setPunchModalMode('out');
+  const handlePunchIn = async () => {
+    const hasOpening = await hasKmEntryToday(engId, 'opening');
+    if (!hasOpening) { setKmCaptureType('opening'); return; }
+    setPunchModalMode('in');
+  };
+  const handlePunchOut = async () => {
+    const hasClosing = await hasKmEntryToday(engId, 'closing');
+    if (!hasClosing) { setKmCaptureType('closing'); return; }
+    setPunchModalMode('out');
+  };
 
   const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
     if (punchModalMode === 'in') {
@@ -280,6 +291,15 @@ export default function MyCallsScreen() {
         )}
       </div>
 
+      {kmCaptureType && (
+        <KmCaptureModal
+          type={kmCaptureType}
+          engId={engId}
+          engName={engName}
+          onClose={() => setKmCaptureType(null)}
+          onDone={() => { const mode = kmCaptureType === 'opening' ? 'in' : 'out'; setKmCaptureType(null); setPunchModalMode(mode); }}
+        />
+      )}
       {punchModalMode && (
         <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
       )}

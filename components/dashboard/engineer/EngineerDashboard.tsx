@@ -23,9 +23,10 @@ import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
 import InventoryScreen from '@/components/screens/InventoryScreen';
 import AMCScreen from '@/components/screens/AMCScreen';
 import WorkLogScreen from '@/components/screens/WorkLogScreen';
+import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
 
 type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
-    | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report';
+    | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -36,6 +37,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'reports', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
+    { id: 'km-report', label: '🛣️ KM Tracking' },
 ];
 
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras.
@@ -74,6 +76,7 @@ export default function EngineerDashboard() {
             case 'reports': return cspMgr ? <ReportsScreen /> : <MyReportScreen />;
             case 'attendance': return <AttendanceScreen />;
             case 'engineer-update': return <EngineerUpdateScreen />;
+            case 'km-report': return <KmTrackingScreen />;
             case 'pending': return cspMgr ? <PendingListScreen /> : null;
             case 'route-planning': return cspMgr ? <RoutePlanningScreen /> : null;
             case 'customers': return cspMgr ? <CustomersScreen /> : null;
