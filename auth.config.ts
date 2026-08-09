@@ -41,6 +41,28 @@ export const authOptions: NextAuthOptions = {
         if (!passwordMatch) {
           return null;
         }
+        if (user.role !== 'admin' || user.role_type === 'work_controller') {
+          try {
+            const today = new Date().toLocaleDateString('en-CA');
+            const { data: leave } = await supabaseAdmin
+              .from('leave_requests')
+              .select('from_date, to_date')
+              .eq('eng_id', user.user_id)
+              .eq('status', 'approved')
+              .lte('from_date', today)
+              .gte('to_date', today)
+              .limit(1);
+            if (leave && leave.length) {
+              throw new Error(
+                `You are on approved leave today (${leave[0].from_date} → ${leave[0].to_date}). Login is blocked for this day.`
+              );
+            }
+          } catch (leaveErr) {
+            if (leaveErr instanceof Error && leaveErr.message.startsWith('You are on approved leave')) {
+              throw leaveErr;
+            }
+          }
+        }
 
         return {
           id: user.id,

@@ -46,6 +46,9 @@ import PeonActivityScreen from '@/components/screens/PeonActivityScreen';
 import FollowupScreen from '@/components/screens/FollowupScreen';
 import PartsReorderScreen from '@/components/screens/PartsReorderScreen';
 import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
+import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
+import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
+import SwSurveyScreen from '@/components/screens/SwSurveyScreen';
 
 import '@/styles/dashboard.css';
 
@@ -58,7 +61,7 @@ type AdminTab =
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
-    | 'followup' | 'reorder' | 'km-report';
+    | 'followup' | 'reorder' | 'km-report' | 'field-tasks' | 'site-visits' | 'sw-survey';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -102,6 +105,9 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'followup', label: '📞 Follow-up Tracker' },
     { id: 'reorder', label: '📦 Parts Reorder Alert' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
+    { id: 'field-tasks', label: '🚚 Other Work' },
+    { id: 'site-visits', label: '🏗️ Site Visits' },
+    { id: 'sw-survey', label: '🔌 SW Survey' },
 ];
 
 export default function AdminDashboard() {
@@ -156,6 +162,9 @@ export default function AdminDashboard() {
             case 'followup': return <FollowupScreen />;
             case 'reorder': return <PartsReorderScreen />;
             case 'km-report': return <KmTrackingScreen />;
+            case 'field-tasks': return <FieldTasksScreen />;
+            case 'site-visits': return <SiteVisitsScreen />;
+            case 'sw-survey': return <SwSurveyScreen />;
             default: return null;
         }
     };

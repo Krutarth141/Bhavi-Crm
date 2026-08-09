@@ -11,6 +11,20 @@ import EngVoidWarrantyModal from '@/components/screens/tickets/EngVoidWarrantyMo
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import PartIndentModal from '@/components/screens/tickets/PartIndentModal';
+import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
+import { hasKmEntryToday } from '@/services/kmTrackingService';
+import { startVisit, stopVisit } from '@/services/visitStartService';
+
+const VISIT_BLOCKED_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'];
+
+const isVisiting = (t: EngineerTicket): boolean => {
+    const tl = t.timeline || [];
+    for (let i = tl.length - 1; i >= 0; i--) {
+        if (tl[i]?.action === 'Visit Start') return true;
+        if (tl[i]?.action === 'Visit Stop') return false;
+    }
+    return false;
+};
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -27,6 +41,8 @@ const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e
 export default function EngineerUpdateScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? '';
+    const engId = (session?.user as any)?.email ?? '';
+    const roleType = (session?.user as any)?.roleType ?? '';
 
     const [statusFilter, setStatusFilter] = useState<'active' | 'closed' | 'all'>('active');
     const { tickets, loading, error, active, closed, update, refetch } = useEngineerUpdate(userName, statusFilter);
@@ -38,6 +54,36 @@ export default function EngineerUpdateScreen() {
     const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
     const [voidModalOpen, setVoidModalOpen] = useState(false);
     const [partIndentOpen, setPartIndentOpen] = useState(false);
+    const [visitBusy, setVisitBusy] = useState<string | null>(null);
+    const [kmGateTicket, setKmGateTicket] = useState<EngineerTicket | null>(null);
+
+    const handleVisitStart = async (t: EngineerTicket) => {
+        if (roleType === 'engineer' && t.service_type !== 'Carry In') {
+            const hasOpening = await hasKmEntryToday(engId, 'opening');
+            if (!hasOpening) { setKmGateTicket(t); return; }
+        }
+        setVisitBusy(t.id);
+        const r = await startVisit(t, engId, userName, roleType);
+        setVisitBusy(null);
+        if (!r.success) alert('Error: ' + r.error); else await refetch();
+    };
+
+    const handleVisitStop = async (t: EngineerTicket) => {
+        setVisitBusy(t.id);
+        const r = await stopVisit(t, engId, userName);
+        setVisitBusy(null);
+        if (!r.success) alert('Error: ' + r.error); else await refetch();
+    };
+
+    const handleKmGateDone = async () => {
+        if (!kmGateTicket) return;
+        const t = kmGateTicket;
+        setKmGateTicket(null);
+        setVisitBusy(t.id);
+        const r = await startVisit(t, engId, userName, roleType);
+        setVisitBusy(null);
+        if (!r.success) alert('Error: ' + r.error); else await refetch();
+    };
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
@@ -116,11 +162,24 @@ export default function EngineerUpdateScreen() {
                                                 {t.address && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>📍 {t.address} {t.pin ? `(${t.pin})` : ''}</div>}
                                                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{t.call_type} | {t.service_type} | JS: {t.job_sheet || '—'}</div>
                                             </div>
-                                            {canUpdate && (
-                                                <button onClick={() => openUpdate(t)} style={{ marginLeft: 12, padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-                                                    ✏️ Update
-                                                </button>
-                                            )}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}>
+                                                {canUpdate && (
+                                                    <button onClick={() => openUpdate(t)} style={{ padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                                                        ✏️ Update
+                                                    </button>
+                                                )}
+                                                {!VISIT_BLOCKED_STATUSES.includes(t.status || '') && (
+                                                    isVisiting(t) ? (
+                                                        <button onClick={() => handleVisitStop(t)} disabled={visitBusy === t.id} style={{ padding: '6px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: visitBusy === t.id ? 0.6 : 1 }}>
+                                                            🛑 Visit Stop
+                                                        </button>
+                                                    ) : (
+                                                        <button onClick={() => handleVisitStart(t)} disabled={visitBusy === t.id} style={{ padding: '6px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: visitBusy === t.id ? 0.6 : 1 }}>
+                                                            🚗 Visit Start
+                                                        </button>
+                                                    )
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -225,6 +284,16 @@ export default function EngineerUpdateScreen() {
                     isEngineerOnSite={selected.service_type === 'On Site'}
                     onClose={() => setPartIndentOpen(false)}
                     onDone={async () => { setPartIndentOpen(false); setModalOpen(false); await refetch(); }}
+                />
+            )}
+            {kmGateTicket && (
+                <KmCaptureModal
+                    type="opening"
+                    engId={engId}
+                    engName={userName}
+                    ticketId={null}
+                    onClose={() => setKmGateTicket(null)}
+                    onDone={handleKmGateDone}
                 />
             )}
         </div>

@@ -21,11 +21,13 @@ import AttendanceScreen from '@/components/screens/AttendanceScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import WCDailyReportModal from '@/components/screens/WCDailyReportModal';
 import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
+import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
+import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
-    | 'reports' | 'inquiries' | 'attendance' | 'km-report';
+    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'field-tasks' | 'site-visits';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -41,6 +43,8 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'inquiries', label: '🔎 Inquiries' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
+    { id: 'field-tasks', label: '🚚 Other Work' },
+    { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
 
 export default function WorkControllerDashboard() {
@@ -73,6 +77,8 @@ export default function WorkControllerDashboard() {
             case 'inquiries': return <InquiriesScreen />;
             case 'attendance': return <AttendanceScreen />;
             case 'km-report': return <KmTrackingScreen />;
+            case 'field-tasks': return <FieldTasksScreen />;
+            case 'site-visits': return <SiteVisitsScreen />;
             default: return null;
         }
     };

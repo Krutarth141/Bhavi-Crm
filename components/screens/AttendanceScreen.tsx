@@ -10,6 +10,7 @@ import { computeAttExtras, computeLeaves, fmtAttMin, parsePendingEdit } from '@/
 import AttAddModal from '@/components/screens/attendance/AttAddModal';
 import AttEditModal from '@/components/screens/attendance/AttEditModal';
 import AttEditRequestModal from '@/components/screens/attendance/AttEditRequestModal';
+import LeaveSection from '@/components/screens/attendance/LeaveSection';
 import { isCspManager } from '@/lib/permissions';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
@@ -166,6 +167,8 @@ export default function AttendanceScreen() {
                     </div>
                 ))}
             </div>
+
+            <LeaveSection myId={myId} myName={adminName} myRole={role} canApprove={isAdmin} isAdminPure={role === 'admin'} reviewerName={adminName} />
 
             {/* Table */}
             <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
