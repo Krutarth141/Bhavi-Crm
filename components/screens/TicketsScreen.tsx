@@ -74,7 +74,7 @@ export default function TicketsScreen() {
 
   // Handle engineer assignment - update both ID and name
   const handleEngineerChange = (engineerId: string) => {
-    const selectedEngineer = engineers.find((e) => e.id === engineerId);
+    const selectedEngineer = engineers.find((e) => e.user_id === engineerId);
     // Update assigned_to
     handleFormChange({
       target: {
@@ -96,7 +96,7 @@ export default function TicketsScreen() {
     let data = { ...formData };
 
     if (data.assigned_to && !data.assigned_name) {
-      const engineer = engineers.find((e) => e.id === data.assigned_to);
+      const engineer = engineers.find((e) => e.user_id === data.assigned_to);
       if (engineer) {
         data.assigned_name = engineer.name;
       }
@@ -485,7 +485,7 @@ export default function TicketsScreen() {
                         onChange={(e: any) => handleEngineerChange(e.target.value)}
                         options={engineers}
                         optionLabelKey="name"
-                        optionValueKey="id"
+                        optionValueKey="user_id"
                         disabled={modalMode === 'view' || engineersLoading || engineersError !== null}
                       />
                     </div>

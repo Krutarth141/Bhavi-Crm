@@ -5,7 +5,7 @@ import Modal from '@/components/Modal';
 import { Ticket } from '@/types/tickets';
 import { backdateCloseTicket } from '@/services/ticketService';
 
-interface EngineerOption { id: string; name: string; }
+interface EngineerOption { id: string; user_id: string; name: string; }
 
 interface Props {
     ticket: Ticket;
@@ -28,7 +28,7 @@ export default function BackdateCloseModal({ ticket, engineers, byUser, onClose,
         if (!date) { alert('Please select a close date'); return; }
         if (!engineerId) { alert('Please select the engineer'); return; }
         if (!reason.trim()) { alert('⚠️ Reason is required!'); return; }
-        const eng = engineers.find((e) => e.id === engineerId);
+        const eng = engineers.find((e) => e.user_id === engineerId);
         setSaving(true);
         const r = await backdateCloseTicket(ticket, { date, engineerId, engineerName: eng?.name || '', reason: reason.trim(), workDone: workDone.trim() }, byUser);
         setSaving(false);
@@ -60,7 +60,7 @@ export default function BackdateCloseModal({ ticket, engineers, byUser, onClose,
                 <label style={{ fontSize: 12, fontWeight: 600 }}>Engineer <span style={{ color: '#dc2626' }}>*</span></label>
                 <select value={engineerId} onChange={(e) => setEngineerId(e.target.value)} style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 13, boxSizing: 'border-box' }}>
                     <option value="">-- Select Engineer --</option>
-                    {engineers.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+                    {engineers.map((e) => (<option key={e.id} value={e.user_id}>{e.name}</option>))}
                 </select>
             </div>
             <div style={{ marginBottom: 10 }}>

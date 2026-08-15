@@ -273,6 +273,7 @@ interface TicketRow {
 
 interface Engineer {
   id: string;
+  user_id: string;
   name: string;
 }
 
@@ -372,14 +373,14 @@ function TicketTable({ tickets, engineers, onEngineerChange, onStatusChange }: T
                   <select
                     value={t.assigned_to || ''}
                     onChange={(e) => {
-                      const eng = engineers.find((en) => en.id === e.target.value);
-                      if (eng) onEngineerChange(t.id, eng.id, eng.name);
+                      const eng = engineers.find((en) => en.user_id === e.target.value);
+                      if (eng) onEngineerChange(t.id, eng.user_id, eng.name);
                     }}
                     style={inlineSelectStyle}
                   >
                     <option value="">— Unassigned —</option>
                     {engineers.map((eng) => (
-                      <option key={eng.id} value={eng.id}>
+                      <option key={eng.id} value={eng.user_id}>
                         {eng.name}
                       </option>
                     ))}

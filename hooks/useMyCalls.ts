@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { WorkLog, PunchLog } from '@/types/myCalls';
 
-const MY_CALLS_CLOSED_STATUSES = ['Closed', 'Call Cancel', 'Customer Reject', 'Cancelled'];
-
 export function useMyCalls(engId: string, engName: string) {
     const [punchLog, setPunchLog] = useState<PunchLog | null>(null);
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
@@ -43,11 +41,6 @@ export function useMyCalls(engId: string, engName: string) {
                     .from('tickets')
                     .select('*')
                     .eq('assigned_to', engId)
-                    .not(
-                        'status',
-                        'in',
-                        `(${MY_CALLS_CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`
-                    )
                     .order('sequence_no', { ascending: true, nullsFirst: false }),
                 supabase
                     .from('tasks')

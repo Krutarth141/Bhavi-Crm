@@ -24,6 +24,7 @@ interface PendingTicket {
 
 interface Engineer {
     id: string;
+    user_id: string;
     name: string;
 }
 
@@ -73,7 +74,7 @@ export function usePendingList() {
         try {
             const { data, error: engError } = await supabase
                 .from('users')
-                .select('id,name')
+                .select('id,user_id,name')
                 .eq('role', 'engineer')
                 .eq('is_active', true)
                 .order('name');

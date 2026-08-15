@@ -12,6 +12,9 @@ import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
 import { fetchWorkLogsByDate } from '@/services/myCallsService';
 import WorkLogShareModal from './WorkLogShareModal';
+import Modal from '@/components/Modal';
+import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
+import { updateTicketStatus } from '@/services/engineerUpdateService';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -75,6 +78,32 @@ export default function MyCallsScreen() {
   const [searchDate, setSearchDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [searchResults, setSearchResults] = useState<typeof workLogs | null>(null);
   const [searching, setSearching] = useState(false);
+
+  // Ticket list — mirrors HTML's My Calls ticket cards + Update modal
+  const [ticketSearch, setTicketSearch] = useState('');
+  const [expandedAddr, setExpandedAddr] = useState<string | null>(null);
+  const [updateTicket, setUpdateTicket] = useState<any | null>(null);
+  const [updateForm, setUpdateForm] = useState({ newStatus: '', note: '', labour: '', faultCode: '' });
+  const [updateSaving, setUpdateSaving] = useState(false);
+
+  const openTicketUpdate = (t: any) => {
+    setUpdateTicket(t);
+    const allowed = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage);
+    setUpdateForm({ newStatus: allowed[0] || '', note: '', labour: String(t.labor || t.service_charges || ''), faultCode: t.fault_code || '' });
+  };
+
+  const allowedForUpdate = updateTicket
+    ? getAllowedStatuses(updateTicket.status, 'engineer', updateTicket.service_type, updateTicket.call_type, updateTicket.warranty_coverage)
+    : [];
+
+  const handleTicketUpdateSave = async () => {
+    if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
+    setUpdateSaving(true);
+    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, engName, updateForm.faultCode);
+    setUpdateSaving(false);
+    if (r.success) { setUpdateTicket(null); refetch(); }
+    else alert('Error: ' + r.error);
+  };
 
   const handleSearchLogs = async () => {
     setSearching(true);
@@ -188,13 +217,22 @@ export default function MyCallsScreen() {
   };
 
   // ── Derived KPIs ──────────────────────────────────────────────────────────
-  const closedStatuses = ['Closed', 'Cancelled'];
-  const activeTickets = myTickets.filter((t) => !closedStatuses.includes(t.status));
+  const activeTickets = myTickets.filter((t) => isTicketActive(t.status));
+  const closedTickets = myTickets.filter((t) => !isTicketActive(t.status));
   const todayDateStr = new Date().toLocaleDateString('en-CA');
   const todayRoute = myTickets
-    .filter((t) => t.planned_date === todayDateStr)
+    .filter((t) => t.planned_date === todayDateStr && isTicketActive(t.status))
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
-  const closedTickets = myTickets.filter((t) => t.status === 'Closed');
+
+  const ticketSearchQ = ticketSearch.trim().toLowerCase();
+  const visibleTickets = activeTickets.filter((t) => {
+    if (!ticketSearchQ) return true;
+    return (t.id || '').toLowerCase().includes(ticketSearchQ)
+      || (t.cname || '').toLowerCase().includes(ticketSearchQ)
+      || (t.mobile || '').includes(ticketSearchQ)
+      || (t.model || '').toLowerCase().includes(ticketSearchQ)
+      || (t.serial || '').toLowerCase().includes(ticketSearchQ);
+  }).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
@@ -413,6 +451,95 @@ export default function MyCallsScreen() {
           </div>
         </div>
       )}
+
+      {/* 5b. My Tickets — searchable list with Update action */}
+      <div style={{ ...styles.card, marginBottom: '20px' }}>
+        <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
+          <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🎫 My Calls ({visibleTickets.length})</span>
+        </div>
+        <input
+          type="text"
+          placeholder="🔍 Search ticket, customer, mobile, model, serial..."
+          value={ticketSearch}
+          onChange={(e) => setTicketSearch(e.target.value)}
+          style={{ ...styles.formInput, marginBottom: '12px' }}
+        />
+        {visibleTickets.length === 0 ? (
+          <div style={styles.emptyMessage}>No calls</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {visibleTickets.map((t) => {
+              const tat = tatLabel(t.tat_date);
+              const addr = [t.address, t.area, t.city, t.state, t.pin].filter(Boolean).join(', ');
+              return (
+                <div key={t.id} style={{ border: `1.5px solid ${colors.border}`, borderRadius: '12px', padding: '14px 16px', background: '#f0f7ff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '14px', color: colors.primary }}>
+                        {t.id}{' '}
+                        {t.priority && <span style={getPriorityBadgeStyle(t.priority)}>{t.priority}</span>}
+                        {t.se_call_id && (
+                          <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e', marginLeft: '4px' }}>
+                            SE: {t.se_call_id}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px' }}>{t.cname || '—'}</div>
+                      {t.problem && (
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', marginTop: '2px' }}>🔧 {t.problem}</div>
+                      )}
+                    </div>
+                    <span style={getStatusBadgeStyle(t.status)}>{t.status}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '12px', color: colors.textMuted, marginBottom: '10px' }}>
+                    <div>📱 <b style={{ color: colors.text }}>{t.model || '—'}</b></div>
+                    <div>🔢 <b style={{ color: colors.text }}>{t.serial || '—'}</b></div>
+                    <div>
+                      📞 <a href={`tel:${t.mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.mobile || '—'}</a>
+                      {t.mobile && (
+                        <a href={`https://wa.me/91${(t.mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
+                      )}
+                    </div>
+                    <div style={{ fontWeight: 700, color: tat.overdue ? '#dc2626' : '#166534' }}>⏱ TAT: {tat.text}</div>
+                    {t.alt_mobile && (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        📞 Alt: <a href={`tel:${t.alt_mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.alt_mobile}</a>
+                        <a href={`https://wa.me/91${(t.alt_mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
+                      </div>
+                    )}
+                  </div>
+                  {addr && (
+                    <div
+                      onClick={() => setExpandedAddr(expandedAddr === t.id ? null : t.id)}
+                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}
+                    >
+                      📍 Address <span style={{ fontSize: '9px' }}>▼</span>
+                    </div>
+                  )}
+                  {addr && expandedAddr === t.id && (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', fontSize: '12px', color: '#166534' }}>
+                      <div>{addr}</div>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([t.address, t.area, t.city, t.state].filter(Boolean).join(', '))}`}
+                        target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-block', marginTop: '4px', color: colors.primary, fontWeight: 600, fontSize: '11px' }}
+                      >
+                        🗺️ Open in Maps
+                      </a>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => openTicketUpdate(t)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: colors.primary, color: '#fff' }}
+                  >
+                    ✏️ Update
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* 6. Work Log Entry Form */}
       <div style={{ ...styles.card, marginBottom: '20px' }}>
@@ -638,6 +765,61 @@ export default function MyCallsScreen() {
 
       {shareLogs && (
         <WorkLogShareModal date={shareLogs.date} logs={shareLogs.logs} name={engName} onClose={() => setShareLogs(null)} />
+      )}
+
+      {updateTicket && (
+        <Modal
+          isOpen
+          onClose={() => setUpdateTicket(null)}
+          title={`Update — ${updateTicket.cname || ''}`}
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setUpdateTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button
+                onClick={handleTicketUpdateSave}
+                disabled={updateSaving || !updateForm.newStatus}
+                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: (updateSaving || !updateForm.newStatus) ? 0.6 : 1 }}
+              >
+                {updateSaving ? 'Saving...' : '💾 Save Update'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {allowedForUpdate.length > 0 ? (
+              <>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>New Status *</label>
+                  <select value={updateForm.newStatus} onChange={(e) => setUpdateForm((f) => ({ ...f, newStatus: e.target.value }))} style={styles.formInput}>
+                    <option value="">Select status...</option>
+                    {allowedForUpdate.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {updateForm.newStatus === 'Closed' && (
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Service / Labour ₹</label>
+                    <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                  </div>
+                )}
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Fault Code</label>
+                  <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div style={styles.formGroup}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={styles.formLabel}>Update Note</label>
+                    <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, note: text }))} />
+                  </div>
+                  <textarea value={updateForm.note} onChange={(e) => setUpdateForm((f) => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...styles.formInput, resize: 'vertical' }} />
+                </div>
+              </>
+            ) : (
+              <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, fontSize: 13, color: '#92400e' }}>
+                ⏳ No status update available for: <strong>{updateTicket.status}</strong>
+              </div>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

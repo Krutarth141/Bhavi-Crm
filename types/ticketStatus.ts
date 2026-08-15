@@ -59,28 +59,39 @@ export function getAllowedStatuses(
     if (isEng) {
         switch (current) {
             case 'Assigned':
+                // Call Cancel is always available to the engineer directly — e.g.
+                // customer not available at site, or charges not approved — no admin
+                // approval needed, just a mandatory reason. Customer Reject: customer
+                // had agreed earlier but backs out later — engineer sets it directly
+                // with amount + remark, no admin approval hop needed.
                 return isCarryIn
-                    ? ['In Progress', 'Repaired', 'Sent to MSC', 'Call Cancel']
-                    : ['In Progress', 'Closed', 'Resolved By Phone', 'Call Cancel'];
+                    ? ['In Progress', 'Repaired', 'Sent to MSC', 'Customer Reject', 'Call Cancel']
+                    : ['In Progress', 'Closed', 'Resolved By Phone', 'Customer Reject', 'Call Cancel'];
 
             case 'In Progress':
-                if (isRepeat) return isCarryIn ? ['Closed', 'Call Cancel'] : ['Closed', 'Resolved By Phone', 'Call Cancel'];
+                if (isRepeat) return isCarryIn ? ['Closed', 'Customer Reject', 'Call Cancel'] : ['Closed', 'Resolved By Phone', 'Customer Reject', 'Call Cancel'];
                 return isCarryIn
-                    ? ['Repaired', 'Sent to MSC', 'Call Cancel']
-                    : ['Closed', 'Resolved By Phone', 'Call Cancel'];
+                    ? ['Repaired', 'Sent to MSC', 'Customer Reject', 'Call Cancel']
+                    : ['Closed', 'Resolved By Phone', 'Customer Reject', 'Call Cancel'];
 
             case 'Pending Parts':
             case 'Pending Engineer Stock':
-                return [];
+                // Waiting for parts/issue — engineer cannot change status manually,
+                // except Customer Reject (customer can still back out while parts are pending).
+                return ['Customer Reject'];
 
             case 'Pending Repair Carry In':
-                return ['Repaired', 'Sent to MSC', 'Call Cancel'];
+                return ['Repaired', 'Sent to MSC', 'Customer Reject', 'Call Cancel'];
             case 'Pending Repair On Site':
-                return ['Closed', 'Sent to MSC', 'Call Cancel'];
+                return ['Closed', 'Sent to MSC', 'Customer Reject', 'Call Cancel'];
 
             case 'Customer Approved':
-            case 'Pending Customer Approval':
                 return [];
+
+            case 'Pending Customer Approval':
+                // Engineer handles their own call's approval/rejection directly —
+                // no need to wait on admin/WC.
+                return ['Customer Approved', 'Customer Reject'];
 
             default:
                 return [];
