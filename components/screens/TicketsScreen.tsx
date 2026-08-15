@@ -24,6 +24,8 @@ import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
+import { approveTicket, rejectTicket } from '@/services/customerApprovalService';
+import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
 
 export default function TicketsScreen() {
   const { data: session } = useSession();
@@ -51,6 +53,10 @@ export default function TicketsScreen() {
   const [tatTicket, setTatTicket] = useState<Ticket | null>(null);
   const [tatPreview, setTatPreview] = useState('');
   const [sigTicket, setSigTicket] = useState<Ticket | null>(null);
+  const [estimateTicket, setEstimateTicket] = useState<Ticket | null>(null);
+  const [estimateForm, setEstimateForm] = useState<EstimateForm>(emptyEstimateForm);
+  const [inspCharges, setInspCharges] = useState('300');
+  const [estimateSaving, setEstimateSaving] = useState(false);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -288,11 +294,57 @@ export default function TicketsScreen() {
     win.document.close();
   };
 
+  // Engineer handles approval/rejection on their own assigned call's estimate
+  // directly — same Approve/Reject Estimate modal admin/WC uses (matches
+  // HTML's openApproval, reused here from customerApprovalService.ts).
+  const openEstimateModal = (t: Ticket) => {
+    setModalOpen(false);
+    setEstimateTicket(t);
+    setEstimateForm({ ...emptyEstimateForm, labourAmt: String(t.service_charges || t.labor || 0) });
+    setInspCharges(String(t.service_charges || t.labor || 300));
+  };
+
+  const { partsAfterDisc: estPartsAfterDisc, labourAfterDisc: estLabourAfterDisc, final: estimateFinal, saved: estimateSaved } =
+    calcEstimate(estimateForm, (estimateTicket?.spares || []) as ApprovalSpare[]);
+
+  const handleApproveEstimate = async () => {
+    if (!estimateTicket) return;
+    if (!estimateForm.remark.trim()) { alert('Remark is required'); return; }
+    setEstimateSaving(true);
+    const r = await approveTicket(estimateTicket, estimateFinal, Number(estimateForm.labourAmt), estimateForm.remark, (session?.user as any)?.name || currentUserRole || '');
+    setEstimateSaving(false);
+    if (r.success) { setEstimateTicket(null); alert(`✅ Approved! Status → ${r.newStatus}`); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleRejectEstimate = async () => {
+    if (!estimateTicket) return;
+    if (!estimateForm.remark.trim()) { alert('Remark is required'); return; }
+    const charges = Number(inspCharges);
+    if (isNaN(charges) || charges < 0) { alert('Enter valid Inspection/Visit Charges'); return; }
+    if (!confirm(`Customer Reject — Inspection/Visit Charges will be finalized at ₹${charges}. Continue?`)) return;
+    setEstimateSaving(true);
+    const r = await rejectTicket(estimateTicket, estimateForm.remark, charges, (session?.user as any)?.name || currentUserRole || '');
+    setEstimateSaving(false);
+    if (r.success) { setEstimateTicket(null); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
   const screenTitle = currentUserRole === 'engineer' && !cspMgr ? '🎫 My Tickets' : '🎫 All Tickets';
 
   const handlePrintLabel = () => {
     if (selectedTicket) printLabel(selectedTicket);
   };
+
+  // View-mode charges breakdown — Customer Reject: parts were only
+  // requested/estimated, never fitted, so they must not be billed; only the
+  // final inspection/visit charge (already in labor/final_charges) applies.
+  const isCustReject = selectedTicket?.status === 'Customer Reject';
+  const fittedPartsTotal = isCustReject ? 0 : (selectedTicket?.spares || []).filter(s => !s.requested).reduce((a, s) => a + (s.qty || 0) * (s.price || 0), 0);
+  const ticketLaborCharge = Number(selectedTicket?.labor) || Number(selectedTicket?.service_charges) || 0;
+  const ticketFinalCharge = Number(selectedTicket?.final_charges) || 0;
+  const ticketGrandTotal = ticketFinalCharge > 0 ? ticketFinalCharge : (ticketLaborCharge + fittedPartsTotal + (Number(selectedTicket?.other_charge) || 0));
+  const canApproveOwnEstimate = !!selectedTicket && selectedTicket.status === 'Pending Customer Approval' && currentUserRole === 'engineer' && selectedTicket.assigned_to === currentUserId;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -407,6 +459,33 @@ export default function TicketsScreen() {
                   )}
                 </div>
               )}
+
+              {modalMode === 'view' && selectedTicket?.warranty_claim_pending && (
+                <div style={{ background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, color: '#b45309', fontSize: 14 }}>🛡️ Warranty Claim — Awaiting Approval</div>
+                  <div style={{ fontSize: 12, color: '#78716c', marginTop: 4 }}>{selectedTicket.warranty_claim_note || ''} &nbsp;|&nbsp; Submitted by: <b>{selectedTicket.warranty_claim_by || ''}</b></div>
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller') ? (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveWarrantyClaim(selectedTicket)}>✅ Approve — Convert to Warranty</button>
+                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectWarrantyClaim(selectedTicket)}>❌ Reject</button>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#d97706', marginTop: 6 }}>⏳ Waiting for WC/Admin approval.</div>
+                  )}
+                </div>
+              )}
+
+              {modalMode === 'view' && selectedTicket && selectedTicket.warranty_coverage === 'Out of Coverage' && (
+                <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontWeight: 600 }}>
+                  ⛔ OUT OF COVERAGE {selectedTicket.coverage_remark ? `— ${selectedTicket.coverage_remark}` : ''}
+                </div>
+              )}
+              {modalMode === 'view' && selectedTicket && selectedTicket.warranty_coverage !== 'Out of Coverage' && (selectedTicket.call_type === 'Warranty' || selectedTicket.call_type === 'Warranty Repeat' || selectedTicket.call_type === 'AMC') && (
+                <div style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontWeight: 600 }}>
+                  ✅ Under Warranty Coverage
+                </div>
+              )}
+
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>👤 Customer</h3>
                 <div style={styles.formGrid}>
@@ -416,7 +495,21 @@ export default function TicketsScreen() {
                   <FormInput label="Alt Mobile" name="alt_mobile" value={formData.alt_mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="State" name="state" value={formData.state} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="PIN" name="pin" value={formData.pin} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Area" name="area" value={formData.area} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Address" name="address" value={formData.address} onChange={handleFormChange} disabled={modalMode === 'view'} />
                 </div>
+                {modalMode === 'view' && formData.mobile && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                    <a href={`tel:${formData.mobile}`} style={{ fontSize: 12, color: colors.primary, fontWeight: 600, textDecoration: 'none' }}>📞 Call {formData.mobile}</a>
+                    <a href={`https://wa.me/91${formData.mobile.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#25D366', fontWeight: 600, textDecoration: 'none' }}>💬 WhatsApp</a>
+                    {formData.alt_mobile && (
+                      <>
+                        <a href={`tel:${formData.alt_mobile}`} style={{ fontSize: 12, color: colors.primary, fontWeight: 600, textDecoration: 'none' }}>📞 Alt {formData.alt_mobile}</a>
+                        <a href={`https://wa.me/91${formData.alt_mobile.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#25D366', fontWeight: 600, textDecoration: 'none' }}>💬 WhatsApp</a>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={styles.sectionDivider}>
@@ -429,10 +522,31 @@ export default function TicketsScreen() {
               </div>
 
               <div style={styles.sectionDivider}>
+                <h3 style={styles.sectionHeader2}>🔧 Problem</h3>
+                <div style={styles.formGrid}>
+                  <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+                    <label style={styles.formLabel}>Problem *</label>
+                    <textarea name="problem" value={formData.problem} onChange={handleFormChange} rows={2} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
+                  </div>
+                  <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+                    <label style={styles.formLabel}>Description</label>
+                    <textarea name="description" value={formData.description} onChange={handleFormChange} rows={2} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
+                  </div>
+                  {modalMode === 'view' && selectedTicket?.work_done && (
+                    <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+                      <label style={styles.formLabel}>Action Taken</label>
+                      <div style={{ fontSize: 13, color: colors.text, background: '#f9fafb', borderRadius: 8, padding: '8px 12px' }}>{selectedTicket.work_done}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🔧 Service</h3>
                 <div style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
                   <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={modalMode === 'view'} />
+                  <FormInput label="SE Call ID" name="se_call_id" value={formData.se_call_id} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   {modalMode === 'add' && (
                     <div style={{ ...styles.formGroup, gridColumn: '1 / -1', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 12 }}>
                       <label style={{ ...styles.formLabel, color: '#166534' }}>📅 Canon Portal — Call Received Date &amp; Time (optional)</label>
@@ -504,10 +618,48 @@ export default function TicketsScreen() {
                 </div>
               )}
 
+              {modalMode === 'view' && selectedTicket && (selectedTicket.spares && selectedTicket.spares.length > 0) && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>🔩 Parts</h3>
+                  {selectedTicket.spares.map((s, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '5px 0', borderBottom: '1px solid #f3f4f6' }}>
+                      <span>{s.code ? `${s.code} ` : ''}{s.name} × {s.qty}{s.requested ? ' (requested)' : ''}</span>
+                      <span style={{ fontWeight: 600 }}>{isCustReject ? '—' : `₹${((s.qty || 0) * (s.price || 0)).toFixed(0)}`}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {modalMode === 'view' && selectedTicket && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>💰 Charges</h3>
+                  <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Service / Labour</span><span>₹{ticketLaborCharge.toFixed(0)}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Parts{isCustReject ? ' (not billed — rejected)' : ''}</span><span>₹{fittedPartsTotal.toFixed(0)}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, borderTop: '1px solid #e5e7eb', paddingTop: 6, marginTop: 2 }}><span>Total</span><span>₹{ticketGrandTotal.toFixed(0)}</span></div>
+                  </div>
+                </div>
+              )}
+
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>📝 Remarks</h3>
                 <textarea name="remarks" value={formData.remarks} onChange={handleFormChange} rows={3} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
               </div>
+
+              {modalMode === 'view' && selectedTicket && selectedTicket.timeline && selectedTicket.timeline.length > 0 && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>🕘 Timeline</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 8 }}>
+                    {selectedTicket.timeline.slice().reverse().map((tl: any, i: number) => (
+                      <div key={i} style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>{tl.action || 'Update'}</div>
+                        <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>By: {tl.by || 'System'} | {tl.at ? new Date(tl.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</div>
+                        {tl.note && <div style={{ fontSize: 12, marginTop: 4, padding: '5px 8px', background: '#fff', borderRadius: 6 }}>{tl.note}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {modalMode === 'view' && selectedTicket && (
                 <div style={styles.sectionDivider}>
@@ -531,6 +683,11 @@ export default function TicketsScreen() {
               </button>
               {modalMode === 'view' ? (
                 <>
+                  {canApproveOwnEstimate && (
+                    <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => openEstimateModal(selectedTicket!)}>
+                      ✅ Approve / Reject Estimate
+                    </button>
+                  )}
                   {selectedTicket?.status !== 'Closed' && canEditTicket(selectedTicket!) && (
                     <button
                       style={{ ...styles.btn, background: '#dc2626', color: 'white' }}
@@ -650,6 +807,77 @@ export default function TicketsScreen() {
           onClose={() => setSigTicket(null)}
           onDone={async () => { setSigTicket(null); await fetchTickets(); }}
         />
+      )}
+      {estimateTicket && (
+        <div style={styles.modalOverlay} onClick={() => setEstimateTicket(null)}>
+          <div style={{ ...styles.modal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>Estimate — {estimateTicket.cname}</h2>
+              <button style={styles.closeBtn} onClick={() => setEstimateTicket(null)}>✕</button>
+            </div>
+            <div style={styles.modalBody}>
+              <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 12 }}>
+                <div><strong>{estimateTicket.brand_name} {estimateTicket.model}</strong> | {estimateTicket.serial}</div>
+                <div style={{ color: colors.textMuted, marginTop: 2 }}>{estimateTicket.problem} | {estimateTicket.call_type}</div>
+              </div>
+
+              {(estimateTicket.spares || []).filter((s) => s.requested).length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Parts Required:</div>
+                  {(estimateTicket.spares || []).map((s, i) => s.requested && (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
+                      <span>{s.code ? `${s.code} ` : ''}{s.name} × {s.qty}</span>
+                      <span style={{ fontWeight: 600 }}>₹{((s.qty || 0) * (s.price || 0)).toFixed(0)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={styles.formLabel}>Labour / Service ₹</label>
+                  <input type="number" value={estimateForm.labourAmt} onChange={(e) => setEstimateForm((f) => ({ ...f, labourAmt: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>Parts Discount %</label>
+                  <input type="number" value={estimateForm.partsDisc} onChange={(e) => setEstimateForm((f) => ({ ...f, partsDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>Labour Discount %</label>
+                  <input type="number" value={estimateForm.labourDisc} onChange={(e) => setEstimateForm((f) => ({ ...f, labourDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+                </div>
+              </div>
+
+              <div style={{ background: '#d1fae5', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span>Parts (after {estimateForm.partsDisc}% disc)</span><span>₹{estPartsAfterDisc.toFixed(0)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
+                  <span>Labour (after {estimateForm.labourDisc}% disc)</span><span>₹{estLabourAfterDisc.toFixed(0)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid #a7f3d0', paddingTop: 8 }}>
+                  <span>Final Estimate</span><span style={{ color: '#065f46' }}>₹{estimateFinal.toFixed(0)}</span>
+                </div>
+                {estimateSaved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{estimateSaved.toFixed(0)}</div>}
+              </div>
+
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', display: 'block', marginBottom: 4 }}>Inspection / Visit Charges ₹ <span style={{ fontWeight: 400 }}>(billed if customer rejects)</span></label>
+                <input type="number" value={inspCharges} onChange={(e) => setInspCharges(e.target.value)} style={styles.formInput} />
+              </div>
+
+              <div>
+                <label style={styles.formLabel}>Remark * <span style={{ color: '#dc2626' }}>(required)</span></label>
+                <textarea value={estimateForm.remark} onChange={(e) => setEstimateForm((f) => ({ ...f, remark: e.target.value }))} rows={2} placeholder="Note about approval/rejection..." style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', resize: 'vertical' as const }} />
+              </div>
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={() => setEstimateTicket(null)}>Cancel</button>
+              <button style={{ ...styles.btn, background: '#dc2626', color: '#fff' }} disabled={estimateSaving} onClick={handleRejectEstimate}>❌ Customer Reject</button>
+              <button style={{ ...styles.btn, background: '#059669', color: '#fff' }} disabled={estimateSaving} onClick={handleApproveEstimate}>✅ Customer Approved</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
