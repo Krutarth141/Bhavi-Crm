@@ -26,6 +26,7 @@ import { isAccountant } from '@/lib/permissions';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import TatReportScreen from '@/components/screens/TatReportScreen';
+import PaymentQrModal from '@/components/screens/PaymentQrModal';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
@@ -66,6 +67,7 @@ export default function WorkControllerDashboard() {
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showWCReport, setShowWCReport] = useState(false);
+    const [showPaymentQR, setShowPaymentQR] = useState(false);
 
     const handleNavClick = (id: WorkControllerTab) => {
         setActiveTab(id);
@@ -129,6 +131,11 @@ export default function WorkControllerDashboard() {
                                 📋 WC Report
                             </button>
                         </li>
+                        <li>
+                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
+                                💳 Payment QR
+                            </button>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -155,6 +162,9 @@ export default function WorkControllerDashboard() {
                     onClose={() => setShowWCReport(false)}
                     onSaved={() => setShowWCReport(false)}
                 />
+            )}
+            {showPaymentQR && (
+                <PaymentQrModal isAdmin={false} onClose={() => setShowPaymentQR(false)} />
             )}
         </div>
     );

@@ -51,6 +51,7 @@ import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import SwSurveyScreen from '@/components/screens/SwSurveyScreen';
 import EngDailyReportScreen from '@/components/screens/EngDailyReportScreen';
+import PaymentQrModal from '@/components/screens/PaymentQrModal';
 
 import '@/styles/dashboard.css';
 
@@ -117,6 +118,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
 export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [showPaymentQR, setShowPaymentQR] = useState(false);
 
     const handleNavClick = (id: AdminTab) => {
         setActiveTab(id);
@@ -204,6 +206,11 @@ export default function AdminDashboard() {
                                 </button>
                             </li>
                         ))}
+                        <li>
+                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
+                                💳 Payment QR
+                            </button>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -223,7 +230,9 @@ export default function AdminDashboard() {
                     {renderContent()}
                 </div>
             </div>
-
+            {showPaymentQR && (
+                <PaymentQrModal isAdmin onClose={() => setShowPaymentQR(false)} />
+            )}
         </div>
     );
 }
