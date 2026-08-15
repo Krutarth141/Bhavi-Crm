@@ -52,6 +52,7 @@ import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import SwSurveyScreen from '@/components/screens/SwSurveyScreen';
 import EngDailyReportScreen from '@/components/screens/EngDailyReportScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
+import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
 import '@/styles/dashboard.css';
 
@@ -119,6 +120,7 @@ export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
+    const [showPortalQR, setShowPortalQR] = useState(false);
 
     const handleNavClick = (id: AdminTab) => {
         setActiveTab(id);
@@ -211,6 +213,11 @@ export default function AdminDashboard() {
                                 💳 Payment QR
                             </button>
                         </li>
+                        <li>
+                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
+                                📱 Customer Portal
+                            </button>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -232,6 +239,9 @@ export default function AdminDashboard() {
             </div>
             {showPaymentQR && (
                 <PaymentQrModal isAdmin onClose={() => setShowPaymentQR(false)} />
+            )}
+            {showPortalQR && (
+                <CustomerPortalQrModal onClose={() => setShowPortalQR(false)} />
             )}
         </div>
     );

@@ -28,6 +28,7 @@ import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScree
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
+import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
 type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
     | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
@@ -68,6 +69,7 @@ export default function EngineerDashboard() {
     const [activeTab, setActiveTab] = useState<EngineerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
+    const [showPortalQR, setShowPortalQR] = useState(false);
 
     const handleNavClick = (id: EngineerTab) => {
         setActiveTab(id);
@@ -132,6 +134,11 @@ export default function EngineerDashboard() {
                                 💳 Payment QR
                             </button>
                         </li>
+                        <li>
+                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
+                                📱 Customer Portal
+                            </button>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -153,6 +160,9 @@ export default function EngineerDashboard() {
             </div>
             {showPaymentQR && (
                 <PaymentQrModal isAdmin={false} onClose={() => setShowPaymentQR(false)} />
+            )}
+            {showPortalQR && (
+                <CustomerPortalQrModal onClose={() => setShowPortalQR(false)} />
             )}
         </div>
     );
