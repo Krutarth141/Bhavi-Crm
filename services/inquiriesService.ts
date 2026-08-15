@@ -3,11 +3,19 @@ import { AutoInquiry, InquiryFormData } from '@/types/inquiries';
 
 export const fetchInquiries = async (userId: string, isAdmin: boolean): Promise<AutoInquiry[]> => {
     try {
-        let q = supabase.from('auto_inquiries').select('*').order('created_at', { ascending: false });
-        if (!isAdmin) q = q.or(`created_by.eq.${userId},assigned_to.eq.${userId}`);
-        const { data, error } = await q;
-        if (error) throw error;
-        return data || [];
+        let all: AutoInquiry[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            let q = supabase.from('auto_inquiries').select('*').order('created_at', { ascending: false });
+            if (!isAdmin) q = q.or(`created_by.eq.${userId},assigned_to.eq.${userId}`);
+            const { data: page, error } = await q.range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(page || []);
+            if (!page || page.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
     } catch (err) { console.error('fetchInquiries:', err); return []; }
 };
 

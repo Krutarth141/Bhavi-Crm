@@ -18,25 +18,38 @@ export function useEngParts() {
             setLoading(true);
             setError(null);
 
+            let inv: any[] = [];
+            let invFrom = 0;
+            const INV_PAGE = 1000;
+            while (true) {
+                const { data: page, error: inventoryError } = await supabase.from('inventory').select('*').order('item_name').range(invFrom, invFrom + INV_PAGE - 1);
+                if (inventoryError) throw inventoryError;
+                inv = inv.concat(page || []);
+                if (!page || page.length < INV_PAGE) break;
+                invFrom += INV_PAGE;
+            }
+
+            let stock: any[] = [];
+            let stockFrom = 0;
+            const STOCK_PAGE = 1000;
+            while (true) {
+                const { data: page, error: engStockError } = await supabase.from('eng_stock').select('*').order('owner').range(stockFrom, stockFrom + STOCK_PAGE - 1);
+                if (engStockError) throw engStockError;
+                stock = stock.concat(page || []);
+                if (!page || page.length < STOCK_PAGE) break;
+                stockFrom += STOCK_PAGE;
+            }
+
             const [
-                { data: inventoryData, error: inventoryError },
-                { data: engStockData, error: engStockError },
                 { data: movementsData, error: movementsError },
                 { data: requestsData, error: requestsError },
             ] = await Promise.all([
-                supabase.from('inventory').select('*').order('item_name'),
-                supabase.from('eng_stock').select('*').order('owner'),
                 supabase.from('eng_movements').select('*').order('created_at', { ascending: false }).limit(500),
                 supabase.from('eng_part_requests').select('*').order('created_at', { ascending: false }).limit(200),
             ]);
 
-            if (inventoryError) throw inventoryError;
-            if (engStockError) throw engStockError;
             if (movementsError) throw movementsError;
             if (requestsError) throw requestsError;
-
-            const inv = inventoryData ?? [];
-            const stock = engStockData ?? [];
 
             setInventory(inv);
             setEngStock(stock);

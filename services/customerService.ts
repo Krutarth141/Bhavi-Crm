@@ -3,13 +3,21 @@ import { Customer } from '@/types/customers';
 
 export const fetchAllCustomers = async (): Promise<Customer[]> => {
     try {
-        const { data, error } = await supabase
-            .from('customers')
-            .select('*')
-            .order('cname', { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        let all: Customer[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            const { data: page, error } = await supabase
+                .from('customers')
+                .select('*')
+                .order('cname', { ascending: true })
+                .range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(page || []);
+            if (!page || page.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
     } catch (err) {
         console.error('Failed to fetch customers:', err);
         return [];

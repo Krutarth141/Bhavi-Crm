@@ -11,12 +11,21 @@ const normBrand = (b: any): { name: string } | null => {
 // ─── Brands ───────────────────────────────────────────────────────────────────
 
 export const fetchBrands = async (): Promise<Brand[]> => {
-    const { data, error } = await supabase
-        .from('brands')
-        .select('id, name, created_at')
-        .order('name');
-    if (error) throw error;
-    return (data || []) as Brand[];
+    let all: Brand[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase
+            .from('brands')
+            .select('id, name, created_at')
+            .order('name')
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat((page || []) as Brand[]);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
+    return all;
 };
 
 export const addBrand = async (form: BrandForm): Promise<void> => {
@@ -34,11 +43,20 @@ export const deleteBrand = async (id: string): Promise<void> => {
 // ─── Sub-Categories ───────────────────────────────────────────────────────────
 
 export const fetchSubCategories = async (): Promise<SubCategory[]> => {
-    const { data, error } = await supabase
-        .from('subcategories')
-        .select('id, name, brand_id, created_at, brand:brands(name)')
-        .order('name');
-    if (error) throw error;
+    let data: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase
+            .from('subcategories')
+            .select('id, name, brand_id, created_at, brand:brands(name)')
+            .order('name')
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
     return (data || []).map((item: any): SubCategory => ({
         ...item,
         brand: normBrand(item.brand),
@@ -61,11 +79,20 @@ export const deleteSubCategory = async (id: string): Promise<void> => {
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 export const fetchModels = async (): Promise<Model[]> => {
-    const { data, error } = await supabase
-        .from('models')
-        .select('id, model_no, model_name, brand_id, subcategory_id, sale_price, printer_type, brochure_url, created_at, brand:brands(name), subcategory:subcategories(name)')
-        .order('model_no');
-    if (error) throw error;
+    let data: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase
+            .from('models')
+            .select('id, model_no, model_name, brand_id, subcategory_id, sale_price, printer_type, brochure_url, created_at, brand:brands(name), subcategory:subcategories(name)')
+            .order('model_no')
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
     return (data || []).map((item: any): Model => ({
         ...item,
         brand: normBrand(item.brand),
@@ -95,11 +122,20 @@ export const deleteModel = async (id: string): Promise<void> => {
 // ─── Problem Types ────────────────────────────────────────────────────────────
 
 export const fetchProblemTypes = async (): Promise<ProblemType[]> => {
-    const { data, error } = await supabase
-        .from('problem_types')
-        .select('id, problem, brand_id, is_active, created_at, brand:brands(name)')
-        .order('problem');
-    if (error) throw error;
+    let data: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase
+            .from('problem_types')
+            .select('id, problem, brand_id, is_active, created_at, brand:brands(name)')
+            .order('problem')
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
     return (data || []).map((item: any): ProblemType => ({
         ...item,
         brand: normBrand(item.brand),
@@ -245,13 +281,22 @@ export const importPincodes = async (
 // ─── Service Gallery ───────────────────────────────────────────────────────────
 
 export const fetchServiceGalleryPhotos = async (): Promise<ServiceGalleryPhoto[]> => {
-    const { data, error } = await supabase
-        .from('service_gallery')
-        .select('*')
-        .order('service_id')
-        .order('created_at', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    let all: ServiceGalleryPhoto[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase
+            .from('service_gallery')
+            .select('*')
+            .order('service_id')
+            .order('created_at', { ascending: true })
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
+    return all;
 };
 
 export const uploadServiceGalleryPhoto = async (

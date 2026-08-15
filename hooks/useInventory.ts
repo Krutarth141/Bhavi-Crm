@@ -11,13 +11,21 @@ export const useInventory = () => {
     const fetchInventory = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('inventory')
-                .select('*')
-                .order('item_name', { ascending: true });
-
-            if (error) throw error;
-            setInventory(data || []);
+            let all: InventoryItem[] = [];
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data: page, error } = await supabase
+                    .from('inventory')
+                    .select('*')
+                    .order('item_name', { ascending: true })
+                    .range(from, from + PAGE - 1);
+                if (error) throw error;
+                all = all.concat(page || []);
+                if (!page || page.length < PAGE) break;
+                from += PAGE;
+            }
+            setInventory(all);
         } catch (err) {
             console.error('Failed to fetch inventory:', err);
         } finally {
@@ -27,14 +35,22 @@ export const useInventory = () => {
 
     const fetchCategories = async () => {
         try {
-            const { data, error } = await supabase
-                .from('inventory')
-                .select('category')
-                .not('category', 'is', null);
+            let all: any[] = [];
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data: page, error } = await supabase
+                    .from('inventory')
+                    .select('category')
+                    .not('category', 'is', null)
+                    .range(from, from + PAGE - 1);
+                if (error) throw error;
+                all = all.concat(page || []);
+                if (!page || page.length < PAGE) break;
+                from += PAGE;
+            }
 
-            if (error) throw error;
-
-            const uniqueCategories = [...new Set((data || []).map(item => item.category).filter(Boolean))] as string[];
+            const uniqueCategories = [...new Set(all.map(item => item.category).filter(Boolean))] as string[];
             setCategories(uniqueCategories.sort());
         } catch (err) {
             console.error('Failed to fetch categories:', err);

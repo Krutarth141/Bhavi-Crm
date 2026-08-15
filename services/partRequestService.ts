@@ -3,14 +3,22 @@ import { PartItem, PartRequest, PartRequestFilter } from '@/types/partRequest';
 
 export const fetchPartRequests = async (filter: PartRequestFilter): Promise<PartRequest[]> => {
     try {
-        let query = supabase
-            .from('eng_part_requests')
-            .select('*')
-            .order('created_at', { ascending: false });
-        if (filter !== 'all') query = query.eq('status', filter);
-        const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
+        let all: PartRequest[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            let query = supabase
+                .from('eng_part_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (filter !== 'all') query = query.eq('status', filter);
+            const { data: page, error } = await query.range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(page || []);
+            if (!page || page.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
     } catch (err) {
         console.error('fetchPartRequests:', err);
         return [];
