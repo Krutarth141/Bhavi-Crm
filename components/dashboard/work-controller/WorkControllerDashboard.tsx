@@ -25,11 +25,12 @@ import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScree
 import { isAccountant } from '@/lib/permissions';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
+import TatReportScreen from '@/components/screens/TatReportScreen';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
-    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
+    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'tat-report';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -48,6 +49,7 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'payment-collection', label: '💰 Payment Collection' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
+    { id: 'tat-report', label: '⏱️ TAT Compliance' },
 ];
 
 export default function WorkControllerDashboard() {
@@ -88,6 +90,7 @@ export default function WorkControllerDashboard() {
             case 'payment-collection': return <PaymentCollectionScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
+            case 'tat-report': return <TatReportScreen />;
             default: return null;
         }
     };
