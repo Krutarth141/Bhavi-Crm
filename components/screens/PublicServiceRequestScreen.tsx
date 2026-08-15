@@ -350,7 +350,10 @@ export default function PublicServiceRequestScreen() {
                         <div><div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Need Help? Call Us</div>
                             <a href="tel:+919574004969" style={{ fontSize: 15, fontWeight: 800, color: '#1d4ed8', textDecoration: 'none' }}>+91 9574004969</a></div>
                     </div>
-                    <div style={{ marginTop: 12, textAlign: 'center' }}><Link href="/shop" style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 700 }}>🛍️ Visit our Shop</Link></div>
+                    <div style={{ marginTop: 12, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: 16 }}>
+                        <Link href="/shop" style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 700 }}>🛍️ Visit our Shop</Link>
+                        <Link href="/account" style={{ fontSize: 12, color: '#1d4ed8', fontWeight: 700 }}>👤 My Account</Link>
+                    </div>
                 </div>
             </div></div>
         );
