@@ -50,6 +50,7 @@ import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScree
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import SwSurveyScreen from '@/components/screens/SwSurveyScreen';
+import EngDailyReportScreen from '@/components/screens/EngDailyReportScreen';
 
 import '@/styles/dashboard.css';
 
@@ -62,7 +63,7 @@ type AdminTab =
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
-    | 'followup' | 'reorder' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'sw-survey';
+    | 'followup' | 'reorder' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'sw-survey' | 'eng-daily-report';
 
 const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -110,6 +111,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
     { id: 'sw-survey', label: '🔌 SW Survey' },
+    { id: 'eng-daily-report', label: '📅 Engineer Daily Report' },
 ];
 
 export default function AdminDashboard() {
@@ -168,6 +170,7 @@ export default function AdminDashboard() {
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             case 'sw-survey': return <SwSurveyScreen />;
+            case 'eng-daily-report': return <EngDailyReportScreen />;
             default: return null;
         }
     };
