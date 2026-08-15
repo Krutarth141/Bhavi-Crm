@@ -3,8 +3,16 @@ import { InventoryLogEntry } from '@/types/inventory';
 
 export const fetchInventoryLogs = async (inventoryId: string): Promise<InventoryLogEntry[]> => {
     try {
-        const { data, error } = await supabase.from('inventory_log').select('*').eq('inventory_id', inventoryId).order('created_at', { ascending: false }).limit(100);
-        if (error) throw error;
+        let data: any[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            const { data: page, error } = await supabase.from('tickets').select('*').order('created_at', { ascending: false }).range(from, from + PAGE - 1);
+            if (error) throw error;
+            data = data.concat(page || []);
+            if (!page || page.length < PAGE) break;
+            from += PAGE;
+        }
         return data || [];
     } catch (err) { console.error('fetchInventoryLogs:', err); return []; }
 };

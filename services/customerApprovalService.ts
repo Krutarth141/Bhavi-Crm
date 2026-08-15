@@ -3,13 +3,22 @@ import { ApprovalTicket, ApprovalSpare } from '@/types/customerApproval';
 
 export const fetchPendingApprovals = async (): Promise<ApprovalTicket[]> => {
     try {
-        const { data, error } = await supabase
-            .from('tickets')
-            .select('*')
-            .eq('status', 'Pending Customer Approval')
-            .order('updated_at', { ascending: false });
-        if (error) throw error;
-        return data || [];
+        let all: ApprovalTicket[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            const { data: page, error } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('status', 'Pending Customer Approval')
+                .order('updated_at', { ascending: false })
+                .range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(page || []);
+            if (!page || page.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
     } catch (err) {
         console.error('fetchPendingApprovals:', err);
         return [];

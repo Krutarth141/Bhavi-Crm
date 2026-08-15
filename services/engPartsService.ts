@@ -173,7 +173,17 @@ export const fetchWarrantyPending = async (
 
         const { data: returned } = await supabase.from('eng_movements').select('*').eq('warranty', true).eq('type', 'WARRANTY_RETURN').order('created_at', { ascending: false });
 
-        const { data: wTickets } = await supabase.from('tickets').select('id, cname, model, call_type, assigned_name, se_call_id, spares, status, created_at').in('call_type', ['Warranty', 'Warranty Repeat', 'AMC']).order('created_at', { ascending: false });
+        let wTickets: any[] = [];
+        {
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data: page } = await supabase.from('tickets').select('id, cname, model, call_type, assigned_name, se_call_id, spares, status, created_at').in('call_type', ['Warranty', 'Warranty Repeat', 'AMC']).order('created_at', { ascending: false }).range(from, from + PAGE - 1);
+                wTickets = wTickets.concat(page || []);
+                if (!page || page.length < PAGE) break;
+                from += PAGE;
+            }
+        }
 
         const usedList = used || [];
         const returnedList = returned || [];

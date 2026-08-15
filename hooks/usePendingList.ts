@@ -45,17 +45,24 @@ export function usePendingList() {
 
     const fetchTickets = useCallback(async () => {
         try {
-            const { data, error: ticketsError } = await supabase
-                .from('tickets')
-                .select(
-                    'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,tat_date'
-                )
-                .not('status', 'in', `(${CLOSED_STATUSES.map((s) => `"${s}"`).join(',')})`)
-                .order('created_at', { ascending: false })
-                .limit(2000);
-
-            if (ticketsError) throw ticketsError;
-            setTickets(data ?? []);
+            let data: any[] = [];
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data: page, error: ticketsError } = await supabase
+                    .from('tickets')
+                    .select(
+                        'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,tat_date'
+                    )
+                    .not('status', 'in', `(${CLOSED_STATUSES.map((s) => `"${s}"`).join(',')})`)
+                    .order('created_at', { ascending: false })
+                    .range(from, from + PAGE - 1);
+                if (ticketsError) throw ticketsError;
+                data = data.concat(page || []);
+                if (!page || page.length < PAGE) break;
+                from += PAGE;
+            }
+            setTickets(data);
         } catch (err: any) {
             console.error('usePendingList fetchTickets error:', err);
             setError(err?.message ?? String(err));

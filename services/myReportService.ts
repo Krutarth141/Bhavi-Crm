@@ -30,9 +30,17 @@ export interface MyReportDayRow {
 }
 
 export const fetchMyReport = async (engId: string, from: string, to: string): Promise<MyReportDayRow[]> => {
-    const { data, error } = await supabase.from('tickets').select('id,status,call_type,timeline').eq('assigned_to', engId);
-    if (error) throw error;
-    const tickets = (data || []) as Ticket[];
+    let data: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data: page, error } = await supabase.from('tickets').select('id,status,call_type,timeline').eq('assigned_to', engId).range(from, from + PAGE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
+    const tickets = data as Ticket[];
 
     const byDate: Record<string, MyReportDayRow> = {};
     const ensure = (d: string) => {

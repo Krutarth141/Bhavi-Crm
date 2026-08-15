@@ -47,13 +47,21 @@ export interface TatReportRow {
 export const loadTatReport = async (
     from: string, to: string, engFilter: string, statusFilter: '' | 'within' | 'outside'
 ): Promise<TatReportRow[]> => {
-    let q = supabase.from('tickets')
-        .select('id, cname, mobile, model, assigned_name, assigned_to, tat_date, timeline')
-        .not('tat_date', 'is', null)
-        .in('status', COMPLETION_STATUSES);
-    if (engFilter) q = q.eq('assigned_to', engFilter);
-    const { data, error } = await q;
-    if (error) throw error;
+    let data: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        let q = supabase.from('tickets')
+            .select('id, cname, mobile, model, assigned_name, assigned_to, tat_date, timeline')
+            .not('tat_date', 'is', null)
+            .in('status', COMPLETION_STATUSES);
+        if (engFilter) q = q.eq('assigned_to', engFilter);
+        const { data: page, error } = await q.range(from, from + PAGE - 1);
+        if (error) throw error;
+        data = data.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
 
     const rows: TatReportRow[] = [];
     (data || []).forEach((t: TatTicket) => {

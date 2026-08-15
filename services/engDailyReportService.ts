@@ -103,11 +103,19 @@ export interface EdrRow {
 export const loadEngDailyReport = async (
     from: string, to: string, engFilter: string, allEngineers: { user_id: string; name: string }[]
 ): Promise<EdrRow[]> => {
-    let q = supabase.from('tickets')
-        .select('id, status, call_type, model, timeline, assigned_to, assigned_name, payment_mode, service_charges, final_charges, labor, other_charge, spares');
-    q = engFilter ? q.eq('assigned_to', engFilter) : q.not('assigned_to', 'is', null);
-    const { data: tickets, error } = await q;
-    if (error) throw error;
+    let tickets: any[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        let q = supabase.from('tickets')
+            .select('id, status, call_type, model, timeline, assigned_to, assigned_name, payment_mode, service_charges, final_charges, labor, other_charge, spares');
+        q = engFilter ? q.eq('assigned_to', engFilter) : q.not('assigned_to', 'is', null);
+        const { data: page, error } = await q.range(from, from + PAGE - 1);
+        if (error) throw error;
+        tickets = tickets.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
+    }
 
     const byEng: Record<string, EdrRow> = {};
     const ensure = (id: string, name?: string): EdrRow => {
