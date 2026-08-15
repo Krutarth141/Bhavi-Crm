@@ -24,11 +24,12 @@ import InventoryScreen from '@/components/screens/InventoryScreen';
 import AMCScreen from '@/components/screens/AMCScreen';
 import WorkLogScreen from '@/components/screens/WorkLogScreen';
 import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
+import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScreen';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 
 type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
-    | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report' | 'field-tasks' | 'site-visits';
+    | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -40,6 +41,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
+    { id: 'payment-collection', label: '💰 Payment Collection' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
@@ -81,6 +83,7 @@ export default function EngineerDashboard() {
             case 'attendance': return <AttendanceScreen />;
             case 'engineer-update': return <EngineerUpdateScreen />;
             case 'km-report': return <KmTrackingScreen />;
+            case 'payment-collection': return <PaymentCollectionScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             case 'pending': return cspMgr ? <PendingListScreen /> : null;

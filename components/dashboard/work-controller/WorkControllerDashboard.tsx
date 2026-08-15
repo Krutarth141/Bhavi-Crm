@@ -21,13 +21,15 @@ import AttendanceScreen from '@/components/screens/AttendanceScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import WCDailyReportModal from '@/components/screens/WCDailyReportModal';
 import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
+import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScreen';
+import { isAccountant } from '@/lib/permissions';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
-    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'field-tasks' | 'site-visits';
+    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -43,6 +45,7 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'inquiries', label: '🔎 Inquiries' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
+    { id: 'payment-collection', label: '💰 Payment Collection' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
@@ -51,7 +54,12 @@ export default function WorkControllerDashboard() {
     const { data: session } = useSession();
     const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
     const { isVisible } = useNavVisibility(uid);
-    const visibleNavItems = NAV_ITEMS.filter((item) => item.id === 'overview' || isVisible(item.id));
+    const isAcct = isAccountant(session);
+    // Payment Collection is Accountant-only among Work Controllers — plain WCs
+    // never see it, regardless of nav permission overrides (mirrors HTML).
+    const visibleNavItems = NAV_ITEMS
+        .filter((item) => item.id !== 'payment-collection' || isAcct)
+        .filter((item) => item.id === 'overview' || isVisible(item.id));
 
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -77,6 +85,7 @@ export default function WorkControllerDashboard() {
             case 'inquiries': return <InquiriesScreen />;
             case 'attendance': return <AttendanceScreen />;
             case 'km-report': return <KmTrackingScreen />;
+            case 'payment-collection': return <PaymentCollectionScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             default: return null;
