@@ -75,12 +75,14 @@ export default function PublicShopPage() {
 
     return (
         <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-            {logoUrl ? <img src={logoUrl} style={{ maxHeight: 44, maxWidth: 150, objectFit: 'contain' }} alt={companyName} /> : <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: 0.5 }}>{companyName}</span>}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Link href="/track-orders" style={{ color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'underline', whiteSpace: 'nowrap' }}>📦 Track My Orders</Link>
-                <button onClick={() => setCartOpen((o) => !o)} style={{ background: '#fff', color: '#1d4ed8', border: 'none', borderRadius: 20, padding: '7px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-                    🛒 Cart ({cartCount})
-                </button>
+            <div style={{ background: '#1d4ed8', padding: '0 16px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+                {logoUrl ? <img src={logoUrl} style={{ maxHeight: 44, maxWidth: 150, objectFit: 'contain' }} alt={companyName} /> : <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: 0.5 }}>{companyName}</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Link href="/track-orders" style={{ color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'underline', whiteSpace: 'nowrap' }}>📦 Track My Orders</Link>
+                    <button onClick={() => setCartOpen((o) => !o)} style={{ background: '#fff', color: '#1d4ed8', border: 'none', borderRadius: 20, padding: '7px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                        🛒 Cart ({cartCount})
+                    </button>
+                </div>
             </div>
 
             {cartOpen && (
