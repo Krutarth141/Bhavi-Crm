@@ -1,12 +1,11 @@
 'use client';
 
-const PORTAL_URL = 'https://bhavi-crm.github.io/bhavi-crm/complaint.html';
-
 interface Props {
     onClose: () => void;
 }
 
 export default function CustomerPortalQrModal({ onClose }: Props) {
+    const PORTAL_URL = typeof window !== 'undefined' ? `${window.location.origin}/service-request` : '/service-request';
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=6&data=${encodeURIComponent(PORTAL_URL)}`;
 
     const handlePrint = () => {
