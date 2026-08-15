@@ -28,7 +28,7 @@ import SignatureModal from '@/components/screens/tickets/SignatureModal';
 export default function TicketsScreen() {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
-  const currentUserId = (session?.user as any)?.id;
+  const currentUserId = (session?.user as any)?.email;
   const cspMgr = isCspManager(session);
 
   const { tickets, loading, fetchTickets } = useTickets({

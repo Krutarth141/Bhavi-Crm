@@ -1,9 +1,9 @@
 // Special-access user IDs — mirrors HTML's window._isCspMgr check.
 // session.user.email holds the login code (e.g. 'ENG001'), not a real email.
-export const CSP_MANAGER_ID = 'ENG001';
+export const CSP_MANAGER_IDS = ['ENG001', 'ENG002'];
 
 export function isCspManager(session: any): boolean {
-    return (session?.user as any)?.email === CSP_MANAGER_ID;
+    return CSP_MANAGER_IDS.includes((session?.user as any)?.email);
 }
 
 // The Accountant (ACCT001) — a role_type='work_controller' account that, unlike

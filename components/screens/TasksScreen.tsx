@@ -21,7 +21,7 @@ export default function TasksScreen() {
 
     const { tasks, engineers, loading, error, refetch } = useTasks({
         userRole: currentUser?.role,
-        userId: currentUser?.id
+        userId: currentUser?.email
     });
 
     const [filter, setFilter] = useState<'open' | 'all' | 'closed'>('open');

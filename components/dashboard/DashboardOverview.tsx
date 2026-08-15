@@ -6,6 +6,7 @@ import { useTickets } from '@/hooks/useTickets';
 import { Ticket, statusBadges } from '@/types/tickets';
 import { getBadgeStyle, printTicket } from '@/utils/printTicket';
 import { fetchTodayInquiryFollowupCount } from '@/services/dashboardService';
+import { isTicketActive, isTicketClosed, isTicketCancelled } from '@/types/ticketStatus';
 import DashboardPeriodFilter, { DashPeriod } from './DashboardPeriodFilter';
 import VBarChart from './charts/VBarChart';
 import DonutChart from './charts/DonutChart';
@@ -15,12 +16,6 @@ import EngineerLiveStatusTable from './EngineerLiveStatusTable';
 interface Props {
     role: 'admin' | 'work_controller' | 'engineer';
 }
-
-// Matches HTML's renderDashboard _doneStatuses exactly (index.html:3669) —
-// kept faithful to source for this screen's own Active/Closed split, rather
-// than reusing types/ticketStatus.ts's slightly different canonical set.
-const DASH_DONE_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered', 'Repaired', 'Pending for Delivery'];
-const DASH_CLOSED_STATUSES = ['Closed', 'Delivered', 'Repaired', 'Pending for Delivery'];
 
 const PERIOD_LABELS: Record<'all' | 'today' | 'week' | 'month' | 'lastmonth', string> = {
     all: 'All Time', today: 'Today', week: 'This Week', month: 'This Month', lastmonth: 'Last Month',
@@ -50,7 +45,7 @@ const DAILY_BAR_COLORS = ['#bfdbfe', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb',
 
 export default function DashboardOverview({ role }: Props) {
     const { data: session } = useSession();
-    const userId = (session?.user as any)?.id;
+    const userId = (session?.user as any)?.email;
     const loginId = ((session?.user as any)?.email || '').toUpperCase(); // holds user_id, e.g. 'ENG002'
 
     const { tickets: allTickets, loading } = useTickets({ userRole: role, userId });
@@ -85,9 +80,9 @@ export default function DashboardOverview({ role }: Props) {
     };
 
     const total = dashTix.length;
-    const active = dashTix.filter(t => !DASH_DONE_STATUSES.includes(t.status)).length;
-    const closed = dashTix.filter(t => DASH_CLOSED_STATUSES.includes(t.status)).length;
-    const unalloc = dashTix.filter(t => !DASH_DONE_STATUSES.includes(t.status) && !t.assigned_to).length;
+    const active = dashTix.filter(t => isTicketActive(t.status)).length;
+    const closed = dashTix.filter(t => isTicketClosed(t.status)).length;
+    const unalloc = dashTix.filter(t => isTicketActive(t.status) && !t.assigned_to).length;
 
     const isAdminOrWC = role === 'admin' || role === 'work_controller';
 
@@ -104,7 +99,7 @@ export default function DashboardOverview({ role }: Props) {
         const inProgress = dashTix.filter(t => t.status === 'In Progress').length;
         const pendParts = dashTix.filter(t => t.status === 'Pending Parts').length;
         const pendRepair = dashTix.filter(t => ['Pending Repair Carry In', 'Pending Repair On Site'].includes(t.status)).length;
-        const cancelled = dashTix.filter(t => ['Call Cancel', 'Customer Reject'].includes(t.status)).length;
+        const cancelled = dashTix.filter(t => isTicketCancelled(t.status)).length;
         const warranty = dashTix.filter(t => t.call_type === 'Warranty' || t.call_type === 'Warranty Repeat').length;
         const nonWarranty = dashTix.filter(t => t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat').length;
         const amc = dashTix.filter(t => t.call_type === 'AMC').length;
@@ -165,9 +160,9 @@ export default function DashboardOverview({ role }: Props) {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 14 }}>
                 <KpiCard label="Total Tickets" sub={periodLabel} value={total} icon="🎫" color="#1d4ed8" onClick={() => setKpiDetail({ title: `Total Tickets (${periodLabel})`, tickets: dashTix })} />
-                <KpiCard label="Active" sub="In pipeline" value={active} icon="🔥" color="#d97706" onClick={() => setKpiDetail({ title: `Active Tickets (${periodLabel})`, tickets: dashTix.filter(t => !DASH_DONE_STATUSES.includes(t.status)) })} />
-                <KpiCard label="Closed" sub="Successfully resolved" value={closed} icon="✅" color="#0d9488" onClick={() => setKpiDetail({ title: `Closed Tickets (${periodLabel})`, tickets: dashTix.filter(t => DASH_CLOSED_STATUSES.includes(t.status)) })} />
-                <KpiCard label="Unassigned" sub="Needs attention" value={unalloc} icon="⏳" color="#7c3aed" onClick={() => setKpiDetail({ title: `Unassigned Tickets (${periodLabel})`, tickets: dashTix.filter(t => !DASH_DONE_STATUSES.includes(t.status) && !t.assigned_to) })} />
+                <KpiCard label="Active" sub="In pipeline" value={active} icon="🔥" color="#d97706" onClick={() => setKpiDetail({ title: `Active Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketActive(t.status)) })} />
+                <KpiCard label="Closed" sub="Successfully resolved" value={closed} icon="✅" color="#0d9488" onClick={() => setKpiDetail({ title: `Closed Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketClosed(t.status)) })} />
+                <KpiCard label="Unassigned" sub="Needs attention" value={unalloc} icon="⏳" color="#7c3aed" onClick={() => setKpiDetail({ title: `Unassigned Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketActive(t.status) && !t.assigned_to) })} />
             </div>
 
             {!isAdminOrWC && engDaily && (
@@ -182,7 +177,7 @@ export default function DashboardOverview({ role }: Props) {
                         <KpiCard label="In Progress" sub="Being worked on" value={chartData.inProgress} icon="⚡" color="#1d4ed8" onClick={() => setKpiDetail({ title: 'In Progress', tickets: allTickets.filter(t => t.status === 'In Progress') })} />
                         <KpiCard label="Pending Parts" sub="Awaiting spare parts" value={chartData.pendParts} icon="🔩" color="#d97706" onClick={() => setKpiDetail({ title: 'Pending Parts', tickets: allTickets.filter(t => t.status === 'Pending Parts') })} />
                         <KpiCard label="Pending Repair" sub="Repair scheduled" value={chartData.pendRepair} icon="🔧" color="#0891b2" onClick={() => setKpiDetail({ title: 'Pending Repair', tickets: allTickets.filter(t => ['Pending Repair Carry In', 'Pending Repair On Site'].includes(t.status)) })} />
-                        <KpiCard label="Cancelled" sub="Rejected / Cancelled" value={chartData.cancelled} icon="🚫" color="#64748b" onClick={() => setKpiDetail({ title: 'Cancelled', tickets: allTickets.filter(t => ['Call Cancel', 'Customer Reject'].includes(t.status)) })} />
+                        <KpiCard label="Cancelled" sub="Rejected / Cancelled" value={chartData.cancelled} icon="🚫" color="#64748b" onClick={() => setKpiDetail({ title: 'Cancelled', tickets: allTickets.filter(t => isTicketCancelled(t.status)) })} />
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>

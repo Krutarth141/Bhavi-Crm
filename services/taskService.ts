@@ -16,6 +16,26 @@ export const fetchAllTasks = async (): Promise<Task[]> => {
     }
 };
 
+// Admins/work controllers see every task; engineers see only their own —
+// "My Tasks" should not list every other engineer's assignments.
+export const fetchTasksForUser = async (role: string | undefined, engId: string | undefined): Promise<Task[]> => {
+    if (role === 'admin' || role === 'work_controller') return fetchAllTasks();
+    if (!engId) return [];
+    try {
+        const { data, error } = await supabase
+            .from('tasks')
+            .select('*')
+            .eq('assigned_to', engId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Failed to fetch tasks for user:', err);
+        return [];
+    }
+};
+
 export const fetchEngineers = async (): Promise<Engineer[]> => {
     try {
         const { data, error } = await supabase

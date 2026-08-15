@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase';
 // Statuses considered "done" / "cancelled" for these analytics — adapted from
 // HTML's TICKET_DONE_STATUSES to the real Next.js status vocabulary
 // (types/tickets.ts statusOptions — no 'Delivered'/'Cancelled' status exists here).
-const DONE_STATUSES = ['Closed', 'Repaired', 'Pending for Delivery', 'Resolved By Phone'];
-const CANCELLED_STATUSES = ['Customer Reject', 'Call Cancel'];
+const DONE_STATUSES = ['Closed', 'Repaired', 'Pending for Delivery', 'Resolved By Phone', 'Customer Reject'];
+const CANCELLED_STATUSES = ['Call Cancel'];
 const isDone = (s?: string) => !!s && DONE_STATUSES.includes(s);
 const isCancelled = (s?: string) => !!s && CANCELLED_STATUSES.includes(s);
 const isActive = (s?: string) => !isDone(s) && !isCancelled(s);

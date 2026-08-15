@@ -1,19 +1,56 @@
 import { supabase } from '@/lib/supabase';
 import { Ticket } from '@/types/reports';
 
-export const MYRPT_DONE_STATUSES = ['Closed', 'Delivered', 'Pending for Delivery', 'Repaired'];
+export const MYRPT_DONE_STATUSES = ['Closed', 'Delivered', 'Pending for Delivery', 'Repaired', 'Resolved By Phone', 'Customer Reject'];
 export const MYRPT_PENDING_STATUSES = ['Pending Parts', 'Pending Customer Approval', 'Pending Engineer Stock', 'Pending Spare', 'Hold', 'Pending Repair Carry In', 'Pending Repair On Site', 'Pending Allocation', 'Pending Customer Arrival'];
+
+const COMPLETION_ACTIONS = ['Closed', 'Repaired', 'Pending for Delivery', 'Resolved By Phone'];
+
+interface TlEntry { action?: string; at?: string; note?: string; }
+
+const tlEntryDate = (e: TlEntry | null): string | null => {
+    if (!e) return null;
+    if (e.action?.includes('Back-Date') && e.note) {
+        const m = String(e.note).match(/for\s+(\d{4}-\d{2}-\d{2})/);
+        if (m) return m[1];
+    }
+    return e.at ? new Date(e.at).toLocaleDateString('en-CA') : null;
+};
+
+// Mirrors HTML's _engCompletionEntry(): the timeline entry marking when the
+// engineer actually finished the repair — never a later Delivered/Invoice
+// entry — falling back to a legacy 'Charges Set' entry.
+const engCompletionEntry = (tl: TlEntry[]): TlEntry | null => {
+    let last: TlEntry | null = null;
+    tl.forEach(e => {
+        if (!e?.action || !e?.at) return;
+        if (e.action.includes('Delivered') || e.action.includes('Invoice')) return;
+        if (COMPLETION_ACTIONS.some(c => e.action!.includes(c))) last = e;
+    });
+    if (!last) {
+        tl.forEach(e => { if (e?.action?.includes('Charges Set') && e?.at) last = e; });
+    }
+    return last;
+};
+
+const engRejectEntry = (tl: TlEntry[]): TlEntry | null => {
+    let last: TlEntry | null = null;
+    tl.forEach(e => { if (e?.action?.includes('Reject') && e?.at) last = e; });
+    return last;
+};
+
+const engClosedDate = (tl: TlEntry[]): string | null => tlEntryDate(engCompletionEntry(tl) || engRejectEntry(tl));
 
 const statusEventDate = (t: Ticket): string | null => {
     const keyword = t.status;
     if (!keyword) return null;
-    const tl = t.timeline || [];
-    let lastMatch: { at: string } | null = null;
-    tl.forEach((entry: any) => {
+    const tl = (t.timeline || []) as TlEntry[];
+    let lastMatch: TlEntry | null = null;
+    tl.forEach((entry) => {
         if (entry && entry.action && entry.action.indexOf(keyword) !== -1 && entry.at) lastMatch = entry;
     });
     if (!lastMatch) return null;
-    return new Date((lastMatch as any).at).toLocaleDateString('en-CA');
+    return new Date((lastMatch as TlEntry).at!).toLocaleDateString('en-CA');
 };
 
 const invoiceDates = (t: Ticket): string[] => {
@@ -51,7 +88,7 @@ export const fetchMyReport = async (engId: string, from: string, to: string): Pr
     tickets.forEach(t => {
         const isW = t.call_type === 'Warranty' || t.call_type === 'Warranty Repeat' || t.call_type === 'AMC';
         if (MYRPT_DONE_STATUSES.includes(t.status)) {
-            const d = statusEventDate(t);
+            const d = engClosedDate((t.timeline || []) as TlEntry[]);
             if (d && d >= from && d <= to) { const row = ensure(d); if (isW) row.w++; else row.ow++; }
         } else if (MYRPT_PENDING_STATUSES.includes(t.status)) {
             const d = statusEventDate(t);

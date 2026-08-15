@@ -76,7 +76,7 @@ export default function FieldTasksScreen() {
         return matchSearch && matchType && matchStatus && matchEng;
     });
 
-    const openCreate = () => { setEditId(null); setForm(emptyFieldTaskForm); setModalOpen(true); };
+    const openCreate = () => { setEditId(null); setForm({ ...emptyFieldTaskForm, assigned_to: isEng ? myId : '' }); setModalOpen(true); };
     const openEdit = (t: FieldTask) => {
         setEditId(t.id);
         setForm({

@@ -18,8 +18,11 @@ export const STATUS_FLOW = [
     'Resolved By Phone',
 ];
 
-export const TICKET_DONE_STATUSES = ['Closed', 'Delivered', 'Repaired', 'Pending for Delivery', 'Resolved By Phone'];
-export const TICKET_CANCELLED_STATUSES = ['Call Cancel', 'Customer Reject'];
+// Customer Reject counts as a CLOSED (done) call — the engineer visited and gave
+// an estimate (with inspection charges), so it is real completed work, not a
+// no-work cancel. Call Cancel stays cancelled (call dropped, no work done).
+export const TICKET_DONE_STATUSES = ['Closed', 'Delivered', 'Repaired', 'Pending for Delivery', 'Resolved By Phone', 'Customer Reject'];
+export const TICKET_CANCELLED_STATUSES = ['Call Cancel'];
 
 export const isTicketClosed = (status?: string) => TICKET_DONE_STATUSES.includes(status || '');
 export const isTicketCancelled = (status?: string) => TICKET_CANCELLED_STATUSES.includes(status || '');

@@ -59,11 +59,13 @@ export default function SiteVisitsScreen() {
 
     useEffect(() => { load(); }, [load]);
 
-    const today = new Date().toLocaleDateString('en-CA');
     const active = visits.filter(v => v.status !== 'Done' && v.status !== 'Cancelled');
     const done = visits.filter(v => v.status === 'Done');
     const cancelled = visits.filter(v => v.status === 'Cancelled');
-    const doneToday = done.filter(v => v.done_date === today).length;
+    const assignedCount = visits.filter(v => v.status === 'Assigned').length;
+    const travelingCount = visits.filter(v => v.status === 'Traveling').length;
+    const reachedCount = visits.filter(v => v.status === 'Reached').length;
+    const workingCount = visits.filter(v => v.status === 'Working').length;
 
     const engineerName = (uid: string) => engineers.find(e => e.user_id === uid)?.name || '';
 
@@ -76,7 +78,7 @@ export default function SiteVisitsScreen() {
         return matchSearch && matchType && matchStatus && matchEng;
     });
 
-    const openCreate = () => { setEditId(null); setForm(emptySiteVisitForm); setModalOpen(true); };
+    const openCreate = () => { setEditId(null); setForm({ ...emptySiteVisitForm, assigned_to: isEng ? myId : '' }); setModalOpen(true); };
     const openEdit = (v: SiteVisit) => {
         setEditId(v.id);
         setForm({
@@ -173,7 +175,9 @@ export default function SiteVisitsScreen() {
     };
 
     const canAct = (v: SiteVisit) => isAdm || (isEng && String(v.assigned_to) === String(myId)) || cspMgr;
-    const canManage = (v: SiteVisit) => isAdm || isWC || cspMgr || String(v.created_by) === String(myId);
+    // Edit/Delete are admin-only (matches HTML's canManage=isAdm); Cancel is
+    // available to anyone who canAct, including the assigned engineer.
+    const canManage = (v: SiteVisit) => isAdm;
 
     const renderCard = (v: SiteVisit) => {
         const meta = SV_TYPE_META[v.visit_type] || SV_TYPE_META['Other'];
@@ -204,7 +208,7 @@ export default function SiteVisitsScreen() {
                     {canAct(v) && v.status === 'Working' && <button onClick={() => handleWorkEnd(v)} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🏁 Work End</button>}
                     {canAct(v) && v.status === 'Working' && <button onClick={() => handleStopWork(v)} style={{ border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⏹ Stop Work</button>}
                     {canManage(v) && <button onClick={() => openEdit(v)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>✏️</button>}
-                    {canManage(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
+                    {canAct(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
                     {canManage(v) && <button onClick={() => handleDelete(v)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
                 </div>
                 {(v.travel_start_at || v.reached_at || v.work_start_at || v.work_end_at || v.done_at) && (
@@ -231,9 +235,11 @@ export default function SiteVisitsScreen() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                <div style={{ background: '#fff7ed', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#c2410c', fontWeight: 700 }}>📋 Active</div><div style={{ fontSize: 20, fontWeight: 800, color: '#c2410c' }}>{active.length}</div></div>
-                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Done Today</div><div style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>{doneToday}</div></div>
-                <div style={{ background: '#eff6ff', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>🗂️ Total Done</div><div style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8' }}>{done.length}</div></div>
+                <div style={{ background: '#eff6ff', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>📌 Assigned</div><div style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8' }}>{assignedCount}</div></div>
+                <div style={{ background: '#fff7ed', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#c2410c', fontWeight: 700 }}>🚗 Traveling</div><div style={{ fontSize: 20, fontWeight: 800, color: '#c2410c' }}>{travelingCount}</div></div>
+                <div style={{ background: '#f0fdfa', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#0d9488', fontWeight: 700 }}>📍 Reached</div><div style={{ fontSize: 20, fontWeight: 800, color: '#0d9488' }}>{reachedCount}</div></div>
+                <div style={{ background: '#eef2ff', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#4338ca', fontWeight: 700 }}>🔧 Working</div><div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca' }}>{workingCount}</div></div>
+                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Done</div><div style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>{done.length}</div></div>
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>

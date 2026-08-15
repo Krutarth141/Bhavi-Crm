@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Task, Engineer } from '@/types/tasks';
-import { fetchAllTasks, fetchEngineers } from '@/services/taskService';
+import { fetchTasksForUser, fetchEngineers } from '@/services/taskService';
 
 interface UseTasksProps {
     userRole?: string;
@@ -17,7 +17,7 @@ export const useTasks = ({ userRole, userId }: UseTasksProps = {}) => {
         try {
             setLoading(true);
             setError(null);
-            const data = await fetchAllTasks();
+            const data = await fetchTasksForUser(userRole, userId);
             setTasks(data);
         } catch (err) {
             const message = (err as any).message || 'Failed to load tasks';

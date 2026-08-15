@@ -128,6 +128,7 @@ export const fetchKmReport = async (from: string, to: string, engId?: string): P
         const g = groupsMap[k];
         let opening: number | null = null, closing: number | null = null, prev: number | null = null, maxRead: number | null = null;
         let openingLoc: { lat: number; lng: number } | null = null, closingLoc: { lat: number; lng: number } | null = null;
+        let dayKm = 0;
         g.entries.forEach((l) => {
             const kmN = parseFloat(String(l.odometer_km));
             if (l.entry_type === 'opening' && opening === null && !isNaN(kmN)) opening = kmN;
@@ -136,9 +137,13 @@ export const fetchKmReport = async (from: string, to: string, engId?: string): P
             if (l.entry_type === 'closing' && !isNaN(kmN)) closing = kmN;
             if (!isNaN(kmN) && (maxRead === null || kmN > maxRead)) maxRead = kmN;
             l.segmentKm = (prev !== null && !isNaN(kmN) && kmN >= prev) ? kmN - prev : null;
+            if (l.segmentKm !== null && l.segmentKm > 0) dayKm += l.segmentKm;
             if (!isNaN(kmN)) prev = kmN;
         });
-        const totalKm = (opening !== null && maxRead !== null && maxRead >= opening) ? maxRead - opening : 0;
+        // Falls back to the sum of positive trip segments when there's no usable
+        // opening reading for the day (matches HTML: still gives a best-effort
+        // total instead of silently reporting 0 despite logged travel).
+        const totalKm = (opening !== null && maxRead !== null && maxRead >= opening) ? maxRead - opening : dayKm;
         grandKm += totalKm;
         const labelFor = (loc: { lat: number; lng: number } | null) => {
             if (!loc) return { label: '—', mapsUrl: '' };
