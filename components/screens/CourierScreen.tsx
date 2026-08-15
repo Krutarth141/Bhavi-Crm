@@ -21,7 +21,7 @@ export default function CourierScreen() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const wcId = (session?.user as any)?.id ?? '';
+  const wcId = (session?.user as any)?.email ?? '';
   const wcName = (session?.user as any)?.name ?? '';
   const todayStr = new Date().toLocaleDateString('en-CA');
 

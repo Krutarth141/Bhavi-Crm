@@ -150,11 +150,23 @@ export const markInvoiceDone = async (ticket: Ticket, invoiceNo: string, updated
     }
 };
 
-export const closeTicket = async (ticketId: string, finalRemarks?: string): Promise<{ success: boolean; error?: string }> => {
+export const closeTicket = async (ticketId: string, finalRemarks?: string, byUser?: string): Promise<{ success: boolean; error?: string }> => {
     try {
+        const { data: existing } = await supabase.from('tickets').select('timeline').eq('id', ticketId).single();
+
         const updates: any = {
             status: 'Closed',
             updated_at: new Date().toISOString(),
+            last_status_by: byUser || '',
+            // My Report / Engineer Daily Report derive a call's closed-date
+            // exclusively from timeline entries — without this, a ticket closed
+            // via this quick action would silently vanish from both reports.
+            timeline: [...(existing?.timeline || []), {
+                action: 'Status → Closed',
+                by: byUser || '',
+                at: new Date().toISOString(),
+                note: finalRemarks || undefined,
+            }],
         };
 
         if (finalRemarks) {

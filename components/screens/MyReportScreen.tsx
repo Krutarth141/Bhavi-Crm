@@ -9,7 +9,7 @@ const monthStartStr = () => todayStr().slice(0, 8) + '01';
 
 export default function MyReportScreen() {
     const { data: session } = useSession();
-    const engId = (session?.user as any)?.id ?? '';
+    const engId = (session?.user as any)?.email ?? '';
 
     const [from, setFrom] = useState(monthStartStr());
     const [to, setTo] = useState(todayStr());

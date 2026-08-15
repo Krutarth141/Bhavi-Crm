@@ -22,7 +22,7 @@ function getToday(): string {
 export default function WalkInScreen() {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
-  const currentUserId = (session?.user as any)?.id ?? '';
+  const currentUserId = (session?.user as any)?.email ?? '';
   const currentUserName = (session?.user as any)?.name ?? '';
 
   const { todayLogs, loading, refetch } = useWalkIn(currentUserRole ?? '', currentUserId);

@@ -176,7 +176,7 @@ export default function TicketsScreen() {
     if (!confirmed) return;
 
     try {
-      const result = await closeTicket(selectedTicket.id, formData.remarks);
+      const result = await closeTicket(selectedTicket.id, formData.remarks, (session?.user as any)?.name || currentUserRole || '');
       if (result.success) {
         alert('✅ Ticket closed!');
         setModalOpen(false);

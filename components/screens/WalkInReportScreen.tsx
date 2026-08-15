@@ -14,7 +14,7 @@ function getToday(): string {
 export default function WalkInReportScreen() {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType ?? '';
-  const currentUserId = (session?.user as any)?.id ?? '';
+  const currentUserId = (session?.user as any)?.email ?? '';
 
   const { fetchByDateRange } = useWalkIn(currentUserRole, currentUserId);
 
