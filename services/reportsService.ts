@@ -4,12 +4,21 @@ import { Ticket, PunchLog, DailyReport, WCDailyReport, ImportRow } from '@/types
 // ─── Tickets ─────────────────────────────────────────────────────────────────
 
 export async function fetchAllTickets(): Promise<Ticket[]> {
-    const { data, error } = await supabase
-        .from('tickets')
-        .select('*')
-        .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    let all: Ticket[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+    }
+    return all;
 }
 
 // ─── Punch Logs ──────────────────────────────────────────────────────────────

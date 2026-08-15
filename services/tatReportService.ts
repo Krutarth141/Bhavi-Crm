@@ -48,7 +48,7 @@ export const loadTatReport = async (
     from: string, to: string, engFilter: string, statusFilter: '' | 'within' | 'outside'
 ): Promise<TatReportRow[]> => {
     let data: any[] = [];
-    let from = 0;
+    let pageFrom = 0;
     const PAGE = 1000;
     while (true) {
         let q = supabase.from('tickets')
@@ -56,11 +56,11 @@ export const loadTatReport = async (
             .not('tat_date', 'is', null)
             .in('status', COMPLETION_STATUSES);
         if (engFilter) q = q.eq('assigned_to', engFilter);
-        const { data: page, error } = await q.range(from, from + PAGE - 1);
+        const { data: page, error } = await q.range(pageFrom, pageFrom + PAGE - 1);
         if (error) throw error;
         data = data.concat(page || []);
         if (!page || page.length < PAGE) break;
-        from += PAGE;
+        pageFrom += PAGE;
     }
 
     const rows: TatReportRow[] = [];
