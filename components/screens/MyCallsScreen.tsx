@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCallsService';
@@ -15,6 +15,10 @@ import WorkLogShareModal from './WorkLogShareModal';
 import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
 import { updateTicketStatus } from '@/services/engineerUpdateService';
+import {
+  fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports,
+  DrCallSummary, DailyReportRecord,
+} from '@/services/engDailyReportService';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -78,6 +82,10 @@ export default function MyCallsScreen() {
   const [searchDate, setSearchDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [searchResults, setSearchResults] = useState<typeof workLogs | null>(null);
   const [searching, setSearching] = useState(false);
+
+  // Daily Report / Past Reports — mirrors HTML's My Calls header buttons.
+  const [dailyReportOpen, setDailyReportOpen] = useState(false);
+  const [pastReportsOpen, setPastReportsOpen] = useState(false);
 
   // Ticket list — mirrors HTML's My Calls ticket cards + Update modal
   const [ticketSearch, setTicketSearch] = useState('');
@@ -456,6 +464,10 @@ export default function MyCallsScreen() {
       <div style={{ ...styles.card, marginBottom: '20px' }}>
         <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
           <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🎫 My Calls ({visibleTickets.length})</span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setPastReportsOpen(true)} style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}>🕐 Past Reports</button>
+            <button onClick={() => setDailyReportOpen(true)} style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}>📋 Daily Report</button>
+          </div>
         </div>
         <input
           type="text"
@@ -767,6 +779,13 @@ export default function MyCallsScreen() {
         <WorkLogShareModal date={shareLogs.date} logs={shareLogs.logs} name={engName} onClose={() => setShareLogs(null)} />
       )}
 
+      {dailyReportOpen && (
+        <DailyReportModal engId={engId} engName={engName} onClose={() => setDailyReportOpen(false)} />
+      )}
+      {pastReportsOpen && (
+        <PastReportsPanel engId={engId} onClose={() => setPastReportsOpen(false)} />
+      )}
+
       {updateTicket && (
         <Modal
           isOpen
@@ -822,5 +841,187 @@ export default function MyCallsScreen() {
         </Modal>
       )}
     </div>
+  );
+}
+
+// ─── Daily Report ────────────────────────────────────────────────────────────
+// Mirrors HTML's openDailyReport()/saveDailyReport() — call-summary counts
+// (auto-filled, editable), pending backlog, petrol KM and remarks. The
+// office-work/payment/review/site-visit sub-forms from HTML's monolithic
+// modal are intentionally left out — this app already has dedicated Field
+// Tasks, Payment Collection and Site Visits screens for that data.
+
+const CALL_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
+  { key: 'w_install', label: 'Warranty — Installation' },
+  { key: 'w_breakdown', label: 'Warranty — Breakdown' },
+  { key: 'w_repeat', label: 'Warranty — Repeat' },
+  { key: 'w_resolved_phone', label: 'Warranty — Resolved by Phone' },
+  { key: 'nw_breakdown', label: 'Non-Warranty — Breakdown' },
+  { key: 'nw_repeat', label: 'Non-Warranty — Repeat' },
+  { key: 'nw_delivery', label: 'Non-Warranty — Delivery' },
+  { key: 'nw_resolved_phone', label: 'Non-Warranty — Resolved by Phone' },
+  { key: 'nw_other', label: 'Non-Warranty — Other (AMC etc.)' },
+];
+
+const PENDING_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
+  { key: 'pending_parts', label: 'Pending Parts' },
+  { key: 'pending_approval', label: 'Pending Approval' },
+  { key: 'pending_other', label: 'Pending Other' },
+  { key: 'customer_reject', label: 'Customer Reject (today)' },
+];
+
+function DailyReportModal({ engId, engName, onClose }: { engId: string; engName: string; onClose: () => void }) {
+  const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [cs, setCs] = useState<DrCallSummary | null>(null);
+  const [petrolKm, setPetrolKm] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchDailyReportAutofill(engId, date).then(({ callSummary, petrolKm: km }) => {
+      setCs(callSummary);
+      setPetrolKm(km ? String(km) : '');
+      setLoading(false);
+    });
+  }, [engId, date]);
+
+  const setField = (key: keyof DrCallSummary, v: string) => {
+    setCs((prev) => (prev ? { ...prev, [key]: parseInt(v, 10) || 0 } : prev));
+  };
+
+  const wTotal = cs ? cs.w_install + cs.w_breakdown + cs.w_repeat + cs.w_resolved_phone : 0;
+  const nwTotal = cs ? cs.nw_breakdown + cs.nw_repeat + cs.nw_other + cs.nw_delivery + cs.nw_resolved_phone : 0;
+
+  const handleSave = async () => {
+    if (!cs) return;
+    setSaving(true);
+    const r = await saveDailyReportSelf({ engId, engName, date, callSummary: cs, petrolKm: parseFloat(petrolKm) || 0, remarks });
+    setSaving(false);
+    if (r.success) { alert('✅ Daily Report submitted!'); onClose(); }
+    else alert('❌ ' + r.error);
+  };
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="📋 Daily Report"
+      footer={
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading || !cs}
+            style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: (saving || loading || !cs) ? 0.6 : 1 }}
+          >
+            {saving ? 'Saving...' : '💾 Submit Report'}
+          </button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={styles.formGroup}>
+          <label style={styles.formLabel}>Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.formInput} />
+        </div>
+
+        {loading || !cs ? (
+          <div style={styles.loadingText}>Loading auto-fill...</div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>Call Summary — auto-filled, edit if needed</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px' }}>
+              {CALL_SUMMARY_FIELDS.map((f) => (
+                <div key={f.key} style={styles.formGroup}>
+                  <label style={{ ...styles.formLabel, fontSize: 11 }}>{f.label}</label>
+                  <input type="number" min={0} value={cs[f.key]} onChange={(e) => setField(f.key, e.target.value)} style={styles.formInput} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 12, fontWeight: 700, background: colors.bg, borderRadius: 8, padding: '8px 12px' }}>
+              <span style={{ color: '#1d4ed8' }}>Warranty: {wTotal}</span>
+              <span style={{ color: '#065f46' }}>Non-Warranty: {nwTotal}</span>
+              <span style={{ color: colors.text }}>Total: {wTotal + nwTotal}</span>
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 4 }}>Pending Backlog</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px' }}>
+              {PENDING_SUMMARY_FIELDS.map((f) => (
+                <div key={f.key} style={styles.formGroup}>
+                  <label style={{ ...styles.formLabel, fontSize: 11 }}>{f.label}</label>
+                  <input type="number" min={0} value={cs[f.key]} onChange={(e) => setField(f.key, e.target.value)} style={styles.formInput} />
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Petrol KM</label>
+              <input type="number" min={0} value={petrolKm} onChange={(e) => setPetrolKm(e.target.value)} style={styles.formInput} placeholder="Auto-filled from KM Tracking" />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Remarks</label>
+              <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} style={{ ...styles.formInput, resize: 'vertical' }} placeholder="Anything else worth noting..." />
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Past Reports ─────────────────────────────────────────────────────────────
+// Mirrors HTML's openPastReports() — last 30 reports, tap to share via WhatsApp.
+
+function PastReportsPanel({ engId, onClose }: { engId: string; onClose: () => void }) {
+  const [reports, setReports] = useState<DailyReportRecord[] | null>(null);
+
+  useEffect(() => { fetchPastDailyReports(engId).then(setReports); }, [engId]);
+
+  const shareReport = (r: DailyReportRecord) => {
+    const dateStr = new Date(r.report_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const cs = r.call_summary || ({} as DrCallSummary);
+    const lines = [
+      `📋 Daily Report — ${dateStr}`,
+      r.eng_name,
+      '',
+      `Warranty: ${cs.warranty_total ?? 0} | Non-Warranty: ${cs.nonwarranty_total ?? 0} | Total: ${r.total_calls ?? 0}`,
+      `Pending: ${r.pending_calls ?? 0}`,
+      r.petrol_km ? `🛣️ Petrol KM: ${r.petrol_km}` : '',
+      r.remarks ? `\n📝 ${r.remarks}` : '',
+    ].filter(Boolean);
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="🕐 Past Daily Reports">
+      {reports === null ? (
+        <div style={styles.loadingText}>Loading...</div>
+      ) : reports.length === 0 ? (
+        <div style={styles.emptyMessage}>No reports found</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {reports.map((r) => {
+            const dateStr = new Date(r.report_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+            const cs = r.call_summary || ({} as DrCallSummary);
+            return (
+              <div key={r.id} onClick={() => shareReport(r)} style={{ border: `1px solid ${colors.border}`, borderRadius: 10, padding: '12px 14px', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>📅 {dateStr}</span>
+                  <span style={{ background: '#25D366', color: '#fff', borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>📲 Share</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap', fontSize: 12 }}>
+                  <span style={{ color: '#1d4ed8' }}>📞 {cs.grand_total ?? r.total_calls ?? 0} Calls</span>
+                  {(r.pending_calls ?? 0) > 0 && <span style={{ color: '#b45309' }}>⏳ {r.pending_calls} Pending</span>}
+                  {r.petrol_km ? <span style={{ color: '#065f46' }}>🛣️ {r.petrol_km} km</span> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
 }

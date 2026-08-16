@@ -12,19 +12,11 @@ import AIWriteButton from '@/components/shared/AIWriteButton';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import PartIndentModal from '@/components/screens/tickets/PartIndentModal';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
-import { hasKmEntryToday } from '@/services/kmTrackingService';
-import { startVisit, stopVisit } from '@/services/visitStartService';
+import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
+import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel, WorkPanelState } from '@/services/visitStartService';
+import { fetchTicketById } from '@/services/engineerUpdateService';
 
 const VISIT_BLOCKED_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'];
-
-const isVisiting = (t: EngineerTicket): boolean => {
-    const tl = t.timeline || [];
-    for (let i = tl.length - 1; i >= 0; i--) {
-        if (tl[i]?.action === 'Visit Start') return true;
-        if (tl[i]?.action === 'Visit Stop') return false;
-    }
-    return false;
-};
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -37,6 +29,100 @@ const statusColor: Record<string, { bg: string; color: string }> = {
 };
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
+
+// ─── Work Start / Reached Location / Work on Hold panel ─────────────────────
+// Mirrors HTML's Visit Start / Work Start panel rendered inside openEngUpdate()
+// (index.html:6897-6992) — driven by computeWorkPanel()'s state, not local UI
+// state, so it always reflects the ticket's actual timeline.
+
+function sessInfoLine(sessions: number, totalMin: number, suffix: string): string | null {
+    if (!sessions) return null;
+    return `📋 ${sessions} session(s) done${totalMin ? ` — ${Math.floor(totalMin / 60)}h ${totalMin % 60}m ${suffix}` : ''}`;
+}
+
+function WorkPanel({
+    panel, busy, onVisitStart, onVisitStop, onWorkStart, onReachedLocation, onWorkHold,
+}: {
+    panel: WorkPanelState; busy: boolean;
+    onVisitStart: () => void; onVisitStop: () => void; onWorkStart: () => void;
+    onReachedLocation: () => void; onWorkHold: () => void;
+}) {
+    const btn = (label: string, onClick: () => void, bg: string, color: string, flex?: number) => (
+        <button onClick={onClick} disabled={busy} style={{ flex: flex ?? undefined, width: flex ? undefined : '100%', background: bg, color, border: 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {label}
+        </button>
+    );
+
+    switch (panel.kind) {
+        case 'carryin-start':
+            return <div style={{ marginBottom: 12 }}>{btn('🔧 Work Start', onWorkStart, '#059669', '#fff')}</div>;
+        case 'carryin-paused': {
+            const info = sessInfoLine(panel.sessions, panel.totalMin, 'total');
+            return (
+                <div style={{ background: '#fef9c3', border: '1.5px solid #fbbf24', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>{panel.isHold ? '⏸️ Work on Hold — Ready to resume' : '⏸️ Call Paused — ' + panel.statusLabel}</div>
+                    {info && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>{info}</div>}
+                    {btn('🔧 Resume Work', onWorkStart, '#059669', '#fff')}
+                </div>
+            );
+        }
+        case 'carryin-started':
+            return (
+                <div style={{ background: '#059669', color: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 8 }}>
+                        🔧 Work Started — {panel.wsTime}{panel.sessionNo > 1 ? ` (Session ${panel.sessionNo})` : ''}{panel.totalMin ? ` | ${Math.floor(panel.totalMin / 60)}h ${panel.totalMin % 60}m total` : ''}
+                    </div>
+                    {btn('⏸️ Work on Hold', onWorkHold, 'rgba(255,255,255,0.2)', '#fff')}
+                </div>
+            );
+        case 'onsite-start':
+            return (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                    {btn('🚗 Visit Start', onVisitStart, '#f59e0b', '#fff', 1)}
+                    {btn('🔧 Work Start', onWorkStart, '#059669', '#fff', 1)}
+                </div>
+            );
+        case 'onsite-paused': {
+            const info = sessInfoLine(panel.sessions, panel.totalMin, 'total work time');
+            return (
+                <div style={{ background: '#fef9c3', border: '1.5px solid #fbbf24', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>{panel.label}</div>
+                    {info && <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>{info}</div>}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        {btn('🚗 Visit Start', onVisitStart, '#f59e0b', '#fff', 1)}
+                        {btn('🔧 Work Start', onWorkStart, '#059669', '#fff', 1)}
+                    </div>
+                </div>
+            );
+        }
+        case 'onsite-started':
+            return (
+                <div style={{ background: '#059669', color: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 8 }}>
+                        🔧 Work Started — {panel.wsTime}{panel.sessionNo > 1 ? ` (Session ${panel.sessionNo})` : ''}
+                    </div>
+                    {btn('⏸️ Work on Hold', onWorkHold, 'rgba(255,255,255,0.2)', '#fff')}
+                </div>
+            );
+        case 'onsite-visiting':
+            return (
+                <div style={{ background: '#f59e0b', color: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700 }}>🚗 Visiting — {panel.vsTime}</span>
+                        <button onClick={onVisitStop} disabled={busy} style={{ background: '#fff', color: '#b45309', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>🛑 Stop</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={onReachedLocation} disabled={busy || panel.reachedToday} style={{ flex: 1, background: panel.reachedToday ? 'rgba(255,255,255,0.25)' : '#fff', color: panel.reachedToday ? '#fff' : '#0d9488', border: panel.reachedToday ? '1.5px solid rgba(255,255,255,0.6)' : 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                            {panel.reachedToday ? '✅ Reached' : '📍 Reached Location'}
+                        </button>
+                        {btn('🔧 Work Start', onWorkStart, '#fff', '#059669', 1)}
+                    </div>
+                </div>
+            );
+        default:
+            return null;
+    }
+}
 
 export default function EngineerUpdateScreen() {
     const { data: session } = useSession();
@@ -54,35 +140,100 @@ export default function EngineerUpdateScreen() {
     const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
     const [voidModalOpen, setVoidModalOpen] = useState(false);
     const [partIndentOpen, setPartIndentOpen] = useState(false);
-    const [visitBusy, setVisitBusy] = useState<string | null>(null);
+    const [panelBusy, setPanelBusy] = useState(false);
     const [kmGateTicket, setKmGateTicket] = useState<EngineerTicket | null>(null);
+    const [catchupTicket, setCatchupTicket] = useState<{ newTicket: EngineerTicket; skipTicketId: string } | null>(null);
+    const [reachedTicket, setReachedTicket] = useState<EngineerTicket | null>(null);
+    const [holdTicket, setHoldTicket] = useState<EngineerTicket | null>(null);
+    const [holdRemark, setHoldRemark] = useState('');
+    const [holdSaving, setHoldSaving] = useState(false);
+
+    // Refreshes the open modal's ticket in place after a panel action, without
+    // dropping the modal (mirrors HTML's closeModal()+openEngUpdate() re-open).
+    const reloadSelected = async (id: string) => {
+        const fresh = await fetchTicketById(id);
+        if (fresh) setSelected(fresh);
+        await refetch();
+    };
 
     const handleVisitStart = async (t: EngineerTicket) => {
         if (roleType === 'engineer' && t.service_type !== 'Carry In') {
+            const today = new Date().toLocaleDateString('en-CA');
+            const skipKey = `kmSkip_${engId}_${today}`;
+            let skipTicket: string | null = null;
+            try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+            if (skipTicket) { setCatchupTicket({ newTicket: t, skipTicketId: skipTicket }); return; }
             const hasOpening = await hasKmEntryToday(engId, 'opening');
             if (!hasOpening) { setKmGateTicket(t); return; }
         }
-        setVisitBusy(t.id);
+        setPanelBusy(true);
         const r = await startVisit(t, engId, userName, roleType);
-        setVisitBusy(null);
-        if (!r.success) alert('Error: ' + r.error); else await refetch();
+        setPanelBusy(false);
+        if (!r.success) alert('Error: ' + r.error); else await reloadSelected(t.id);
     };
 
     const handleVisitStop = async (t: EngineerTicket) => {
-        setVisitBusy(t.id);
+        setPanelBusy(true);
         const r = await stopVisit(t, engId, userName);
-        setVisitBusy(null);
-        if (!r.success) alert('Error: ' + r.error); else await refetch();
+        setPanelBusy(false);
+        if (!r.success) alert('Error: ' + r.error); else await reloadSelected(t.id);
     };
 
     const handleKmGateDone = async () => {
         if (!kmGateTicket) return;
         const t = kmGateTicket;
         setKmGateTicket(null);
-        setVisitBusy(t.id);
+        setPanelBusy(true);
         const r = await startVisit(t, engId, userName, roleType);
-        setVisitBusy(null);
-        if (!r.success) alert('Error: ' + r.error); else await refetch();
+        setPanelBusy(false);
+        if (!r.success) alert('Error: ' + r.error); else await reloadSelected(t.id);
+    };
+
+    const handleCatchupDone = async () => {
+        if (!catchupTicket) return;
+        const { newTicket } = catchupTicket;
+        try { window.localStorage.removeItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+        setCatchupTicket(null);
+        await handleVisitStart(newTicket);
+    };
+
+    const handleWorkStart = async (t: EngineerTicket) => {
+        setPanelBusy(true);
+        const r = await doWorkStart(t, engId, userName, roleType);
+        setPanelBusy(false);
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        alert(`Work Started! ✅ Time In: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+        await reloadSelected(t.id);
+    };
+
+    const handleReachedLocationClick = async (t: EngineerTicket) => {
+        const already = await hasArrivalKmForTicket(engId, t.id);
+        if (already) { alert('✅ Arrival KM is already recorded for this call today.'); return; }
+        setReachedTicket(t);
+    };
+
+    const handleReachedLocationDone = async (skipped?: boolean) => {
+        if (!reachedTicket) return;
+        const t = reachedTicket;
+        setReachedTicket(null);
+        const r = await recordReachedLocation(t, engId, userName, !!skipped);
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        if (skipped) { try { window.localStorage.setItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`, t.id); } catch { /* localStorage unavailable */ } }
+        alert(`📍 Reached Location saved${skipped ? '\n\n⏭️ KM skip karyu — next call na Visit Start (travel start) par farjiyat KM levase.' : ''}\n\nNow go inside and tap 🔧 Work Start when you begin work.`);
+        await reloadSelected(t.id);
+    };
+
+    const handleConfirmHold = async () => {
+        if (!holdTicket) return;
+        if (!holdRemark.trim()) { alert('Reason is mandatory!'); return; }
+        setHoldSaving(true);
+        const r = await doWorkHold(holdTicket, engId, userName, holdRemark.trim());
+        setHoldSaving(false);
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        const t = holdTicket;
+        setHoldTicket(null); setHoldRemark('');
+        alert('Work paused ✅\nYou can now go to another call.\nCome back and tap Work Start to resume.');
+        await reloadSelected(t.id);
     };
 
     const openUpdate = (ticket: EngineerTicket) => {
@@ -110,6 +261,7 @@ export default function EngineerUpdateScreen() {
     };
 
     const allowed = getAllowedStatuses(selected?.status, 'engineer', selected?.service_type, selected?.call_type, selected?.warranty_coverage);
+    const workPanel = selected ? computeWorkPanel(selected) : null;
 
     const modalFooter = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -162,24 +314,11 @@ export default function EngineerUpdateScreen() {
                                                 {t.address && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>📍 {t.address} {t.pin ? `(${t.pin})` : ''}</div>}
                                                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>{t.call_type} | {t.service_type} | JS: {t.job_sheet || '—'}</div>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginLeft: 12, flexShrink: 0 }}>
-                                                {canUpdate && (
-                                                    <button onClick={() => openUpdate(t)} style={{ padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                                                        ✏️ Update
-                                                    </button>
-                                                )}
-                                                {!VISIT_BLOCKED_STATUSES.includes(t.status || '') && (
-                                                    isVisiting(t) ? (
-                                                        <button onClick={() => handleVisitStop(t)} disabled={visitBusy === t.id} style={{ padding: '6px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: visitBusy === t.id ? 0.6 : 1 }}>
-                                                            🛑 Visit Stop
-                                                        </button>
-                                                    ) : (
-                                                        <button onClick={() => handleVisitStart(t)} disabled={visitBusy === t.id} style={{ padding: '6px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: visitBusy === t.id ? 0.6 : 1 }}>
-                                                            🚗 Visit Start
-                                                        </button>
-                                                    )
-                                                )}
-                                            </div>
+                                            {canUpdate && (
+                                                <button onClick={() => openUpdate(t)} style={{ padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginLeft: 12, flexShrink: 0 }}>
+                                                    ✏️ Update
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -197,6 +336,18 @@ export default function EngineerUpdateScreen() {
                                 <span style={{ padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600, background: statusColor[selected.status || '']?.bg || '#f3f4f6', color: statusColor[selected.status || '']?.color || '#374151' }}>{selected.status}</span>
                             </div>
                         </div>
+
+                        {!VISIT_BLOCKED_STATUSES.includes(selected.status || '') && workPanel && (
+                            <WorkPanel
+                                panel={workPanel}
+                                busy={panelBusy}
+                                onVisitStart={() => handleVisitStart(selected)}
+                                onVisitStop={() => handleVisitStop(selected)}
+                                onWorkStart={() => handleWorkStart(selected)}
+                                onReachedLocation={() => handleReachedLocationClick(selected)}
+                                onWorkHold={() => setHoldTicket(selected)}
+                            />
+                        )}
 
                         {(selected.call_type === 'Non-Warranty' || selected.call_type === 'Non-Warranty Repeat') && !selected.warranty_claim_pending && (
                             <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
@@ -295,6 +446,51 @@ export default function EngineerUpdateScreen() {
                     onClose={() => setKmGateTicket(null)}
                     onDone={handleKmGateDone}
                 />
+            )}
+            {catchupTicket && (
+                <KmCaptureModal
+                    type="arrival"
+                    engId={engId}
+                    engName={userName}
+                    ticketId={catchupTicket.skipTicketId}
+                    onClose={() => setCatchupTicket(null)}
+                    onDone={handleCatchupDone}
+                />
+            )}
+            {reachedTicket && (
+                <KmCaptureModal
+                    type="arrival"
+                    engId={engId}
+                    engName={userName}
+                    ticketId={reachedTicket.id}
+                    allowSkip
+                    onClose={() => setReachedTicket(null)}
+                    onDone={handleReachedLocationDone}
+                />
+            )}
+            {holdTicket && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>⏸️ Work on Hold</div>
+                        <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Work log will be paused. You can start another call and come back to resume this one.</div>
+                        <div style={{ marginBottom: 14 }}>
+                            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }}>Reason for hold <span style={{ color: '#dc2626' }}>*</span></label>
+                            <textarea
+                                value={holdRemark}
+                                onChange={(e) => setHoldRemark(e.target.value)}
+                                rows={3}
+                                placeholder="e.g. Customer not available, waiting for part, going to urgent call..."
+                                style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 8, padding: 10, fontSize: 13, resize: 'none', outline: 'none', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            <button onClick={() => { setHoldTicket(null); setHoldRemark(''); }} style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+                            <button onClick={handleConfirmHold} disabled={holdSaving} style={{ flex: 1, padding: 10, background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: holdSaving ? 0.6 : 1 }}>
+                                {holdSaving ? 'Saving...' : '⏸️ Put on Hold'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -8,7 +8,7 @@ import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
-import { createTicket, updateTicket, updateTicketRemarks, closeTicket } from '@/services/ticketService';
+import { createTicket, updateTicket, updateTicketRemarks, closeTicket, ensureGroupId } from '@/services/ticketService';
 import { printTicket, getBadgeStyle } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
@@ -57,6 +57,9 @@ export default function TicketsScreen() {
   const [estimateForm, setEstimateForm] = useState<EstimateForm>(emptyEstimateForm);
   const [inspCharges, setInspCharges] = useState('300');
   const [estimateSaving, setEstimateSaving] = useState(false);
+  // "Add Product (Same Customer)" — mirrors HTML's addProductForSameCustomer():
+  // links a new call to an existing one's group_id and pre-fills customer info.
+  const [groupBanner, setGroupBanner] = useState<{ groupId: string; anchor: Ticket } | null>(null);
 
   // Check if current user can edit this ticket
   const canEditTicket = (ticket: Ticket) => {
@@ -124,6 +127,33 @@ export default function TicketsScreen() {
     setModalMode('add');
     setSelectedTicket(null);
     resetForm();
+    setGroupBanner(null);
+    // Engineers creating their own call: pre-select self (mirrors HTML's
+    // openEngNewCall() auto-selecting the current engineer).
+    if (currentUserRole === 'engineer') {
+      setFormValues({ assigned_to: currentUserId, assigned_name: (session?.user as any)?.name || '' });
+    }
+    setModalOpen(true);
+  };
+
+  // Mirrors HTML's addProductForSameCustomer(): links the new call to the
+  // anchor ticket's group_id and pre-fills customer/address/brand so only
+  // the product-specific fields need filling in.
+  const handleAddProductSameCustomer = async (t: Ticket) => {
+    const r = await ensureGroupId(t);
+    if (!r.success || !r.groupId) { alert('❌ ' + (r.error || 'Could not link call group')); return; }
+    setModalMode('add');
+    setSelectedTicket(null);
+    resetForm();
+    setFormValues({
+      cname: t.cname, mobile: t.mobile, alt_mobile: t.alt_mobile || '', address: t.address || '',
+      city: t.city || '', state: t.state || 'Gujarat', pin: t.pin || '', area: t.area || '',
+      service_type: t.service_type || 'On Site', priority: t.priority || 'Normal',
+      brand_name: t.brand_name || '', wc_type: t.wc_type || 'ICP',
+      assigned_to: currentUserRole === 'engineer' ? currentUserId : (t.assigned_to || ''),
+      assigned_name: currentUserRole === 'engineer' ? ((session?.user as any)?.name || '') : (t.assigned_name || ''),
+    });
+    setGroupBanner({ groupId: r.groupId, anchor: t });
     setModalOpen(true);
   };
 
@@ -196,12 +226,6 @@ export default function TicketsScreen() {
       return;
     }
 
-    // Only admins and work controllers can assign tickets
-    if (currentUserRole === 'engineer') {
-      alert('❌ Engineers cannot create tickets');
-      return;
-    }
-
     try {
       if (modalMode === 'edit' && selectedTicket) {
         // Check authorization
@@ -221,7 +245,14 @@ export default function TicketsScreen() {
         if (!result.success) throw new Error(result.error);
         alert('✅ Updated!');
       } else {
-        const ticketData = getFormDataWithEngineerName();
+        const ticketData: Partial<Ticket> = { ...getFormDataWithEngineerName() };
+        // Engineers don't see the "Assign to Engineer" field (admin/WC only) —
+        // default the call to themselves, mirroring HTML's auto-select.
+        if (currentUserRole === 'engineer' && !ticketData.assigned_to) {
+          ticketData.assigned_to = currentUserId;
+          ticketData.assigned_name = (session?.user as any)?.name || '';
+        }
+        if (groupBanner) ticketData.group_id = groupBanner.groupId;
         console.log('Creating ticket with data:', { assigned_to: ticketData.assigned_to, assigned_name: ticketData.assigned_name, status: ticketData.status });
         const result = await createTicket(ticketData);
         if (!result.success) throw new Error(result.error);
@@ -229,6 +260,7 @@ export default function TicketsScreen() {
       }
       setModalOpen(false);
       resetForm();
+      setGroupBanner(null);
       await fetchTickets();
     } catch (err) {
       alert('❌ Error');
@@ -350,11 +382,9 @@ export default function TicketsScreen() {
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
         <h2 style={styles.sectionTitle}>{screenTitle}</h2>
-        {currentUserRole !== 'engineer' && (
-          <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
-            ➕ New Call
-          </button>
-        )}
+        <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleAddClick}>
+          ➕ New Call
+        </button>
       </div>
 
       <div style={styles.filterBar}>
@@ -412,9 +442,16 @@ export default function TicketsScreen() {
                   </td>
                   <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.assigned_name || '—'}</td>
                   <td style={styles.tableCell}>
-                    <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
-                      👁 View
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                      <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
+                        👁 View
+                      </button>
+                      {currentUserRole === 'engineer' && (
+                        <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={() => handleAddProductSameCustomer(t)}>
+                          ➕ Add Product
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -424,7 +461,7 @@ export default function TicketsScreen() {
       )}
 
       {modalOpen && (
-        <div style={styles.modalOverlay} onClick={() => setModalOpen(false)}>
+        <div style={styles.modalOverlay} onClick={() => { setModalOpen(false); setGroupBanner(null); }}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <div>
@@ -441,11 +478,16 @@ export default function TicketsScreen() {
                     🏷️ Label
                   </button>
                 )}
-                <button style={styles.closeBtn} onClick={() => setModalOpen(false)}>✕</button>
+                <button style={styles.closeBtn} onClick={() => { setModalOpen(false); setGroupBanner(null); }}>✕</button>
               </div>
             </div>
 
             <div style={styles.modalBody}>
+              {modalMode === 'add' && groupBanner && (
+                <div style={{ background: '#ecfdf5', border: '1.5px solid #6ee7b7', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#065f46' }}>
+                  🔗 Linked to Call Group <b>{groupBanner.groupId}</b> — Customer/Address/Brand same as {groupBanner.anchor.id} used (no need to re-check). Just fill in Model No, Serial No, Call Type, Problem, Description &amp; Engineer — Save creates a new ticket ID under the same group.
+                </div>
+              )}
               {modalMode === 'view' && selectedTicket?.pending_edit && (
                 <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
                   ⏳ <b>Edit Pending Approval</b> — Requested by <b>{selectedTicket.pending_edit.requested_by}</b><br />
