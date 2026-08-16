@@ -26,10 +26,48 @@ export const useInventory = () => {
                 from += PAGE;
             }
             setInventory(all);
+            checkPendingPartsAuto();
         } catch (err) {
             console.error('Failed to fetch inventory:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Mirrors HTML's checkPendingPartsAuto(): once every requested spare on a
+    // "Pending Parts" ticket is back in stock, auto-advance it to the repair
+    // stage — fire-and-forget, matches HTML's non-blocking call site.
+    const checkPendingPartsAuto = async () => {
+        try {
+            const { data: pendingTickets, error } = await supabase
+                .from('tickets')
+                .select('id, service_type, spares, timeline')
+                .eq('status', 'Pending Parts');
+            if (error || !pendingTickets) return;
+
+            for (const t of pendingTickets) {
+                const spares = t.spares || [];
+                let allAvailable = true;
+                for (const s of spares) {
+                    if (s.requested && s.code) {
+                        const { data: inv } = await supabase
+                            .from('inventory')
+                            .select('qty_in_stock')
+                            .eq('part_code', s.code);
+                        if (!inv || !inv.length || inv[0].qty_in_stock < (s.qty || 1)) {
+                            allAvailable = false;
+                            break;
+                        }
+                    }
+                }
+                if (allAvailable && spares.length) {
+                    const newStatus = t.service_type === 'Carry In' ? 'Pending Repair Carry In' : 'Pending Repair On Site';
+                    const tl = [...(t.timeline || []), { action: 'Parts Available — Auto Status Update', by: 'System', at: new Date().toISOString() }];
+                    await supabase.from('tickets').update({ status: newStatus, timeline: tl, updated_at: new Date().toISOString() }).eq('id', t.id);
+                }
+            }
+        } catch {
+            // best-effort background check — never surface errors to the user
         }
     };
 
@@ -89,6 +127,9 @@ export const useInventory = () => {
             }
             if (itemData.item_code === '') {
                 itemData.item_code = null as any;
+            }
+            if ((itemData.brand_id as any) === '') {
+                itemData.brand_id = null;
             }
 
             // When creating a new item, check for duplicate part_code

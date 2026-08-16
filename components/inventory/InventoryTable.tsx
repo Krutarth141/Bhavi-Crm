@@ -1,8 +1,10 @@
 import { InventoryItem } from '@/types/inventory';
+import { Brand } from '@/types/masters';
 import { inventoryStyles, inventoryColors } from '@/styles/inventoryStyles';
 
 interface InventoryTableProps {
     filteredInventory: InventoryItem[];
+    brands: Brand[];
     selectedIds: string[];
     onToggleOne: (id: string) => void;
     onToggleAll: (checked: boolean) => void;
@@ -15,6 +17,7 @@ interface InventoryTableProps {
 
 export function InventoryTable({
     filteredInventory,
+    brands,
     selectedIds,
     onToggleOne,
     onToggleAll,
@@ -24,6 +27,8 @@ export function InventoryTable({
     onDeleteItem,
     onOpenHistory
 }: InventoryTableProps) {
+    const brandName = (brandId: string | null) => brands.find(b => b.id === brandId)?.name || '-';
+
     return (
         <div style={inventoryStyles.card}>
             <table style={inventoryStyles.table}>
@@ -39,11 +44,14 @@ export function InventoryTable({
                         </th>
                         <th style={inventoryStyles.tableHeader}>Part Code</th>
                         <th style={inventoryStyles.tableHeader}>Item Name</th>
+                        <th style={inventoryStyles.tableHeader}>Brand</th>
                         <th style={inventoryStyles.tableHeader}>Category</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>Stock</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>Min</th>
-                        <th style={{ ...inventoryStyles.tableHeader, textAlign: 'right' }}>Price ₹</th>
+                        <th style={{ ...inventoryStyles.tableHeader, textAlign: 'right' }}>DTP ₹</th>
+                        <th style={{ ...inventoryStyles.tableHeader, textAlign: 'right' }}>MRP ₹</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>GST %</th>
+                        <th style={{ ...inventoryStyles.tableHeader, textAlign: 'right' }}>Stock Value ₹</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>Actions</th>
                     </tr>
                 </thead>
@@ -51,6 +59,12 @@ export function InventoryTable({
                     {filteredInventory.map((item) => {
                         const isLowStock = item.qty_in_stock <= item.min_stock;
                         const isOutOfStock = item.qty_in_stock <= 0;
+                        const dtp = item.purchase_price || 0;
+                        const mrp = item.unit_price || 0;
+                        // Matches HTML: falls back to MRP for the stock-value calc when DTP isn't set.
+                        const stockVal = dtp > 0
+                            ? (item.qty_in_stock || 0) * dtp * (1 + ((item.gst_pct || 0) / 100))
+                            : (item.qty_in_stock || 0) * mrp;
                         return (
                             <tr
                                 key={item.id}
@@ -74,6 +88,9 @@ export function InventoryTable({
                                     </span>
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, fontSize: '12px', color: inventoryColors.textMuted }}>
+                                    {brandName(item.brand_id)}
+                                </td>
+                                <td style={{ ...inventoryStyles.tableCell, fontSize: '12px', color: inventoryColors.textMuted }}>
                                     {item.category || '—'}
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center' }}>
@@ -89,11 +106,17 @@ export function InventoryTable({
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center', fontSize: '12px' }}>
                                     {item.min_stock}
                                 </td>
-                                <td style={{ ...inventoryStyles.tableCell, textAlign: 'right', fontWeight: 600 }}>
-                                    ₹{(item.unit_price || 0).toLocaleString()}
+                                <td style={{ ...inventoryStyles.tableCell, textAlign: 'right', fontWeight: 600, color: '#0369a1' }}>
+                                    {dtp > 0 ? `₹${dtp}` : '-'}
+                                </td>
+                                <td style={{ ...inventoryStyles.tableCell, textAlign: 'right', fontWeight: 600, color: '#065f46' }}>
+                                    ₹{mrp}
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center', fontSize: '12px' }}>
-                                    {item.gst_pct || 18}%
+                                    {item.gst_pct != null ? item.gst_pct : 18}%
+                                </td>
+                                <td style={{ ...inventoryStyles.tableCell, textAlign: 'right', fontWeight: 600 }}>
+                                    ₹{stockVal.toFixed(0)}
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center' }}>
                                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'nowrap' }}>

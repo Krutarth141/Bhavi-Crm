@@ -22,21 +22,57 @@ const statusBadgeStyle = (status: string): React.CSSProperties => {
   return { background: '#ffe4e6', color: '#be123c' };
 };
 
-// Check if TAT date is overdue
-const isOverdue = (tatDate?: string): boolean => {
-  if (!tatDate) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tat = new Date(tatDate);
-  tat.setHours(0, 0, 0, 0);
-  return tat < today;
-};
+// Hour-level TAT urgency badge — matches HTML's tatBadge(): red/amber/green
+// tiers with a countdown ("2h 15m left") or "Overdue"/"Xd left" caption.
+function TatBadge({ tatDate }: { tatDate?: string }) {
+  if (!tatDate) return <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>;
+  const isDateOnly = /T00:00:00/.test(tatDate);
+  const d = new Date(tatDate);
+  const deadline = isDateOnly ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59) : d;
+  const timeStr = isDateOnly ? 'End of Day' : deadline.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateStr = deadline.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  const label = `${dateStr} · ${timeStr}`;
+  const diff = deadline.getTime() - Date.now();
+
+  if (diff < 0) {
+    return (
+      <div>
+        <span style={{ background: '#fef2f2', color: '#dc2626', padding: '3px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>⚠️ {label}</span>
+        <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>Overdue</div>
+      </div>
+    );
+  }
+
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.round((diff % 3600000) / 60000);
+  const timeLeft = `⏰ ${hrs > 0 ? `${hrs}h${mins ? ` ${mins}m` : ''}` : `${mins}m`} left`;
+
+  if (hrs < 24) {
+    const bg = hrs < 2 ? '#fee2e2' : '#fef9c3';
+    const col = hrs < 2 ? '#dc2626' : '#ca8a04';
+    return (
+      <div>
+        <span style={{ background: bg, color: col, padding: '3px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>
+        <div style={{ fontSize: 10, color: col, marginTop: 2 }}>{timeLeft}</div>
+      </div>
+    );
+  }
+
+  const days = Math.floor(hrs / 24);
+  return (
+    <div>
+      <span style={{ background: '#f0fdf4', color: '#15803d', padding: '3px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>
+      <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>✅ {days}d left</div>
+    </div>
+  );
+}
 
 export default function PendingListScreen() {
   const { tickets, engineers, loading, error, refetch } = usePendingList();
 
-  const [wcTypeFilter, setWcTypeFilter] = useState<string>('');
-  const [serviceFilter, setServiceFilter] = useState<string>('');
+  // Matches HTML's defaults (window._pendingWCFilter||'CSP', _pendingServiceFilter||'On Site').
+  const [wcTypeFilter, setWcTypeFilter] = useState<string>('CSP');
+  const [serviceFilter, setServiceFilter] = useState<string>('On Site');
   const [brandFilter, setBrandFilter] = useState<string>('');
   const [searchText, setSearchText] = useState<string>('');
 
@@ -48,10 +84,16 @@ export default function PendingListScreen() {
       if (brandFilter && !t.brand_name?.toLowerCase().includes(brandFilter.toLowerCase())) return false;
       if (searchText) {
         const q = searchText.toLowerCase();
+        // Matches HTML's search scope: cname, mobile, pin, area, model, serial, id, assigned_name.
         const matches =
-          t.id.toLowerCase().includes(q) ||
           t.cname.toLowerCase().includes(q) ||
-          t.mobile.includes(q);
+          t.mobile.includes(q) ||
+          (t.pin || '').toLowerCase().includes(q) ||
+          (t.area || '').toLowerCase().includes(q) ||
+          t.model.toLowerCase().includes(q) ||
+          t.serial.toLowerCase().includes(q) ||
+          t.id.toLowerCase().includes(q) ||
+          (t.assigned_name || '').toLowerCase().includes(q);
         if (!matches) return false;
       }
       return true;
@@ -269,6 +311,8 @@ interface TicketRow {
   wc_type?: string;
   tat_date?: string;
   sequence_no?: number;
+  problem?: string;
+  remarks?: string;
 }
 
 interface Engineer {
@@ -306,6 +350,7 @@ function TicketTable({ tickets, engineers, onEngineerChange, onStatusChange }: T
             <th style={styles.tableHeader}>Customer</th>
             <th style={styles.tableHeader}>Mobile</th>
             <th style={styles.tableHeader}>Brand/Model</th>
+            <th style={styles.tableHeader}>Problem</th>
             <th style={styles.tableHeader}>Area/PIN</th>
             <th style={styles.tableHeader}>Status</th>
             <th style={styles.tableHeader}>Engineer</th>
@@ -315,7 +360,6 @@ function TicketTable({ tickets, engineers, onEngineerChange, onStatusChange }: T
         </thead>
         <tbody>
           {tickets.map((t) => {
-            const overdue = isOverdue(t.tat_date);
             return (
               <tr
                 key={t.id}
@@ -348,6 +392,16 @@ function TicketTable({ tickets, engineers, onEngineerChange, onStatusChange }: T
                 {/* Brand/Model */}
                 <td style={styles.tableCell}>
                   {t.brand_name} {t.model}
+                </td>
+
+                {/* Problem / Remarks */}
+                <td style={{ ...styles.tableCell, fontSize: '12px', maxWidth: 180 }}>
+                  <div>{t.problem || '—'}</div>
+                  {t.remarks && (
+                    <div style={{ marginTop: 2, padding: '2px 6px', background: '#fef3c7', borderRadius: 4, color: '#92400e', fontSize: 11 }}>
+                      {t.remarks}
+                    </div>
+                  )}
                 </td>
 
                 {/* Area/PIN */}
@@ -388,18 +442,8 @@ function TicketTable({ tickets, engineers, onEngineerChange, onStatusChange }: T
                 </td>
 
                 {/* TAT Date */}
-                <td
-                  style={{
-                    ...styles.tableCell,
-                    fontSize: '12px',
-                    color: overdue ? colors.danger : colors.text,
-                    fontWeight: overdue ? 600 : 400,
-                  }}
-                >
-                  {t.tat_date
-                    ? new Date(t.tat_date).toLocaleDateString()
-                    : '—'}
-                  {overdue && ' ⚠️'}
+                <td style={{ ...styles.tableCell, fontSize: '12px' }}>
+                  <TatBadge tatDate={t.tat_date} />
                 </td>
 
                 {/* Status inline dropdown */}

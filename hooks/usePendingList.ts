@@ -20,6 +20,8 @@ interface PendingTicket {
     wc_type?: string;
     tat_date?: string;
     sequence_no?: number;
+    problem?: string;
+    remarks?: string;
 }
 
 interface Engineer {
@@ -36,6 +38,8 @@ const CLOSED_STATUSES = [
     'Repaired',
     'Call Cancel',
     'Customer Reject',
+    'Resolved By Phone',
+    'Pending for Delivery',
 ];
 
 export function usePendingList() {
@@ -53,7 +57,7 @@ export function usePendingList() {
                 const { data: page, error: ticketsError } = await supabase
                     .from('tickets')
                     .select(
-                        'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,tat_date'
+                        'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,tat_date,problem,remarks'
                     )
                     .not('status', 'in', `(${CLOSED_STATUSES.map((s) => `"${s}"`).join(',')})`)
                     .order('created_at', { ascending: false })

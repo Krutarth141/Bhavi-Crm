@@ -49,6 +49,7 @@ export default function InventoryScreen() {
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
+    const [stockFilter, setStockFilter] = useState<'' | 'low' | 'out'>('');
 
     // Filtered Data
     const filteredInventory = useMemo(() => {
@@ -61,9 +62,14 @@ export default function InventoryScreen() {
 
             const matchesCategory = !selectedCategory || item.category === selectedCategory;
 
-            return matchesSearch && matchesCategory;
+            const matchesStock =
+                !stockFilter ||
+                (stockFilter === 'low' && item.qty_in_stock > 0 && item.qty_in_stock <= item.min_stock) ||
+                (stockFilter === 'out' && item.qty_in_stock <= 0);
+
+            return matchesSearch && matchesCategory && matchesStock;
         });
-    }, [inventory, searchTerm, selectedCategory]);
+    }, [inventory, searchTerm, selectedCategory, stockFilter]);
 
     const toggleSelectOne = (id: string) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -84,9 +90,11 @@ export default function InventoryScreen() {
                 item_name: '',
                 item_code: '',
                 part_code: '',
+                brand_id: null,
                 category: '',
                 qty_in_stock: 0,
                 min_stock: 0,
+                purchase_price: 0,
                 unit_price: 0,
                 gst_pct: 18,
                 description: '',
@@ -277,6 +285,8 @@ export default function InventoryScreen() {
                                 ))}
                             </select>
                             <select
+                                value={stockFilter}
+                                onChange={(e) => setStockFilter(e.target.value as '' | 'low' | 'out')}
                                 style={{
                                     padding: '10px 12px',
                                     border: '1px solid #e2e8f0',
@@ -284,9 +294,9 @@ export default function InventoryScreen() {
                                     fontSize: '14px',
                                 }}
                             >
-                                <option>Sort: A-Z</option>
-                                <option>Sort: Low Stock</option>
-                                <option>Sort: Price High</option>
+                                <option value="">All Stock</option>
+                                <option value="low">Low Stock</option>
+                                <option value="out">Out of Stock</option>
                             </select>
                             <button
                                 onClick={() => openAddForm()}
@@ -305,7 +315,6 @@ export default function InventoryScreen() {
                         </div>
 
                         {/* Results */}
-                        {/* Results */}
                         <div style={{ marginBottom: '8px', fontSize: '13px', color: '#64748b' }}>
                             Showing {filteredInventory.length} of {inventory.length} items
                         </div>
@@ -317,6 +326,7 @@ export default function InventoryScreen() {
             {activeTab === 'stock' && (
                 <InventoryTable
                     filteredInventory={filteredInventory}
+                    brands={brands}
                     selectedIds={selectedIds}
                     onToggleOne={toggleSelectOne}
                     onToggleAll={toggleSelectAll}
@@ -334,6 +344,7 @@ export default function InventoryScreen() {
                 showViewModal={modalMode === 'view'}
                 showStockTransactionModal={showStockTransactionModal}
                 selectedItem={selectedItem}
+                brands={brands}
                 formData={formData}
                 transactionData={transactionData}
                 transactionType={transactionType}

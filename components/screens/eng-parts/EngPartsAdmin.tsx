@@ -29,6 +29,9 @@ interface Props {
   engineers: string[];
   pendingRequests: PartRequest[];
   onRefetch: () => void;
+  // HTML: isEng && isCspMgr → show ONLY the Pending Requests tab (with an
+  // info banner), no KPI bar / action buttons / other admin tabs.
+  cspManagerMode?: boolean;
 }
 
 export default function EngPartsAdmin({
@@ -38,11 +41,12 @@ export default function EngPartsAdmin({
   engineers,
   pendingRequests,
   onRefetch,
+  cspManagerMode,
 }: Props) {
   const { data: session } = useSession();
   const approvedBy = (session?.user as any)?.name ?? 'Admin';
 
-  const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
+  const [activeTab, setActiveTab] = useState<AdminTabType>(cspManagerMode ? 'pending' : 'overview');
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [search, setSearch] = useState('');
 
@@ -140,68 +144,78 @@ export default function EngPartsAdmin({
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
 
       {/* KPI Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-        {[
-          { label: 'Total Parts', value: inventory.length },
-          { label: 'Engineers with Stock', value: engineers.length },
-          { label: 'Office Stock Value', value: `₹${officeStockValue.toFixed(0)}` },
-          { label: 'Field Stock Value', value: `₹${fieldStockValue.toFixed(0)}` },
-        ].map(kpi => (
-          <div key={kpi.label} style={{ ...styles.card, textAlign: 'center' as const }}>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{kpi.value}</div>
-            <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>{kpi.label}</div>
-          </div>
-        ))}
-      </div>
+      {!cspManagerMode && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+          {[
+            { label: 'Total Parts', value: inventory.length },
+            { label: 'Engineers with Stock', value: engineers.length },
+            { label: 'Office Stock Value', value: `₹${officeStockValue.toFixed(0)}` },
+            { label: 'Field Stock Value', value: `₹${fieldStockValue.toFixed(0)}` },
+          ].map(kpi => (
+            <div key={kpi.label} style={{ ...styles.card, textAlign: 'center' as const }}>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{kpi.value}</div>
+              <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>{kpi.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
-        <button
-          style={{ ...styles.btn, ...styles.btnPrimary }}
-          onClick={() => setActiveModal('issue')}
-        >
-          📤 Issue to Engineer
-        </button>
-        <button
-          style={{ ...styles.btn, backgroundColor: colors.warning, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-          onClick={() => setActiveModal('use')}
-        >
-          🔧 Record Usage
-        </button>
-        <button
-          style={{ ...styles.btn, backgroundColor: colors.success, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-          onClick={() => setActiveModal('return')}
-        >
-          ↩️ Engineer Return
-        </button>
-        <button
-          style={{ ...styles.btn, ...styles.btnOutline }}
-          onClick={() => setActiveModal('warranty')}
-        >
-          🔄 Warranty Return
-        </button>
-        <button
-          style={{ ...styles.btn, backgroundColor: '#4338ca', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-          onClick={() => setActiveModal('directWarranty')}
-        >
-          🎁 Direct Warranty Issue
-        </button>
-      </div>
+      {!cspManagerMode && (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
+          <button
+            style={{ ...styles.btn, ...styles.btnPrimary }}
+            onClick={() => setActiveModal('issue')}
+          >
+            📤 Issue to Engineer
+          </button>
+          <button
+            style={{ ...styles.btn, backgroundColor: colors.warning, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+            onClick={() => setActiveModal('use')}
+          >
+            🔧 Record Usage
+          </button>
+          <button
+            style={{ ...styles.btn, backgroundColor: colors.success, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+            onClick={() => setActiveModal('return')}
+          >
+            ↩️ Engineer Return
+          </button>
+          <button
+            style={{ ...styles.btn, ...styles.btnOutline }}
+            onClick={() => setActiveModal('warranty')}
+          >
+            🔄 Warranty Return
+          </button>
+          <button
+            style={{ ...styles.btn, backgroundColor: '#4338ca', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+            onClick={() => setActiveModal('directWarranty')}
+          >
+            🎁 Direct Warranty Issue
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ ...styles.card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px' }}>
-          {tabs.map(tab => (
-            <button key={tab.key} style={tabStyle(tab.key)} onClick={() => setActiveTab(tab.key)}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {cspManagerMode ? (
+          <div style={{ padding: '12px 16px', backgroundColor: colors.primaryLight, borderBottom: `1px solid ${colors.border}`, fontSize: '13px', color: colors.text }}>
+            ℹ️ Manager access — approve/reject any engineer&apos;s Parts Request (Receive or Return).
+          </div>
+        ) : (
+          <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px' }}>
+            {tabs.map(tab => (
+              <button key={tab.key} style={tabStyle(tab.key)} onClick={() => setActiveTab(tab.key)}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ padding: '16px' }}>
 
           {/* ── Stock Overview ── */}
-          {activeTab === 'overview' && (
+          {!cspManagerMode && activeTab === 'overview' && (
             <>
               <div style={styles.filterBar}>
                 <input
@@ -259,7 +273,7 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Engineer Analysis ── */}
-          {activeTab === 'analysis' && (
+          {!cspManagerMode && activeTab === 'analysis' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
               {engineers.map(eng => {
                 const parts = engStock.filter(s => s.owner === eng);
@@ -316,7 +330,7 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Pending Approvals ── */}
-          {activeTab === 'pending' && (
+          {(cspManagerMode || activeTab === 'pending') && (
             pendingRequests.length === 0 ? (
               <div style={styles.emptyMessage}>No pending requests</div>
             ) : (
@@ -376,12 +390,12 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Warranty Pending ── */}
-          {activeTab === 'warranty-pending' && (
+          {!cspManagerMode && activeTab === 'warranty-pending' && (
             <WarrantyPendingTab inventory={inventory} />
           )}
 
           {/* ── Log ── */}
-          {activeTab === 'log' && (
+          {!cspManagerMode && activeTab === 'log' && (
             <div style={{ overflowX: 'auto' as const }}>
               <table style={styles.table}>
                 <thead>
@@ -429,7 +443,7 @@ export default function EngPartsAdmin({
       </div>
 
       {/* Modals */}
-      {activeModal === 'issue' && (
+      {!cspManagerMode && activeModal === 'issue' && (
         <IssueModal
           engineers={engineers}
           inventory={inventory}
@@ -437,7 +451,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {activeModal === 'use' && (
+      {!cspManagerMode && activeModal === 'use' && (
         <UseModal
           engineers={engineers}
           engStock={engStock}
@@ -446,7 +460,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {activeModal === 'return' && (
+      {!cspManagerMode && activeModal === 'return' && (
         <ReturnModal
           mode="return"
           engineers={engineers}
@@ -456,7 +470,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {activeModal === 'warranty' && (
+      {!cspManagerMode && activeModal === 'warranty' && (
         <ReturnModal
           mode="warranty"
           engineers={engineers}
@@ -466,7 +480,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {activeModal === 'directWarranty' && (
+      {!cspManagerMode && activeModal === 'directWarranty' && (
         <DirectWarrantyIssueModal
           engineers={engineers}
           inventory={inventory}

@@ -1,6 +1,7 @@
 'use client';
 
 import { InventoryItem, TransactionData } from '@/types/inventory';
+import { Brand } from '@/types/masters';
 import Modal from '@/components/Modal';
 
 interface InventoryModalsProps {
@@ -8,6 +9,7 @@ interface InventoryModalsProps {
     showViewModal: boolean;
     showStockTransactionModal: boolean;
     selectedItem: InventoryItem | null;
+    brands: Brand[];
     formData: any;
     transactionData: TransactionData;
     transactionType: 'in' | 'out' | 'sell';
@@ -27,6 +29,7 @@ export function InventoryModals({
     showViewModal,
     showStockTransactionModal,
     selectedItem,
+    brands,
     formData,
     transactionData,
     transactionType,
@@ -40,6 +43,14 @@ export function InventoryModals({
     onSaveForm,
     onSaveTransaction,
 }: InventoryModalsProps) {
+    const dtpPreview = (() => {
+        const dtp = Number(formData.purchase_price) || 0;
+        const gst = Number(formData.gst_pct) || 0;
+        if (dtp <= 0) return '—';
+        const total = dtp * (1 + gst / 100);
+        return `₹${dtp.toFixed(0)} + ${gst}% = ₹${total.toFixed(0)}`;
+    })();
+
     return (
         <>
             {/* Add/Edit Inventory Modal */}
@@ -91,6 +102,13 @@ export function InventoryModals({
                         />
                     </div>
                     <div className="form-group">
+                        <label>Brand</label>
+                        <select name="brand_id" value={formData.brand_id || ''} onChange={onFormChange}>
+                            <option value="">All Brands</option>
+                            {brands.map(b => (<option key={b.id} value={b.id}>{b.name}</option>))}
+                        </select>
+                    </div>
+                    <div className="form-group">
                         <label>Category / Model No</label>
                         <input
                             type="text"
@@ -123,7 +141,18 @@ export function InventoryModals({
                         />
                     </div>
                     <div className="form-group">
-                        <label>Unit Price ₹</label>
+                        <label>Purchase Price (DTP) ₹</label>
+                        <input
+                            type="number"
+                            name="purchase_price"
+                            value={formData.purchase_price || 0}
+                            onChange={onFormChange}
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label>Unit Price (MRP) ₹</label>
                         <input
                             type="number"
                             name="unit_price"
@@ -144,6 +173,9 @@ export function InventoryModals({
                             max="100"
                             step="0.01"
                         />
+                    </div>
+                    <div className="form-group" style={{ gridColumn: '1/-1', fontSize: '12px', color: '#64748b' }}>
+                        DTP + GST total: <strong>{dtpPreview}</strong>
                     </div>
                     <div className="form-group" style={{ gridColumn: '1/-1' }}>
                         <label>Description</label>
@@ -175,11 +207,24 @@ export function InventoryModals({
                             <DetailRow label="Item Code" value={selectedItem.item_code} />
                             <DetailRow label="Part Code" value={selectedItem.part_code || '—'} />
                             <DetailRow label="Item Name" value={selectedItem.item_name} />
+                            <DetailRow label="Brand" value={brands.find(b => b.id === selectedItem.brand_id)?.name || '—'} />
                             <DetailRow label="Category" value={selectedItem.category || '—'} />
                             <DetailRow label="Stock Qty" value={selectedItem.qty_in_stock} />
                             <DetailRow label="Min Stock" value={selectedItem.min_stock} />
-                            <DetailRow label="Unit Price" value={`₹${(selectedItem.unit_price || 0).toLocaleString()}`} />
-                            <DetailRow label="Brand" value={selectedItem.brand_id || '—'} />
+                            <DetailRow label="Purchase Price (DTP)" value={selectedItem.purchase_price ? `₹${selectedItem.purchase_price.toLocaleString()}` : '—'} />
+                            <DetailRow label="Unit Price (MRP)" value={`₹${(selectedItem.unit_price || 0).toLocaleString()}`} />
+                            <DetailRow label="GST %" value={`${selectedItem.gst_pct != null ? selectedItem.gst_pct : 18}%`} />
+                            <DetailRow
+                                label="Stock Value"
+                                value={(() => {
+                                    const dtp = selectedItem.purchase_price || 0;
+                                    const mrp = selectedItem.unit_price || 0;
+                                    const val = dtp > 0
+                                        ? (selectedItem.qty_in_stock || 0) * dtp * (1 + ((selectedItem.gst_pct || 0) / 100))
+                                        : (selectedItem.qty_in_stock || 0) * mrp;
+                                    return `₹${val.toFixed(0)}`;
+                                })()}
+                            />
                         </div>
                         <div>
                             <strong>Description:</strong> {selectedItem.description || '—'}

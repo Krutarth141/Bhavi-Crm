@@ -1,16 +1,29 @@
+import { useEffect, useState } from 'react';
 import { InventoryItem } from '@/types/inventory';
+import { fetchPurchases } from '@/services/inventoryPurchaseService';
+import { fetchSales } from '@/services/inventorySaleService';
 
 interface InventoryStatsProps {
     inventory: InventoryItem[];
 }
 
 export function InventoryStats({ inventory }: InventoryStatsProps) {
+    const [totalPurchaseVal, setTotalPurchaseVal] = useState(0);
+    const [totalSaleVal, setTotalSaleVal] = useState(0);
+
+    useEffect(() => {
+        Promise.all([fetchPurchases(), fetchSales()]).then(([purchases, sales]) => {
+            setTotalPurchaseVal(purchases.reduce((a, p) => a + (p.qty || 0) * (p.unit_cost || 0), 0));
+            setTotalSaleVal(sales.reduce((a, s) => a + (s.qty || 0) * (s.unit_price || 0), 0));
+        });
+    }, []);
+
     const stats = {
         totalItems: inventory.length,
         lowStockItems: inventory.filter(item => item.qty_in_stock > 0 && item.qty_in_stock <= item.min_stock).length,
         outOfStock: inventory.filter(item => item.qty_in_stock <= 0).length,
-        totalValue: inventory.reduce((sum, item) => sum + (item.qty_in_stock * item.unit_price), 0),
-        avgStockLevel: inventory.length > 0 ? Math.round(inventory.reduce((sum, item) => sum + item.qty_in_stock, 0) / inventory.length) : 0,
+        // Matches HTML: falls back to unit_price (MRP) when purchase_price (DTP) isn't set.
+        stockVal: inventory.reduce((a, i) => a + (i.qty_in_stock || 0) * ((i.purchase_price || i.unit_price || 0)) * (1 + ((i.gst_pct || 0) / 100)), 0),
     };
 
     return (
@@ -21,35 +34,37 @@ export function InventoryStats({ inventory }: InventoryStatsProps) {
             marginBottom: '16px',
         }}>
             <StatCard
-                label="Total Items"
+                label="Total Parts"
                 value={stats.totalItems}
                 color="#3b82f6"
                 background="#f0f9ff"
             />
             <StatCard
-                label="Low Stock"
-                value={stats.lowStockItems}
-                color="#f59e0b"
-                background="#fef3c7"
-            />
-            <StatCard
-                label="Out of Stock"
-                value={stats.outOfStock}
-                color="#dc2626"
-                background="#fee2e2"
-            />
-            <StatCard
-                label="Avg Stock Level"
-                value={stats.avgStockLevel}
+                label="Stock Value (with GST)"
+                value={`₹${stats.stockVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                 color="#10b981"
                 background="#f0fdf4"
+                valueSize="16px"
             />
             <StatCard
-                label="Total Value ₹"
-                value={`₹${stats.totalValue.toLocaleString()}`}
-                color="#ec4899"
-                background="#fce7f3"
+                label="Total Purchase"
+                value={`₹${totalPurchaseVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                color="#1d4ed8"
+                background="#eff6ff"
                 valueSize="16px"
+            />
+            <StatCard
+                label="Total Sales"
+                value={`₹${totalSaleVal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                color="#7c3aed"
+                background="#f5f3ff"
+                valueSize="16px"
+            />
+            <StatCard
+                label="Low / Out"
+                value={`${stats.lowStockItems} / ${stats.outOfStock}`}
+                color="#f59e0b"
+                background="#fef3c7"
             />
         </div>
     );
