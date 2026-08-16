@@ -1,7 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import { PaymentTicket, PcBreakdown } from '@/types/paymentCollection';
 
-export const fetchPaymentCollectionTickets = async (myId: string, canManage: boolean): Promise<PaymentTicket[]> => {
+// Matches HTML's renderPaymentCollection: when the payment_received columns
+// haven't been added to `tickets` yet, PostgREST's error mentions the column
+// name — surface that as setupNeeded instead of a generic empty state.
+export const fetchPaymentCollectionTickets = async (
+    myId: string, canManage: boolean
+): Promise<{ tickets: PaymentTicket[]; setupNeeded: boolean }> => {
     try {
         let q = supabase.from('tickets')
             .select('id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, invoice_done, invoice_no')
@@ -10,8 +15,12 @@ export const fetchPaymentCollectionTickets = async (myId: string, canManage: boo
         if (!canManage) q = q.eq('assigned_to', myId);
         const { data, error } = await q;
         if (error) throw error;
-        return data || [];
-    } catch (err) { console.error('fetchPaymentCollectionTickets:', err); return []; }
+        return { tickets: data || [], setupNeeded: false };
+    } catch (err: any) {
+        console.error('fetchPaymentCollectionTickets:', err);
+        const setupNeeded = String(err?.message || '').indexOf('payment_received') !== -1;
+        return { tickets: [], setupNeeded };
+    }
 };
 
 // Same fallback chain as HTML's _pcBreakdown(): final_charges wins when set,
@@ -28,7 +37,7 @@ export const pcAmount = (t: PaymentTicket): number => pcBreakdown(t).total;
 
 export const markPaymentReceived = async (
     ticketId: string, received: boolean, receivedBy: string
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; setupNeeded?: boolean }> => {
     try {
         const patch = received
             ? { payment_received: true, payment_received_at: new Date().toISOString(), payment_received_by: receivedBy }
@@ -36,7 +45,10 @@ export const markPaymentReceived = async (
         const { error } = await supabase.from('tickets').update(patch).eq('id', ticketId);
         if (error) throw error;
         return { success: true };
-    } catch (err) { return { success: false, error: (err as any).message }; }
+    } catch (err: any) {
+        const message = err?.message || '';
+        return { success: false, error: message, setupNeeded: String(message).indexOf('payment_received') !== -1 };
+    }
 };
 
 export const savePaymentInvoice = async (

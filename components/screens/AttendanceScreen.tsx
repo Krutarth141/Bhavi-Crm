@@ -30,7 +30,7 @@ export default function AttendanceScreen() {
     const [editLog, setEditLog] = useState<PunchLog | null>(null);
     const [requestLog, setRequestLog] = useState<PunchLog | null>(null);
 
-    const { logs, shiftMap, employees, loading, error, verify, refetch } = useAttendance({
+    const { logs, shiftMap, employees, loading, error, verify, rejectPunch, refetch } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
 
@@ -49,10 +49,25 @@ export default function AttendanceScreen() {
         setApplied({ from: f, to: todayStr(), empFilter });
     };
 
-    const handleVerify = async (id: string) => {
-        const remark = prompt('Verification remark (optional):');
+    // Rich context prompt matching HTML's verifyPunchLog() — used both by the
+    // top-of-page Pending Punch Approvals section and the inline table button.
+    const handleVerify = async (log: PunchLog) => {
+        const info = (log.is_next_day ? '⚠️ NEXT DAY PUNCH OUT\n' : '⚠️ LATE PUNCH OUT\n')
+            + `Engineer: ${log.eng_name}\n`
+            + `Punch In: ${log.punch_in_date} ${log.punch_in_time}\n`
+            + `Punch Out: ${log.punch_out_date || log.punch_in_date} ${log.punch_out_time}\n`
+            + `Engineer Reason: ${log.late_remark || '—'}\n\nAdmin Remark (approval note):`;
+        const remark = prompt(info);
         if (remark === null) return;
-        const result = await verify(id, remark, adminName);
+        const result = await verify(log.id, remark, adminName);
+        if (!result.success) alert('Error: ' + result.error);
+    };
+
+    const handleRejectPunch = async (log: PunchLog) => {
+        const reason = prompt('Reason for rejecting this punch-out? (required)');
+        if (reason === null) return;
+        if (!reason.trim()) { alert('A reason is required to reject.'); return; }
+        const result = await rejectPunch(log.id, reason.trim(), adminName);
         if (!result.success) alert('Error: ' + result.error);
     };
 
@@ -102,6 +117,10 @@ export default function AttendanceScreen() {
             : null;
         return { totalDays, totalWorkMins, totalOTMins, lateCount, officeMins, shortfallMins, adjustMins, leaves };
     }, [logs, shiftMap, isAdmin, applied, myId]);
+
+    // Pending Punch Approvals — admin/CSP-manager only, matches HTML's
+    // renderPunchApprovalSection(). Scoped to the currently loaded date range.
+    const pendingApprovals = useMemo(() => logs.filter(l => l.status === 'late_pending'), [logs]);
 
     const tiles = [
         { value: String(summary.totalDays), label: 'Days Present', bg: '#eff6ff', color: '#1d4ed8' },
@@ -167,6 +186,30 @@ export default function AttendanceScreen() {
                     </div>
                 ))}
             </div>
+
+            {isAdmin && pendingApprovals.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                    <h2 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#92400e' }}>⏳ Pending Punch Approvals ({pendingApprovals.length})</h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {pendingApprovals.map(l => (
+                            <div key={l.id} style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                <div style={{ fontSize: 12 }}>
+                                    <b>{l.eng_name}</b> — {l.is_next_day ? '⚠️ Next Day Punch Out' : '⚠️ Late Punch Out'}
+                                    <div style={{ color: '#6b7280', marginTop: 2 }}>
+                                        In: {l.punch_in_date} {l.punch_in_time} &nbsp;•&nbsp; Out: {l.punch_out_date || l.punch_in_date} {l.punch_out_time}
+                                        {l.late_remark && <> &nbsp;•&nbsp; Reason: <i>{l.late_remark}</i></>}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={() => handleVerify(l)} style={{ padding: '4px 10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✅ Approve</button>
+                                    <button onClick={() => setEditLog(l)} style={{ padding: '4px 10px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✏️ Correction</button>
+                                    <button onClick={() => handleRejectPunch(l)} style={{ padding: '4px 10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>❌ Reject</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <LeaveSection myId={myId} myName={adminName} myRole={role} canApprove={isAdmin} isAdminPure={role === 'admin'} reviewerName={adminName} />
 

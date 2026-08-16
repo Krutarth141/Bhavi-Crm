@@ -6,13 +6,13 @@ import { useAMC } from '@/hooks/useAMC';
 import { fetchCompanyInfo } from '@/services/settingsService';
 import AMCTable from '@/components/screens/amc/AMCTable';
 import AMCFormModal from '@/components/screens/amc/AMCFormModal';
-import { AMCFormData, AMCContract, emptyAMCForm, isExpired, isExpiringSoon, todayStr } from '@/types/amc';
+import { AMCFormData, AMCContract, emptyAMCForm, isExpired, isExpiringSoon } from '@/types/amc';
 
 export default function AMCScreen() {
     const { data: session } = useSession();
     const adminName = (session?.user as any)?.name ?? 'Admin';
 
-    const { contracts, loading, error, active, expiring, expired, refetch, create, update, remove } = useAMC();
+    const { contracts, loading, error, active, expiring, expired, revenue, refetch, create, update, remove } = useAMC();
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -21,7 +21,7 @@ export default function AMCScreen() {
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
-    const [form, setForm] = useState<AMCFormData>({ ...emptyAMCForm, amc_start: todayStr() });
+    const [form, setForm] = useState<AMCFormData>({ ...emptyAMCForm });
 
     const filtered = contracts.filter((c: AMCContract) => {
         const q = search.toLowerCase();
@@ -41,7 +41,7 @@ export default function AMCScreen() {
         setEditingId(null);
         setModalTitle('➕ Add AMC Contract');
         setSaveLabel('💾 Save Contract');
-        setForm({ ...emptyAMCForm, amc_start: todayStr() });
+        setForm({ ...emptyAMCForm });
         setModalOpen(true);
     };
 
@@ -81,12 +81,16 @@ export default function AMCScreen() {
     };
 
     const handleSave = async () => {
-        if (!form.customer_name.trim()) { alert('Customer name required'); return; }
+        if (!form.customer_name.trim() || !form.mobile.trim() || !form.amc_start || !form.amc_end) {
+            alert('Please fill Customer Name, Mobile, Start and End dates.');
+            return;
+        }
         setSaving(true);
         const result = editingId ? await update(editingId, form) : await create(form, adminName);
         if (result.success) {
+            alert('✅ AMC saved successfully!');
             setModalOpen(false);
-            setForm({ ...emptyAMCForm, amc_start: todayStr() });
+            setForm({ ...emptyAMCForm });
             setEditingId(null);
         } else {
             alert('Error: ' + result.error);
@@ -95,7 +99,7 @@ export default function AMCScreen() {
     };
 
     const handleDelete = async (id: number, name: string) => {
-        if (!confirm(`Delete AMC for "${name}"?`)) return;
+        if (!confirm('Delete this AMC contract? This cannot be undone.')) return;
         const result = await remove(id);
         if (!result.success) alert('Error: ' + result.error);
     };
@@ -140,15 +144,16 @@ export default function AMCScreen() {
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
                 {[
-                    { label: 'Total', value: contracts.length, color: '#185FA5' },
-                    { label: '✅ Active', value: active, color: '#059669' },
-                    { label: '⚠️ Expiring', value: expiring, color: '#d97706' },
-                    { label: '❌ Expired', value: expired, color: '#dc2626' },
+                    { label: 'Total', value: String(contracts.length), color: '#185FA5' },
+                    { label: '✅ Active', value: String(active), color: '#059669' },
+                    { label: '⚠️ Expiring', value: String(expiring), color: '#d97706' },
+                    { label: '❌ Expired', value: String(expired), color: '#dc2626' },
+                    { label: '💰 Total Revenue', value: `₹${revenue.toLocaleString('en-IN')}`, color: '#7c3aed' },
                 ].map(s => (
                     <div key={s.label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
                         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{s.label}</div>
                     </div>
                 ))}

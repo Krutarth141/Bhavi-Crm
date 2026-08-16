@@ -32,7 +32,25 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
-        return NextResponse.json({ logs: data ?? [] }, { status: 200 });
+        const logs = data ?? [];
+
+        // Enrich with area/service_type per ticket_id (matches HTML's per-entry
+        // 📍 area badge / 📦 Carry In badge) — skips FT/SV-prefixed ids since
+        // those aren't real tickets.
+        const ticketIds = Array.from(new Set(
+            logs.map((l: any) => l.ticket_id).filter((x: any) => x && !String(x).startsWith('FT') && !String(x).startsWith('SV'))
+        ));
+        if (ticketIds.length) {
+            const { data: tix } = await supabaseAdmin.from('tickets').select('id, area, service_type').in('id', ticketIds);
+            const tixMap: Record<string, { area?: string; service_type?: string }> = {};
+            (tix ?? []).forEach((t: any) => { tixMap[t.id] = { area: t.area, service_type: t.service_type }; });
+            logs.forEach((l: any) => {
+                const info = l.ticket_id ? tixMap[l.ticket_id] : undefined;
+                if (info) { l.area = info.area; l.service_type = info.service_type; }
+            });
+        }
+
+        return NextResponse.json({ logs }, { status: 200 });
     } catch (err) {
         console.error('work-logs route error:', err);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

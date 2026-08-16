@@ -6,12 +6,20 @@ import { useTickets } from '@/hooks/useTickets';
 import { Ticket, statusBadges } from '@/types/tickets';
 import { getBadgeStyle, printTicket } from '@/utils/printTicket';
 import { fetchTodayInquiryFollowupCount } from '@/services/dashboardService';
-import { isTicketActive, isTicketClosed, isTicketCancelled } from '@/types/ticketStatus';
+import { isTicketActive, isTicketClosed, isTicketCancelled, getAllowedStatuses } from '@/types/ticketStatus';
 import DashboardPeriodFilter, { DashPeriod } from './DashboardPeriodFilter';
 import VBarChart from './charts/VBarChart';
 import DonutChart from './charts/DonutChart';
 import KpiDetailModal from './KpiDetailModal';
 import EngineerLiveStatusTable from './EngineerLiveStatusTable';
+import { useMyCalls } from '@/hooks/useMyCalls';
+import { punchIn, punchOut } from '@/services/myCallsService';
+import { hasKmEntryToday } from '@/services/kmTrackingService';
+import { updateTicketStatus } from '@/services/engineerUpdateService';
+import PunchModal from '@/components/screens/PunchModal';
+import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
+import Modal from '@/components/Modal';
+import { colors, styles } from '@/styles/ticketsStyles';
 
 interface Props {
     role: 'admin' | 'work_controller' | 'engineer';
@@ -47,8 +55,73 @@ export default function DashboardOverview({ role }: Props) {
     const { data: session } = useSession();
     const userId = (session?.user as any)?.email;
     const loginId = ((session?.user as any)?.email || '').toUpperCase(); // holds user_id, e.g. 'ENG002'
+    const userName = (session?.user as any)?.name ?? '';
 
     const { tickets: allTickets, loading } = useTickets({ userRole: role, userId });
+
+    // Punch In/Out bar — engineers AND work controllers (matches HTML:3754).
+    const canPunch = role === 'engineer' || role === 'work_controller';
+    const { punchLog, refetch: refetchPunch } = useMyCalls(canPunch ? (userId ?? '') : '', userName);
+    const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
+    const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
+
+    const handlePunchIn = async () => {
+        const hasOpening = await hasKmEntryToday(userId ?? '', 'opening');
+        if (!hasOpening) { setKmCaptureType('opening'); return; }
+        setPunchModalMode('in');
+    };
+    const handlePunchOut = async () => {
+        const hasClosing = await hasKmEntryToday(userId ?? '', 'closing');
+        if (!hasClosing) { setKmCaptureType('closing'); return; }
+        setPunchModalMode('out');
+    };
+    const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
+        if (punchModalMode === 'in') {
+            const today = new Date().toLocaleDateString('en-CA');
+            const currentTime = new Date().toTimeString().slice(0, 5);
+            const result = await punchIn({
+                eng_id: userId ?? '', eng_name: userName, punch_in_date: today, punch_in_time: currentTime,
+                start_meter: data.meter ? Number(data.meter) : undefined, photo: data.photo, lat: data.lat, lng: data.lng,
+            });
+            if (result.success) refetchPunch();
+            return result;
+        }
+        const currentTime = new Date().toTimeString().slice(0, 5);
+        const result = await punchOut({
+            eng_id: userId ?? '', punch_out_time: currentTime, end_meter: data.meter ? Number(data.meter) : undefined,
+            photo: data.photo, lat: data.lat, lng: data.lng, lateRemark: data.remark,
+        });
+        if (result.success) refetchPunch();
+        return result;
+    };
+
+    // Ticket view→update wiring — engineers get an "Update" action (matches
+    // HTML's openEngUpdate); closed/cancelled tickets are blocked from
+    // engineer editing (matches HTML's isClosed guard).
+    const [updateTicket, setUpdateTicket] = useState<Ticket | null>(null);
+    const [updateForm, setUpdateForm] = useState({ newStatus: '', note: '', labour: '', faultCode: '' });
+    const [updateSaving, setUpdateSaving] = useState(false);
+
+    const openTicketUpdate = (t: Ticket) => {
+        if (role === 'engineer' && (isTicketClosed(t.status) || isTicketCancelled(t.status))) {
+            alert('🔒 Closed call ni details engineer ne available nathi.');
+            return;
+        }
+        setUpdateTicket(t);
+        const allowed = getAllowedStatuses(t.status, 'engineer', (t as any).service_type, (t as any).call_type, (t as any).warranty_coverage);
+        setUpdateForm({ newStatus: allowed[0] || '', note: '', labour: String((t as any).labor || (t as any).service_charges || ''), faultCode: (t as any).fault_code || '' });
+    };
+    const allowedForUpdate = updateTicket
+        ? getAllowedStatuses(updateTicket.status, 'engineer', (updateTicket as any).service_type, (updateTicket as any).call_type, (updateTicket as any).warranty_coverage)
+        : [];
+    const handleTicketUpdateSave = async () => {
+        if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
+        setUpdateSaving(true);
+        const r = await updateTicketStatus(updateTicket as any, updateForm.newStatus, updateForm.note, updateForm.labour, userName, updateForm.faultCode);
+        setUpdateSaving(false);
+        if (r.success) { setUpdateTicket(null); }
+        else alert('Error: ' + r.error);
+    };
 
     const [period, setPeriod] = useState<DashPeriod>('all');
     const [fromDate, setFromDate] = useState('');
@@ -151,6 +224,41 @@ export default function DashboardOverview({ role }: Props) {
 
     return (
         <div style={{ padding: '20px 24px' }}>
+            {canPunch && (
+                <div style={{ background: 'linear-gradient(135deg, #1a56db 0%, #1240a8 100%)', borderRadius: 10, padding: 16, color: '#fff', marginBottom: 16 }}>
+                    {!punchLog?.punch_in_time ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                            <div>
+                                <div style={{ fontSize: 16, fontWeight: 700 }}>🟢 Ready to Work</div>
+                                <div style={{ fontSize: 12, opacity: 0.85 }}>Click to start your duty</div>
+                            </div>
+                            <button onClick={handlePunchIn} style={{ padding: '9px 18px', background: '#0e9f6e', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>▶ Punch In / Work Start</button>
+                        </div>
+                    ) : !punchLog.punch_out_time ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                            <div>
+                                <div style={{ fontSize: 18, fontWeight: 700 }}>🔴 On Duty</div>
+                                <div style={{ fontSize: 12, opacity: 0.85 }}>Started: {punchLog.punch_in_time} | Meter: {punchLog.start_meter ?? '-'}</div>
+                            </div>
+                            <button onClick={handlePunchOut} style={{ padding: '9px 18px', background: colors.danger, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>⏹ Punch Out / Work Over</button>
+                        </div>
+                    ) : (
+                        <div style={{ fontSize: 15, fontWeight: 600 }}>✅ {punchLog.punch_in_time} → {punchLog.punch_out_time}</div>
+                    )}
+                </div>
+            )}
+
+            {kmCaptureType && (
+                <KmCaptureModal
+                    type={kmCaptureType} engId={userId ?? ''} engName={userName}
+                    onClose={() => setKmCaptureType(null)}
+                    onDone={() => { const mode = kmCaptureType === 'opening' ? 'in' : 'out'; setKmCaptureType(null); setPunchModalMode(mode); }}
+                />
+            )}
+            {punchModalMode && (
+                <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
+            )}
+
             <DashboardPeriodFilter
                 period={period} fromDate={fromDate} toDate={toDate}
                 resultCount={dashTix.length} periodLabel={periodLabel}
@@ -277,7 +385,11 @@ export default function DashboardOverview({ role }: Props) {
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}><span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : '-'}</td>
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
-                                        <button onClick={() => printTicket(t)} style={{ padding: '5px 10px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>View</button>
+                                        {role === 'engineer' ? (
+                                            <button onClick={() => openTicketUpdate(t)} style={{ padding: '5px 10px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Update</button>
+                                        ) : (
+                                            <button onClick={() => printTicket(t)} style={{ padding: '5px 10px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>View</button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -287,6 +399,58 @@ export default function DashboardOverview({ role }: Props) {
             </div>
 
             {kpiDetail && <KpiDetailModal title={kpiDetail.title} tickets={kpiDetail.tickets} onClose={() => setKpiDetail(null)} onView={printTicket} />}
+
+            {updateTicket && (
+                <Modal
+                    isOpen
+                    onClose={() => setUpdateTicket(null)}
+                    title={`Update — ${(updateTicket as any).cname || ''}`}
+                    footer={
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setUpdateTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                            <button
+                                onClick={handleTicketUpdateSave}
+                                disabled={updateSaving || !updateForm.newStatus}
+                                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: (updateSaving || !updateForm.newStatus) ? 0.6 : 1 }}
+                            >
+                                {updateSaving ? 'Saving...' : '💾 Save Update'}
+                            </button>
+                        </div>
+                    }
+                >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {allowedForUpdate.length > 0 ? (
+                            <>
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>New Status *</label>
+                                    <select value={updateForm.newStatus} onChange={(e) => setUpdateForm((f) => ({ ...f, newStatus: e.target.value }))} style={styles.formInput}>
+                                        <option value="">Select status...</option>
+                                        {allowedForUpdate.map((s) => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                {updateForm.newStatus === 'Closed' && (
+                                    <div style={styles.formGroup}>
+                                        <label style={styles.formLabel}>Service / Labour ₹</label>
+                                        <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                                    </div>
+                                )}
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>Fault Code</label>
+                                    <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
+                                </div>
+                                <div style={styles.formGroup}>
+                                    <label style={styles.formLabel}>Update Note</label>
+                                    <textarea value={updateForm.note} onChange={(e) => setUpdateForm((f) => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...styles.formInput, resize: 'vertical' }} />
+                                </div>
+                            </>
+                        ) : (
+                            <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, fontSize: 13, color: '#92400e' }}>
+                                ⏳ No status update available for: <strong>{updateTicket.status}</strong>
+                            </div>
+                        )}
+                    </div>
+                </Modal>
+            )}
 
             {followup && (
                 <div onClick={() => setFollowup(null)} style={{ position: 'fixed', bottom: 20, right: 20, background: '#f59e0b', color: '#fff', padding: '12px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 999, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: 280 }}>

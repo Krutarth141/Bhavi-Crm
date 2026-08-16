@@ -104,7 +104,7 @@ export default function CustomersScreen() {
                         📥 Import
                     </button>
                     <button
-                        onClick={() => exportCustomers(displayedCustomers)}
+                        onClick={() => exportCustomers(customers)}
                         style={{
                             padding: '8px 16px',
                             background: '#f3f4f6',

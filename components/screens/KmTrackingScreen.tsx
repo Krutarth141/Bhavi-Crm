@@ -28,6 +28,7 @@ export default function KmTrackingScreen() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<KmReportResult | null>(null);
     const [settingOffice, setSettingOffice] = useState(false);
+    const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true);
@@ -196,7 +197,9 @@ export default function KmTrackingScreen() {
                                                     <td style={{ padding: 8 }}>{l.captured_at ? new Date(l.captured_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                                                     <td style={{ padding: 8 }}>{TYPE_LABEL[l.entry_type] || l.entry_type}</td>
                                                     <td style={{ padding: 8 }}>
-                                                        {l.ticket_id ? (
+                                                        {l.ticket_id && String(l.ticket_id).startsWith('FT') ? (
+                                                            <span style={{ color: '#7c3aed', fontWeight: 700 }}>🚚 Other Work</span>
+                                                        ) : l.ticket_id ? (
                                                             <>
                                                                 <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{l.ticket_id}</span>
                                                                 {l.area && <div style={{ fontSize: 11, color: '#0d9488', fontWeight: 700 }}>📍 {l.area}</div>}
@@ -209,7 +212,7 @@ export default function KmTrackingScreen() {
                                                         {isAdmin && <button title="Edit reading (with remark)" onClick={() => handleEdit(l.id, l.odometer_km)} style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>✏️</button>}
                                                     </td>
                                                     <td style={{ padding: 8, textAlign: 'right', fontWeight: 700, color: '#0d9488' }}>{l.segmentKm == null ? '—' : `+${l.segmentKm} km`}</td>
-                                                    <td style={{ padding: 8, textAlign: 'center' }}>{l.photo_url ? <button onClick={() => window.open(l.photo_url as string, '_blank')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>👁️</button> : '—'}</td>
+                                                    <td style={{ padding: 8, textAlign: 'center' }}>{l.photo_url ? <button title="View odometer photo" onClick={() => setLightboxSrc(l.photo_url as string)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>👁️</button> : '—'}</td>
                                                     <td style={{ padding: 8, textAlign: 'center' }}>{l.lat && l.lng ? <a href={`https://maps.google.com/?q=${l.lat},${l.lng}`} target="_blank" rel="noreferrer">📍</a> : '—'}</td>
                                                 </tr>
                                             ))}
@@ -218,6 +221,12 @@ export default function KmTrackingScreen() {
                                 </div>
                             </div>
                         ))}
+
+            {lightboxSrc && (
+                <div onClick={() => setLightboxSrc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <img src={lightboxSrc} style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} alt="Odometer photo" />
+                </div>
+            )}
         </div>
     );
 }

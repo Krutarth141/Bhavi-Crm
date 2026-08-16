@@ -8,6 +8,10 @@ export interface WorkLog {
     eng_id: string;
     eng_name: string;
     member_role?: string;
+    ticket_id?: string | null;
+    // Server-enriched from `tickets` for the matching ticket_id.
+    area?: string;
+    service_type?: string;
 }
 
 export interface WorkLogMember {

@@ -8,7 +8,7 @@ import { isCspManager } from '@/lib/permissions';
 import { hasKmEntryToday } from '@/services/kmTrackingService';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import {
-    SiteVisit, SiteVisitFormData, emptySiteVisitForm, SV_TYPES, SV_TYPE_META, SV_STATUS_META, SV_STATUS_ORDER,
+    SiteVisit, SiteVisitFormData, emptySiteVisitForm, SV_TYPES, SV_TYPE_META, SV_STATUS_META, SV_STATUS_ORDER, SvStatus,
 } from '@/types/siteVisits';
 import {
     fetchSiteVisits, saveSiteVisit, svTravelStart, svReached, svWorkStart, svWorkEnd,
@@ -16,6 +16,10 @@ import {
 } from '@/services/siteVisitsService';
 
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' as const };
+
+const SV_SECTION_COLOR: Record<SvStatus, string> = {
+    Assigned: '#1d4ed8', Traveling: '#ea580c', Reached: '#0d9488', Working: '#b45309', Done: '#15803d', Cancelled: '#6b7280',
+};
 
 export default function SiteVisitsScreen() {
     const { data: session } = useSession();
@@ -59,13 +63,22 @@ export default function SiteVisitsScreen() {
 
     useEffect(() => { load(); }, [load]);
 
-    const active = visits.filter(v => v.status !== 'Done' && v.status !== 'Cancelled');
-    const done = visits.filter(v => v.status === 'Done');
-    const cancelled = visits.filter(v => v.status === 'Cancelled');
-    const assignedCount = visits.filter(v => v.status === 'Assigned').length;
-    const travelingCount = visits.filter(v => v.status === 'Traveling').length;
-    const reachedCount = visits.filter(v => v.status === 'Reached').length;
-    const workingCount = visits.filter(v => v.status === 'Working').length;
+    const byStatus = (s: SvStatus) => visits.filter(v => v.status === s);
+    const assigned = byStatus('Assigned');
+    const traveling = byStatus('Traveling');
+    const reached = byStatus('Reached');
+    const working = byStatus('Working');
+    const done = byStatus('Done');
+    const cancelled = byStatus('Cancelled');
+    const assignedCount = assigned.length;
+    const travelingCount = traveling.length;
+    const reachedCount = reached.length;
+    const workingCount = working.length;
+    // HTML groups the card list into exactly these 6 status sections, in this
+    // order, each shown only when non-empty.
+    const groupsByStatus: Record<SvStatus, SiteVisit[]> = {
+        Assigned: assigned, Traveling: traveling, Reached: reached, Working: working, Done: done, Cancelled: cancelled,
+    };
 
     const engineerName = (uid: string) => engineers.find(e => e.user_id === uid)?.name || '';
 
@@ -264,9 +277,17 @@ export default function SiteVisitsScreen() {
                 : visits.length === 0 ? <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#9ca3af' }}>🏗️ No site visits yet. Click &quot;New Visit&quot; to add one!</div>
                     : (
                         <>
-                            {filtered(active).length > 0 && <><h3 style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', borderLeft: '4px solid #d97706', paddingLeft: 10 }}>📋 Active ({filtered(active).length})</h3>{filtered(active).map(renderCard)}</>}
-                            {filtered(done).length > 0 && <><h3 style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', borderLeft: '4px solid #059669', paddingLeft: 10, marginTop: 18 }}>✅ Done ({filtered(done).length})</h3>{filtered(done).map(renderCard)}</>}
-                            {filtered(cancelled).length > 0 && <><h3 style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', borderLeft: '4px solid #6b7280', paddingLeft: 10, marginTop: 18 }}>🚫 Cancelled ({filtered(cancelled).length})</h3>{filtered(cancelled).map(renderCard)}</>}
+                            {SV_STATUS_ORDER.map(st => {
+                                const rows = filtered(groupsByStatus[st]);
+                                if (rows.length === 0) return null;
+                                const color = SV_SECTION_COLOR[st];
+                                return (
+                                    <div key={st}>
+                                        <h3 style={{ marginTop: 16, padding: '8px 12px', background: `${color}15`, borderLeft: `3px solid ${color}`, borderRadius: 6, fontSize: 14, color, fontWeight: 700 }}>{st} ({rows.length})</h3>
+                                        {rows.map(renderCard)}
+                                    </div>
+                                );
+                            })}
                         </>
                     )}
 

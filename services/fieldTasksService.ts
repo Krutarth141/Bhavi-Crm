@@ -11,33 +11,106 @@ export const fetchFieldTasks = async (userId: string, isAdminList: boolean): Pro
     } catch (err) { console.error('fetchFieldTasks:', err); return []; }
 };
 
-export const saveFieldTask = async (
-    id: number | null, form: FieldTaskFormData, assignedName: string, createdBy: string, createdByName: string
-): Promise<{ success: boolean; error?: string }> => {
+// Retries once without from_time/to_time if the columns don't exist yet on
+// `field_tasks` (setup SQL not run) — mirrors HTML's _ftSave() wrapper.
+async function ftSaveWithRetry(mode: 'insert' | 'update', payload: any, id?: number): Promise<void> {
     try {
-        const payload: any = {
-            task_type: form.task_type,
-            customer_name: form.customer_name.trim(),
-            mobile: form.mobile.trim() || null,
-            amount: form.amount.trim() === '' ? null : parseFloat(form.amount),
-            address: form.address.trim() || null,
-            location: form.location.trim() || null,
-            assigned_to: form.assigned_to || null,
-            assigned_name: form.assigned_to ? (assignedName || null) : null,
-            notes: form.notes.trim() || null,
-            updated_at: new Date().toISOString(),
-        };
-        if (id) {
+        if (mode === 'update') {
             const { error } = await supabase.from('field_tasks').update(payload).eq('id', id);
             if (error) throw error;
         } else {
-            payload.status = 'Assigned';
-            payload.created_by = createdBy;
-            payload.created_by_name = createdByName;
-            payload.task_date = new Date().toLocaleDateString('en-CA');
-            payload.created_at = new Date().toISOString();
             const { error } = await supabase.from('field_tasks').insert([payload]);
             if (error) throw error;
+        }
+    } catch (err: any) {
+        const msg = String(err?.message || '');
+        const touchesTime = payload.from_time !== undefined || payload.to_time !== undefined;
+        if (touchesTime && (msg.indexOf('from_time') !== -1 || msg.indexOf('to_time') !== -1)) {
+            const retry = { ...payload };
+            delete retry.from_time;
+            delete retry.to_time;
+            if (mode === 'update') {
+                const { error } = await supabase.from('field_tasks').update(retry).eq('id', id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase.from('field_tasks').insert([retry]);
+                if (error) throw error;
+            }
+        } else {
+            throw err;
+        }
+    }
+}
+
+export const saveFieldTask = async (
+    id: number | null, form: FieldTaskFormData, assignedName: string, createdBy: string, createdByName: string,
+    creatorRole: 'WC' | 'Engineer' = 'Engineer'
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const now = new Date();
+        const isOffice = form.task_type === 'Office Work';
+        // Office Work is a simple real-time log, no travel/customer involved —
+        // work type stands in for "customer_name" so card display needs no
+        // special-casing.
+        const payload: any = isOffice
+            ? {
+                task_type: form.task_type,
+                customer_name: form.customer_name.trim(),
+                notes: form.notes.trim() || null,
+                from_time: form.from_time || null,
+                to_time: form.to_time || null,
+                assigned_to: form.assigned_to || null,
+                assigned_name: form.assigned_to ? (assignedName || null) : null,
+                updated_at: now.toISOString(),
+            }
+            : {
+                task_type: form.task_type,
+                customer_name: form.customer_name.trim(),
+                mobile: form.mobile.trim() || null,
+                amount: form.amount.trim() === '' ? null : parseFloat(form.amount),
+                address: form.address.trim() || null,
+                location: form.location.trim() || null,
+                assigned_to: form.assigned_to || null,
+                assigned_name: form.assigned_to ? (assignedName || null) : null,
+                notes: form.notes.trim() || null,
+                updated_at: now.toISOString(),
+            };
+        if (id) {
+            await ftSaveWithRetry('update', payload, id);
+        } else {
+            payload.created_by = createdBy;
+            payload.created_by_name = createdByName;
+            payload.task_date = now.toLocaleDateString('en-CA');
+            payload.created_at = now.toISOString();
+            if (isOffice) {
+                // Office Work has no travel lifecycle — submitting IS finishing it.
+                payload.status = 'Done';
+                payload.done_date = payload.task_date;
+                payload.done_at = now.toISOString();
+            } else {
+                payload.status = 'Assigned';
+            }
+            await ftSaveWithRetry('insert', payload);
+            // Time range given -> also drop it straight into Work Log, same as
+            // any other time-tracked entry there.
+            if (isOffice && payload.from_time && payload.to_time) {
+                try {
+                    await supabase.from('work_logs').insert({
+                        eng_id: payload.assigned_to || createdBy,
+                        eng_name: payload.assigned_name || createdByName,
+                        member_role: creatorRole,
+                        log_date: payload.task_date,
+                        from_time: payload.from_time,
+                        to_time: payload.to_time,
+                        task_description: `🏢 Office Work — ${payload.customer_name}${payload.notes ? ` — ${payload.notes}` : ''}`,
+                        ticket_id: null,
+                        log_type: 'work',
+                        created_at: now.toISOString(),
+                    });
+                } catch {
+                    // best-effort — don't fail the task save if the work log insert fails
+                }
+            }
         }
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }

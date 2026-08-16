@@ -8,7 +8,7 @@ import { isCspManager } from '@/lib/permissions';
 import { hasKmEntryToday } from '@/services/kmTrackingService';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import {
-    FieldTask, FieldTaskFormData, emptyFieldTaskForm, FT_TYPES, FT_TYPE_META, FT_STATUS_META,
+    FieldTask, FieldTaskFormData, emptyFieldTaskForm, FT_TYPES, FT_TYPE_META, FT_STATUS_META, FT_OFFICE_WORK_TYPES,
 } from '@/types/fieldTasks';
 import {
     fetchFieldTasks, saveFieldTask, ftTravelStart, ftReached, ftDone, ftCancel, ftDelete,
@@ -83,14 +83,17 @@ export default function FieldTasksScreen() {
             task_type: t.task_type, customer_name: t.customer_name, mobile: t.mobile || '',
             amount: t.amount != null ? String(t.amount) : '', address: t.address || '', location: t.location || '',
             assigned_to: t.assigned_to || '', notes: t.notes || '',
+            from_time: t.from_time || '', to_time: t.to_time || '',
         });
         setModalOpen(true);
     };
 
+    const isOfficeForm = form.task_type === 'Office Work';
+
     const handleSave = async () => {
-        if (!form.customer_name.trim()) { alert('Customer / Party name is required.'); return; }
+        if (!form.customer_name.trim()) { alert(isOfficeForm ? 'Work Type is required.' : 'Customer / Party name is required.'); return; }
         setSaving(true);
-        const r = await saveFieldTask(editId, form, engineerName(form.assigned_to), myId, myName);
+        const r = await saveFieldTask(editId, form, engineerName(form.assigned_to), myId, myName, isWC ? 'WC' : 'Engineer');
         setSaving(false);
         if (!r.success) { alert('Error saving: ' + r.error); return; }
         setModalOpen(false);
@@ -167,7 +170,10 @@ export default function FieldTasksScreen() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
                     <div>
                         <div style={{ fontSize: 15, fontWeight: 700 }}>{meta.emoji} {t.customer_name || '(no name)'}{t.mobile ? <> &nbsp;<a href={`tel:${t.mobile}`} style={{ fontSize: 12, color: '#2563eb' }}>📱 {t.mobile}</a></> : ''}</div>
-                        <div style={{ fontSize: 12, color: meta.color, fontWeight: 700, marginTop: 2 }}>{t.task_type}{amt != null && !isNaN(amt) ? ` • ₹${amt.toLocaleString('en-IN')}` : ''}</div>
+                        <div style={{ fontSize: 12, color: meta.color, fontWeight: 700, marginTop: 2 }}>
+                            {t.task_type}{amt != null && !isNaN(amt) ? ` • ₹${amt.toLocaleString('en-IN')}` : ''}
+                            {t.from_time && t.to_time && <span style={{ color: '#7c3aed', fontWeight: 700 }}> • 🕐 {t.from_time} – {t.to_time}</span>}
+                        </div>
                         {t.address && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>📍 {t.address}{t.location && <> &nbsp;<a href={`https://maps.google.com/?q=${encodeURIComponent(t.location)}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Map</a></>}</div>}
                         {t.notes && <div style={{ fontSize: 12, marginTop: 4, color: '#6b7280' }}>💬 {t.notes}</div>}
                     </div>
@@ -252,87 +258,112 @@ export default function FieldTasksScreen() {
                                     {FT_TYPES.map(t => <option key={t} value={t}>{FT_TYPE_META[t].emoji} {t}</option>)}
                                 </select>
                             </div>
-                            <div><label style={{ fontSize: 12, fontWeight: 700 }}>Customer / Party Name *</label><input type="text" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} style={fieldStyle} /></div>
-                            <div style={{ display: 'flex', gap: 10 }}>
-                                <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Mobile</label><input type="tel" value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} style={fieldStyle} /></div>
-                                <div style={{ flex: 1, opacity: (form.task_type === 'Payment Collection' || form.task_type === 'Cheque Collection') ? 1 : 0.55 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Amount (₹)</label><input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={fieldStyle} /></div>
-                            </div>
-                            <div><label style={{ fontSize: 12, fontWeight: 700 }}>Address</label><input type="text" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} style={fieldStyle} /></div>
-                            <div><label style={{ fontSize: 12, fontWeight: 700 }}>Location (Maps link / coords)</label><input type="text" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={fieldStyle} /></div>
+                            {isOfficeForm ? (
+                                <>
+                                    <div>
+                                        <label style={{ fontSize: 12, fontWeight: 700 }}>Work Type *</label>
+                                        <input type="text" list="ft-office-work-types" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} style={fieldStyle} placeholder="e.g. Remote Support" />
+                                        <datalist id="ft-office-work-types">
+                                            {FT_OFFICE_WORK_TYPES.map(t => <option key={t} value={t} />)}
+                                        </datalist>
+                                    </div>
+                                    <div><label style={{ fontSize: 12, fontWeight: 700 }}>Details</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
+                                    <div style={{ display: 'flex', gap: 10 }}>
+                                        <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 700 }}>From</label><input type="time" value={form.from_time} onChange={e => setForm(f => ({ ...f, from_time: e.target.value }))} style={fieldStyle} /></div>
+                                        <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 700 }}>To</label><input type="time" value={form.to_time} onChange={e => setForm(f => ({ ...f, to_time: e.target.value }))} style={fieldStyle} /></div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div><label style={{ fontSize: 12, fontWeight: 700 }}>Customer / Party Name *</label><input type="text" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} style={fieldStyle} /></div>
+                                    <div style={{ display: 'flex', gap: 10 }}>
+                                        <div style={{ flex: 1 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Mobile</label><input type="tel" value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} style={fieldStyle} /></div>
+                                        <div style={{ flex: 1, opacity: (form.task_type === 'Payment Collection' || form.task_type === 'Cheque Collection') ? 1 : 0.55 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Amount (₹)</label><input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} style={fieldStyle} /></div>
+                                    </div>
+                                    <div><label style={{ fontSize: 12, fontWeight: 700 }}>Address</label><input type="text" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} style={fieldStyle} /></div>
+                                    <div><label style={{ fontSize: 12, fontWeight: 700 }}>Location (Maps link / coords)</label><input type="text" value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={fieldStyle} /></div>
+                                    <div><label style={{ fontSize: 12, fontWeight: 700 }}>Notes</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
+                                </>
+                            )}
                             <div><label style={{ fontSize: 12, fontWeight: 700 }}>Assign to Engineer</label>
                                 <select value={form.assigned_to} onChange={e => setForm(f => ({ ...f, assigned_to: e.target.value }))} style={fieldStyle}>
                                     <option value="">— Select Engineer —</option>
                                     {engineers.map(e => <option key={e.id} value={e.user_id}>{e.name}</option>)}
                                 </select>
                             </div>
-                            <div><label style={{ fontSize: 12, fontWeight: 700 }}>Notes</label><textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
-                        </div>
-                        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                            <button onClick={() => setModalOpen(false)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-                            <button onClick={handleSave} disabled={saving} style={{ padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '💾 Save'}</button>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {reportOpen && (
-                <div onClick={() => setReportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto' }}>
-                        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h2 style={{ margin: 0, fontSize: 17 }}>📊 Other Work Report</h2>
-                            <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
-                        </div>
-                        <div style={{ padding: 20 }}>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
-                                <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>From</label><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
-                                <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>To</label><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
-                                <button onClick={loadReport} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🔍 Load</button>
-                                <button onClick={downloadReport} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>⬇️ Excel</button>
-                            </div>
-                            {reportLoading ? <p style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</p>
-                                : reportRows.length === 0 ? <div style={{ textAlign: 'center', padding: 24, color: '#9ca3af' }}>No completed tasks in this period.</div>
-                                    : (
-                                        <>
-                                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-                                                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Total Done</div><div style={{ fontSize: 18, fontWeight: 800, color: '#15803d' }}>{reportRows.reduce((s, r) => s + r.total, 0)}</div></div>
-                                                <div style={{ background: '#eff6ff', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>💰 Total Collected</div><div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>₹{reportRows.reduce((s, r) => s + r.amount, 0).toLocaleString('en-IN')}</div></div>
-                                            </div>
-                                            <div style={{ overflowX: 'auto' }}>
-                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                                    <thead><tr style={{ background: '#f8fafc', textAlign: 'center' }}>
-                                                        <th style={{ padding: '7px 9px', textAlign: 'left' }}>Engineer</th>
-                                                        {FT_TYPES.map(t => <th key={t} style={{ padding: '7px 9px' }}>{FT_TYPE_META[t].emoji}</th>)}
-                                                        <th style={{ padding: '7px 9px' }}>Total</th><th style={{ padding: '7px 9px' }}>Amount ₹</th>
-                                                    </tr></thead>
-                                                    <tbody>
-                                                        {reportRows.map(r => (
-                                                            <tr key={r.name} style={{ borderBottom: '1px solid #eef2f7' }}>
-                                                                <td style={{ padding: '6px 9px', fontWeight: 600 }}>{r.name}</td>
-                                                                {FT_TYPES.map(t => <td key={t} style={{ padding: '6px 9px', textAlign: 'center' }}>{r.types[t] || ''}</td>)}
-                                                                <td style={{ padding: '6px 9px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{r.total}</td>
-                                                                <td style={{ padding: '6px 9px', textAlign: 'right' }}>{r.amount ? r.amount.toLocaleString('en-IN') : ''}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </>
-                                    )}
-                        </div>
+                    <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button onClick={() => setModalOpen(false)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                        <button onClick={handleSave} disabled={saving} style={{ padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '💾 Save'}</button>
                     </div>
                 </div>
-            )}
+                </div>
+    )
+}
 
-            {kmTaskId != null && kmStep && (
-                <KmCaptureModal
-                    type={kmStep}
-                    engId={myId}
-                    engName={myName}
-                    ticketId={`FT${kmTaskId}`}
-                    onClose={() => { setKmTaskId(null); setKmStep(null); }}
-                    onDone={handleKmDone}
-                />
-            )}
+{
+    reportOpen && (
+        <div onClick={() => setReportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h2 style={{ margin: 0, fontSize: 17 }}>📊 Other Work Report</h2>
+                    <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                </div>
+                <div style={{ padding: 20 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+                        <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>From</label><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
+                        <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>To</label><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
+                        <button onClick={loadReport} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🔍 Load</button>
+                        <button onClick={downloadReport} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>⬇️ Excel</button>
+                    </div>
+                    {reportLoading ? <p style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</p>
+                        : reportRows.length === 0 ? <div style={{ textAlign: 'center', padding: 24, color: '#9ca3af' }}>No completed tasks in this period.</div>
+                            : (
+                                <>
+                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                                        <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Total Done</div><div style={{ fontSize: 18, fontWeight: 800, color: '#15803d' }}>{reportRows.reduce((s, r) => s + r.total, 0)}</div></div>
+                                        <div style={{ background: '#eff6ff', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>💰 Total Collected</div><div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>₹{reportRows.reduce((s, r) => s + r.amount, 0).toLocaleString('en-IN')}</div></div>
+                                    </div>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                            <thead><tr style={{ background: '#f8fafc', textAlign: 'center' }}>
+                                                <th style={{ padding: '7px 9px', textAlign: 'left' }}>Engineer</th>
+                                                {FT_TYPES.map(t => <th key={t} style={{ padding: '7px 9px' }}>{FT_TYPE_META[t].emoji}</th>)}
+                                                <th style={{ padding: '7px 9px' }}>Total</th><th style={{ padding: '7px 9px' }}>Amount ₹</th>
+                                            </tr></thead>
+                                            <tbody>
+                                                {reportRows.map(r => (
+                                                    <tr key={r.name} style={{ borderBottom: '1px solid #eef2f7' }}>
+                                                        <td style={{ padding: '6px 9px', fontWeight: 600 }}>{r.name}</td>
+                                                        {FT_TYPES.map(t => <td key={t} style={{ padding: '6px 9px', textAlign: 'center' }}>{r.types[t] || ''}</td>)}
+                                                        <td style={{ padding: '6px 9px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{r.total}</td>
+                                                        <td style={{ padding: '6px 9px', textAlign: 'right' }}>{r.amount ? r.amount.toLocaleString('en-IN') : ''}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
+                </div>
+            </div>
         </div>
+    )
+}
+
+{
+    kmTaskId != null && kmStep && (
+        <KmCaptureModal
+            type={kmStep}
+            engId={myId}
+            engName={myName}
+            ticketId={`FT${kmTaskId}`}
+            onClose={() => { setKmTaskId(null); setKmStep(null); }}
+            onDone={handleKmDone}
+        />
+    )
+}
+        </div >
     );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PunchLog } from '@/types/attendance';
 import { EmployeeShift } from '@/types/settings';
-import { fetchPunchLogs, fetchAttendanceEmployees, verifyPunchLog } from '@/services/attendanceService';
+import { fetchPunchLogs, fetchAttendanceEmployees, verifyPunchLog, rejectPunchLog } from '@/services/attendanceService';
 import { fetchShiftMap } from '@/services/settingsService';
 
 interface Params {
@@ -48,5 +48,11 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
         return result;
     };
 
-    return { logs, shiftMap, employees, loading, error, refetch: load, verify };
+    const rejectPunch = async (id: string, reason: string, verifiedBy: string) => {
+        const result = await rejectPunchLog(id, reason, verifiedBy);
+        if (result.success) await load();
+        return result;
+    };
+
+    return { logs, shiftMap, employees, loading, error, refetch: load, verify, rejectPunch };
 };

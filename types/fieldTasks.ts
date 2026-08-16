@@ -1,4 +1,4 @@
-export const FT_TYPES = ['Cart Delivery', 'Payment Collection', 'Cheque Collection', 'Document Pickup', 'Bank Work', 'Other'];
+export const FT_TYPES = ['Cart Delivery', 'Payment Collection', 'Cheque Collection', 'Document Pickup', 'Bank Work', 'Office Work', 'Other'];
 
 export const FT_TYPE_META: Record<string, { emoji: string; color: string }> = {
     'Cart Delivery': { emoji: '🚚', color: '#2563eb' },
@@ -6,8 +6,15 @@ export const FT_TYPE_META: Record<string, { emoji: string; color: string }> = {
     'Cheque Collection': { emoji: '🧾', color: '#7c3aed' },
     'Document Pickup': { emoji: '📄', color: '#0891b2' },
     'Bank Work': { emoji: '🏦', color: '#b45309' },
+    'Office Work': { emoji: '🏢', color: '#7c3aed' },
     'Other': { emoji: '🔧', color: '#64748b' },
 };
+
+// Suggestions shown only for the "Office Work" type — matches HTML's datalist.
+export const FT_OFFICE_WORK_TYPES = [
+    'Remote Support', 'Configuration', 'Estimation', 'Documentation',
+    'Follow-up Call', 'Billing / Invoice', 'Stock / Inventory', 'Training', 'Other',
+];
 
 export type FieldTaskStatus = 'Assigned' | 'Traveling' | 'Reached' | 'Done' | 'Cancelled';
 
@@ -38,6 +45,8 @@ export interface FieldTask {
     reached_at?: string | null;
     done_at?: string | null;
     done_date?: string | null;
+    from_time?: string | null;
+    to_time?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -51,8 +60,11 @@ export interface FieldTaskFormData {
     location: string;
     assigned_to: string;
     notes: string;
+    from_time: string;
+    to_time: string;
 }
 
 export const emptyFieldTaskForm: FieldTaskFormData = {
     task_type: 'Cart Delivery', customer_name: '', mobile: '', amount: '', address: '', location: '', assigned_to: '', notes: '',
+    from_time: '', to_time: '',
 };

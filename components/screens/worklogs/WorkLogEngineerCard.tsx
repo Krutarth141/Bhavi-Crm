@@ -139,11 +139,26 @@ function WorkLogDateGroup({
 function WorkLogEntry({ log }: { log: WorkLog }) {
     const isOpen = log.to_time === 'OPEN';
     const isTravel = log.log_type === 'travel';
+    // A "status" entry has a single timestamp, not a from–to range — either
+    // explicitly log_type='status', or a work entry whose from/to happen to
+    // match (matches HTML's isStatus detection).
+    const isStatus = log.log_type === 'status' || (log.log_type === 'work' && log.from_time === log.to_time && !!log.from_time && log.to_time !== 'OPEN');
+    const isToday = log.log_date === new Date().toLocaleDateString('en-CA');
 
-    const borderColor = isTravel ? '#f59e0b' : isOpen ? '#10b981' : 'var(--primary)';
-    const timeBg = isTravel ? '#fef3c7' : isOpen ? '#d1fae5' : '#ede9fe';
-    const timeColor = isTravel ? '#92400e' : isOpen ? '#065f46' : '#4c1d95';
-    const timeLabel = `${log.from_time} – ${isOpen ? 'Running ⏳' : log.to_time}`;
+    const borderColor = isStatus ? '#10b981' : isTravel ? '#f59e0b' : isOpen ? '#10b981' : 'var(--primary)';
+    const timeBg = isStatus ? '#d1fae5' : isTravel ? '#fef3c7' : isOpen ? '#d1fae5' : '#ede9fe';
+    const timeColor = isStatus ? '#065f46' : isTravel ? '#92400e' : isOpen ? '#065f46' : '#4c1d95';
+    const timeLabel = isStatus
+        ? log.from_time
+        : isOpen
+            ? (isToday ? `${log.from_time} – Running ⏳` : log.from_time)
+            : `${log.from_time} – ${log.to_time}`;
+
+    const areaBadge = log.service_type === 'Carry In'
+        ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#7c3aed' }}>📦 Carry In</span>
+        : log.area
+            ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#0d9488' }}>📍 {log.area}</span>
+            : null;
 
     return (
         <div
@@ -172,7 +187,7 @@ function WorkLogEntry({ log }: { log: WorkLog }) {
                 {timeLabel}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
-                {log.task_description}
+                {log.task_description}{areaBadge}
             </div>
         </div>
     );

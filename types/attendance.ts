@@ -18,10 +18,13 @@ export interface PunchLog {
     pending_edit?: any;
     start_meter?: string;
     end_meter?: string;
-    status: 'active' | 'late_pending' | 'verified';
+    status: 'active' | 'late_pending' | 'verified' | 'rejected';
     admin_remark?: string;
     verified_by?: string;
     meter_photo_url?: string;
+    late_remark?: string;
+    is_next_day?: boolean;
+    punch_out_date?: string;
     created_at?: string;
     updated_at?: string;
 }

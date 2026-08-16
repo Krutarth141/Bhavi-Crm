@@ -58,7 +58,7 @@ export const verifyPunchLog = async (
             .from('punch_logs')
             .update({
                 status: 'verified',
-                admin_remark: remark || 'OK',
+                admin_remark: remark || 'Approved',
                 verified_by: verifiedBy,
                 updated_at: new Date().toISOString(),
             })
@@ -67,6 +67,31 @@ export const verifyPunchLog = async (
         return { success: true };
     } catch (err) {
         console.error('Failed to verify punch log:', err);
+        return { success: false, error: (err as any).message };
+    }
+};
+
+// Reject a late/next-day punch out (separate from edit-request rejection) —
+// matches HTML's rejectPunchLog().
+export const rejectPunchLog = async (
+    id: string,
+    reason: string,
+    verifiedBy: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase
+            .from('punch_logs')
+            .update({
+                status: 'rejected',
+                admin_remark: reason,
+                verified_by: verifiedBy,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error('Failed to reject punch log:', err);
         return { success: false, error: (err as any).message };
     }
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AMCContract, AMCFormData, isExpired, isExpiringSoon } from '@/types/amc';
+import { AMCContract, AMCFormData, isExpired, isExpiringSoon, todayStr } from '@/types/amc';
 import { fetchAMCContracts, createAMCContract, updateAMCContract, deleteAMCContract } from '@/services/amcService';
 
 export const useAMC = () => {
@@ -41,9 +41,13 @@ export const useAMC = () => {
     };
 
     // Derived stats
-    const active = contracts.filter(c => !isExpired(c.amc_end) && !isExpiringSoon(c.amc_end)).length;
+    // Derived stats — matches HTML's summary tile: Active = amc_end >= today
+    // (inclusive of expiring-soon contracts; per-card badges use the
+    // mutually-exclusive isExpired/isExpiringSoon logic separately).
+    const active = contracts.filter(c => !!c.amc_end && c.amc_end >= todayStr()).length;
     const expiring = contracts.filter(c => isExpiringSoon(c.amc_end)).length;
     const expired = contracts.filter(c => isExpired(c.amc_end)).length;
+    const revenue = contracts.reduce((s, c) => s + (c.amc_amount || 0), 0);
 
     return {
         contracts,
@@ -52,6 +56,7 @@ export const useAMC = () => {
         active,
         expiring,
         expired,
+        revenue,
         refetch: loadContracts,
         create,
         update,
