@@ -14,6 +14,8 @@ export default function WorkLogScreen() {
         setFilters,
         logs,
         grouped,
+        peonGrouped,
+        isPeonMode,
         stats,
         loading,
         error,
@@ -21,9 +23,11 @@ export default function WorkLogScreen() {
     } = useWorkLogs();
     const [searched, setSearched] = useState(true);
 
+    const isPeonSelected = members.find((m) => m.id === filters.engId)?.role === 'Peon';
+
     const onSearch = () => {
         setSearched(true);
-        handleSearch();
+        handleSearch(isPeonSelected);
     };
 
     const onExcelDownload = () => downloadWorkLogExcel(logs);
@@ -43,6 +47,8 @@ export default function WorkLogScreen() {
                 loading={loading}
                 error={error}
                 grouped={grouped}
+                peonGrouped={peonGrouped}
+                isPeonMode={isPeonMode}
                 stats={stats}
                 searched={searched}
             />

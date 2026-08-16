@@ -6,7 +6,7 @@ import { useAttendance } from '@/hooks/useAttendance';
 import AttendanceTable from '@/components/screens/attendance/AttendanceTable';
 import { exportAttendanceExcel, approveAttEdit, rejectAttEdit } from '@/services/attendanceService';
 import { PunchLog, RosterRow } from '@/types/attendance';
-import { computeAttExtras, computeLeaves, fmtAttMin, parsePendingEdit } from '@/utils/attendanceCalc';
+import { computeAttExtras, computeLeaves, computeSundayInfo, fmtAttMin, parsePendingEdit } from '@/utils/attendanceCalc';
 import AttAddModal from '@/components/screens/attendance/AttAddModal';
 import AttEditModal from '@/components/screens/attendance/AttEditModal';
 import AttEditRequestModal from '@/components/screens/attendance/AttEditRequestModal';
@@ -30,7 +30,7 @@ export default function AttendanceScreen() {
     const [editLog, setEditLog] = useState<PunchLog | null>(null);
     const [requestLog, setRequestLog] = useState<PunchLog | null>(null);
 
-    const { logs, shiftMap, employees, loading, error, verify, rejectPunch, refetch } = useAttendance({
+    const { logs, shiftMap, employees, sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
 
@@ -112,11 +112,15 @@ export default function AttendanceScreen() {
             if (ex) { officeMins += ex.officeMin; shortfallMins += ex.shortfall; adjustMins += ex.adjustMin; }
         });
         const effectiveEmp = isAdmin ? applied.empFilter : myId;
-        const leaves = (effectiveEmp && applied.from && applied.to && applied.from !== applied.to)
-            ? computeLeaves(effectiveEmp, applied.from, applied.to, logs, shiftMap)
-            : null;
-        return { totalDays, totalWorkMins, totalOTMins, lateCount, officeMins, shortfallMins, adjustMins, leaves };
-    }, [logs, shiftMap, isAdmin, applied, myId]);
+        const showLeaves = !!(effectiveEmp && applied.from && applied.to && applied.from !== applied.to);
+        const leaves = showLeaves ? computeLeaves(effectiveEmp, applied.from, applied.to, logs, shiftMap) : null;
+        // Sunday (weekly-off) paid days — additive only, same eligibility as Leaves.
+        const sunday = showLeaves ? computeSundayInfo(effectiveEmp, applied.from, applied.to, shiftMap, sundayExclude) : null;
+        return {
+            totalDays, totalWorkMins, totalOTMins, lateCount, officeMins, shortfallMins, adjustMins, leaves,
+            effectiveEmp, sundayInfo: sunday?.info ?? null, sundayAnyExcluded: sunday?.anyExcluded ?? false,
+        };
+    }, [logs, shiftMap, isAdmin, applied, myId, sundayExclude]);
 
     // Pending Punch Approvals — admin/CSP-manager only, matches HTML's
     // renderPunchApprovalSection(). Scoped to the currently loaded date range.
@@ -131,7 +135,19 @@ export default function AttendanceScreen() {
         { value: fmtAttMin(summary.shortfallMins), label: 'Late/Early Total', bg: '#fff0f0', color: '#dc2626' },
         { value: fmtAttMin(summary.adjustMins), label: 'Adjust Hours Total', bg: '#f0fdf4', color: '#059669' },
         { value: String(summary.lateCount), label: 'Late Punch Out', bg: '#fff0f0', color: '#dc2626' },
+        // ── Sunday (weekly-off) paid — separate tiles; existing totals above unchanged ──
+        ...(summary.sundayInfo ? [{
+            value: summary.sundayInfo.total !== summary.sundayInfo.counted ? `${summary.sundayInfo.counted} / ${summary.sundayInfo.total}` : String(summary.sundayInfo.counted),
+            label: `Sundays Paid${summary.sundayAnyExcluded ? ' (excl.)' : ''}`, bg: '#f5f3ff', color: '#6d28d9',
+        }] : []),
+        ...(summary.sundayInfo && summary.sundayInfo.shiftMin ? [{ value: fmtAttMin(summary.officeMins + summary.sundayInfo.mins), label: 'Office Hrs + Sundays', bg: '#ecfeff', color: '#0e7490' }] : []),
+        ...(summary.sundayInfo && summary.sundayInfo.shiftMin ? [{ value: fmtAttMin(summary.totalWorkMins + summary.sundayInfo.mins), label: 'Work + Sundays', bg: '#ecfeff', color: '#0e7490' }] : []),
     ];
+
+    const handleToggleSunday = async () => {
+        const result = await toggleSunday(summary.effectiveEmp, applied.from, applied.to);
+        if (!result.success) alert('Error: ' + result.error);
+    };
 
     const inputStyle = { border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13, outline: 'none' };
 
@@ -185,6 +201,16 @@ export default function AttendanceScreen() {
                         <div style={{ fontSize: 11, color: '#64748b' }}>{t.label}</div>
                     </div>
                 ))}
+                {isAdmin && summary.sundayInfo && (
+                    <div style={{ minWidth: 130, display: 'flex', alignItems: 'center' }}>
+                        <button
+                            onClick={handleToggleSunday}
+                            style={{ padding: '8px 10px', background: summary.sundayAnyExcluded ? '#16a34a' : '#dc2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                        >
+                            {summary.sundayAnyExcluded ? '✓ Include Sundays' : '🚫 Exclude Sundays (this month)'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {isAdmin && pendingApprovals.length > 0 && (

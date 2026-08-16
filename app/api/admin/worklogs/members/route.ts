@@ -33,6 +33,17 @@ export async function GET(_request: NextRequest) {
             return NextResponse.json({ error: wcErr.message }, { status: 400 });
         }
 
+        const { data: peons, error: peonErr } = await supabaseAdmin
+            .from('users')
+            .select('user_id, name, role')
+            .eq('role', 'peon')
+            .eq('is_active', true)
+            .order('name', { ascending: true });
+
+        if (peonErr) {
+            return NextResponse.json({ error: peonErr.message }, { status: 400 });
+        }
+
         const members: WorkLogMember[] = [
             ...(engineers ?? []).map((e) => ({
                 id: e.user_id,
@@ -43,6 +54,11 @@ export async function GET(_request: NextRequest) {
                 id: w.user_id,
                 name: w.name,
                 role: 'WC' as const,
+            })),
+            ...(peons ?? []).map((p) => ({
+                id: p.user_id,
+                name: p.name,
+                role: 'Peon' as const,
             })),
         ];
 

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PunchLog } from '@/types/attendance';
 import { EmployeeShift } from '@/types/settings';
-import { fetchPunchLogs, fetchAttendanceEmployees, verifyPunchLog, rejectPunchLog } from '@/services/attendanceService';
+import {
+    fetchPunchLogs, fetchAttendanceEmployees, verifyPunchLog, rejectPunchLog,
+    fetchSundayExclude, toggleSundayExclude as toggleSundayExcludeService,
+} from '@/services/attendanceService';
 import { fetchShiftMap } from '@/services/settingsService';
 
 interface Params {
@@ -16,6 +19,7 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
     const [logs, setLogs] = useState<PunchLog[]>([]);
     const [shiftMap, setShiftMap] = useState<Record<string, EmployeeShift>>({});
     const [employees, setEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
+    const [sundayExclude, setSundayExclude] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +46,8 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
         if (isAdmin) fetchAttendanceEmployees().then(setEmployees);
     }, [isAdmin]);
 
+    useEffect(() => { fetchSundayExclude().then(setSundayExclude); }, []);
+
     const verify = async (id: string, remark: string, verifiedBy: string) => {
         const result = await verifyPunchLog(id, remark, verifiedBy);
         if (result.success) await load();
@@ -54,5 +60,11 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
         return result;
     };
 
-    return { logs, shiftMap, employees, loading, error, refetch: load, verify, rejectPunch };
+    const toggleSunday = async (empId: string, fromDate: string, toDate: string) => {
+        const result = await toggleSundayExcludeService(empId, fromDate, toDate, sundayExclude);
+        if (result.success && result.next) setSundayExclude(result.next);
+        return result;
+    };
+
+    return { logs, shiftMap, employees, sundayExclude, loading, error, refetch: load, verify, rejectPunch, toggleSunday };
 };

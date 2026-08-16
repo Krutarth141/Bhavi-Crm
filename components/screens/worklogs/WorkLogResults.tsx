@@ -1,17 +1,19 @@
 import React from 'react';
-import { WorkLogsByEngineer, WorkLogStats } from '@/types/workLogs';
+import { WorkLogsByEngineer, WorkLogStats, PeonLogsByPeon } from '@/types/workLogs';
 import WorkLogStatsCards from './WorkLogStatsCards';
-import WorkLogEngineerCard from './WorkLogEngineerCard';
+import WorkLogEngineerCard, { WorkLogPeonCard } from './WorkLogEngineerCard';
 
 interface Props {
     loading: boolean;
     error: string | null;
     grouped: WorkLogsByEngineer;
+    peonGrouped: PeonLogsByPeon;
+    isPeonMode: boolean;
     stats: WorkLogStats;
     searched: boolean;
 }
 
-export default function WorkLogResults({ loading, error, grouped, stats, searched }: Props) {
+export default function WorkLogResults({ loading, error, grouped, peonGrouped, isPeonMode, stats, searched }: Props) {
     if (loading) {
         return <div className="loading">Loading...</div>;
     }
@@ -21,6 +23,20 @@ export default function WorkLogResults({ loading, error, grouped, stats, searche
     }
 
     if (!searched) return null;
+
+    if (isPeonMode) {
+        const peons = Object.entries(peonGrouped);
+        if (!peons.length) {
+            return <div className="alert alert-info">No task logs found.</div>;
+        }
+        return (
+            <div>
+                {peons.map(([peonName, dateMap]) => (
+                    <WorkLogPeonCard key={peonName} peonName={peonName} dateMap={dateMap} />
+                ))}
+            </div>
+        );
+    }
 
     const engineers = Object.entries(grouped);
 

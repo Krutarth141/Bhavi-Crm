@@ -118,3 +118,46 @@ export const computeWorkAndOvertime = (inT?: string, outT?: string, shift?: Empl
     const shiftDur = (ss != null && se != null) ? se - ss : 480;
     return { working, overtime: Math.max(0, working - shiftDur) };
 };
+
+export interface SundayInfo {
+    total: number;
+    counted: number;
+    mins: number;
+    shiftMin: number;
+}
+
+// Sunday (weekly-off) paid days — additive only, doesn't touch any of the
+// existing totals above. Mirrors HTML's sundayInfo block in
+// loadAttendanceReport() (index.html:24260-24284).
+export function computeSundayInfo(
+    empId: string,
+    from: string,
+    to: string,
+    shiftMap: Record<string, EmployeeShift>,
+    sundayExclude: Record<string, boolean>
+): { info: SundayInfo; anyExcluded: boolean } {
+    const empShift = shiftMap[empId];
+    const offDays = (empShift && empShift.weekly_off && empShift.weekly_off !== 'None')
+        ? empShift.weekly_off.split(',')
+        : ['Sunday'];
+    let shiftMin = 0;
+    if (empShift && empShift.shift_start && empShift.shift_end) {
+        const ss = attToMin(empShift.shift_start), se = attToMin(empShift.shift_end);
+        if (ss != null && se != null && se > ss) shiftMin = se - ss;
+    }
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const cursor = new Date(`${from}T00:00:00`);
+    const endD = new Date(`${to}T00:00:00`);
+    let total = 0, counted = 0, anyExcluded = false;
+    while (cursor <= endD) {
+        const wd = dayNames[cursor.getDay()];
+        if (offDays.indexOf(wd) !== -1) {
+            total++;
+            const ym = cursor.toLocaleDateString('en-CA').slice(0, 7);
+            if (sundayExclude[`${empId}|${ym}`]) anyExcluded = true;
+            else counted++;
+        }
+        cursor.setDate(cursor.getDate() + 1);
+    }
+    return { info: { total, counted, mins: counted * shiftMin, shiftMin }, anyExcluded };
+}

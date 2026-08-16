@@ -4,6 +4,38 @@ import { EmployeeShift } from '@/types/settings';
 import { computeAttExtras, computeWorkAndOvertime, fmtAttMin, to12h, PendingEdit } from '@/utils/attendanceCalc';
 import * as XLSX from 'xlsx';
 
+// Sunday (weekly-off) exclusion config — company_info.sunday_exclude, keyed
+// 'empId|YYYY-MM'. Matches HTML's window._sundayExclude.
+export const fetchSundayExclude = async (): Promise<Record<string, boolean>> => {
+    try {
+        const { data } = await supabase.from('company_info').select('sunday_exclude').eq('id', 1);
+        return (data && data[0] && data[0].sunday_exclude) || {};
+    } catch {
+        return {};
+    }
+};
+
+// Toggles Sunday paid-counting for an employee across every month covered by
+// [fromDate, toDate] — matches HTML's toggleSundayExclude().
+export const toggleSundayExclude = async (
+    empId: string, fromDate: string, toDate: string, current: Record<string, boolean>
+): Promise<{ success: boolean; error?: string; next?: Record<string, boolean> }> => {
+    try {
+        const months: Record<string, boolean> = {};
+        const c = new Date(`${fromDate}T00:00:00`), e = new Date(`${toDate}T00:00:00`);
+        while (c <= e) { months[c.toLocaleDateString('en-CA').slice(0, 7)] = true; c.setDate(c.getDate() + 1); }
+        const keys = Object.keys(months).map((m) => `${empId}|${m}`);
+        const next = { ...current };
+        const anyExcluded = keys.some((k) => next[k]);
+        keys.forEach((k) => { if (anyExcluded) delete next[k]; else next[k] = true; });
+        const { error } = await supabase.from('company_info').upsert([{ id: 1, sunday_exclude: next, updated_at: new Date().toISOString() }]);
+        if (error) throw error;
+        return { success: true, next };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
 export const fetchPunchLogs = async (params: {
     from?: string;
     to?: string;
