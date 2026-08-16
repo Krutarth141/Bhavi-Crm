@@ -292,78 +292,72 @@ export default function FieldTasksScreen() {
                                 </select>
                             </div>
                         </div>
-                    </div>
-                    <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button onClick={() => setModalOpen(false)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-                        <button onClick={handleSave} disabled={saving} style={{ padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '💾 Save'}</button>
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setModalOpen(false)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                            <button onClick={handleSave} disabled={saving} style={{ padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '💾 Save'}</button>
+                        </div>
                     </div>
                 </div>
-                </div>
-    )
-}
+            )}
 
-{
-    reportOpen && (
-        <div onClick={() => setReportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h2 style={{ margin: 0, fontSize: 17 }}>📊 Other Work Report</h2>
-                    <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
-                </div>
-                <div style={{ padding: 20 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>From</label><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
-                        <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>To</label><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
-                        <button onClick={loadReport} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🔍 Load</button>
-                        <button onClick={downloadReport} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>⬇️ Excel</button>
+            {reportOpen && (
+                <div onClick={() => setReportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 720, maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h2 style={{ margin: 0, fontSize: 17 }}>📊 Other Work Report</h2>
+                            <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                        </div>
+                        <div style={{ padding: 20 }}>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+                                <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>From</label><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
+                                <div><label style={{ fontSize: 12, fontWeight: 700, display: 'block' }}>To</label><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} /></div>
+                                <button onClick={loadReport} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🔍 Load</button>
+                                <button onClick={downloadReport} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>⬇️ Excel</button>
+                            </div>
+                            {reportLoading ? <p style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</p>
+                                : reportRows.length === 0 ? <div style={{ textAlign: 'center', padding: 24, color: '#9ca3af' }}>No completed tasks in this period.</div>
+                                    : (
+                                        <>
+                                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                                                <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Total Done</div><div style={{ fontSize: 18, fontWeight: 800, color: '#15803d' }}>{reportRows.reduce((s, r) => s + r.total, 0)}</div></div>
+                                                <div style={{ background: '#eff6ff', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>💰 Total Collected</div><div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>₹{reportRows.reduce((s, r) => s + r.amount, 0).toLocaleString('en-IN')}</div></div>
+                                            </div>
+                                            <div style={{ overflowX: 'auto' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                                    <thead><tr style={{ background: '#f8fafc', textAlign: 'center' }}>
+                                                        <th style={{ padding: '7px 9px', textAlign: 'left' }}>Engineer</th>
+                                                        {FT_TYPES.map(t => <th key={t} style={{ padding: '7px 9px' }}>{FT_TYPE_META[t].emoji}</th>)}
+                                                        <th style={{ padding: '7px 9px' }}>Total</th><th style={{ padding: '7px 9px' }}>Amount ₹</th>
+                                                    </tr></thead>
+                                                    <tbody>
+                                                        {reportRows.map(r => (
+                                                            <tr key={r.name} style={{ borderBottom: '1px solid #eef2f7' }}>
+                                                                <td style={{ padding: '6px 9px', fontWeight: 600 }}>{r.name}</td>
+                                                                {FT_TYPES.map(t => <td key={t} style={{ padding: '6px 9px', textAlign: 'center' }}>{r.types[t] || ''}</td>)}
+                                                                <td style={{ padding: '6px 9px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{r.total}</td>
+                                                                <td style={{ padding: '6px 9px', textAlign: 'right' }}>{r.amount ? r.amount.toLocaleString('en-IN') : ''}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    )}
+                        </div>
                     </div>
-                    {reportLoading ? <p style={{ textAlign: 'center', color: '#6b7280' }}>Loading...</p>
-                        : reportRows.length === 0 ? <div style={{ textAlign: 'center', padding: 24, color: '#9ca3af' }}>No completed tasks in this period.</div>
-                            : (
-                                <>
-                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-                                        <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Total Done</div><div style={{ fontSize: 18, fontWeight: 800, color: '#15803d' }}>{reportRows.reduce((s, r) => s + r.total, 0)}</div></div>
-                                        <div style={{ background: '#eff6ff', borderRadius: 10, padding: '8px 14px' }}><div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>💰 Total Collected</div><div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8' }}>₹{reportRows.reduce((s, r) => s + r.amount, 0).toLocaleString('en-IN')}</div></div>
-                                    </div>
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                            <thead><tr style={{ background: '#f8fafc', textAlign: 'center' }}>
-                                                <th style={{ padding: '7px 9px', textAlign: 'left' }}>Engineer</th>
-                                                {FT_TYPES.map(t => <th key={t} style={{ padding: '7px 9px' }}>{FT_TYPE_META[t].emoji}</th>)}
-                                                <th style={{ padding: '7px 9px' }}>Total</th><th style={{ padding: '7px 9px' }}>Amount ₹</th>
-                                            </tr></thead>
-                                            <tbody>
-                                                {reportRows.map(r => (
-                                                    <tr key={r.name} style={{ borderBottom: '1px solid #eef2f7' }}>
-                                                        <td style={{ padding: '6px 9px', fontWeight: 600 }}>{r.name}</td>
-                                                        {FT_TYPES.map(t => <td key={t} style={{ padding: '6px 9px', textAlign: 'center' }}>{r.types[t] || ''}</td>)}
-                                                        <td style={{ padding: '6px 9px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{r.total}</td>
-                                                        <td style={{ padding: '6px 9px', textAlign: 'right' }}>{r.amount ? r.amount.toLocaleString('en-IN') : ''}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </>
-                            )}
                 </div>
-            </div>
+            )}
+
+            {kmTaskId != null && kmStep && (
+                <KmCaptureModal
+                    type={kmStep}
+                    engId={myId}
+                    engName={myName}
+                    ticketId={`FT${kmTaskId}`}
+                    onClose={() => { setKmTaskId(null); setKmStep(null); }}
+                    onDone={handleKmDone}
+                />
+            )}
         </div>
-    )
-}
-
-{
-    kmTaskId != null && kmStep && (
-        <KmCaptureModal
-            type={kmStep}
-            engId={myId}
-            engName={myName}
-            ticketId={`FT${kmTaskId}`}
-            onClose={() => { setKmTaskId(null); setKmStep(null); }}
-            onDone={handleKmDone}
-        />
-    )
-}
-        </div >
     );
 }
