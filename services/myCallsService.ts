@@ -192,3 +192,41 @@ export const fetchWorkLogsByDate = async (
         return { success: false, error: String(err) };
     }
 };
+
+export interface PrevLocation { ticketId: string; lat: number; lng: number; at: string; }
+
+// Mirrors HTML's mcBuildPrevLocMap(): bulk lookup of the most recent GPS point
+// (arrival KM or call-close location) recorded for OTHER tickets sharing the
+// same serial number, so the engineer can quickly re-navigate to a familiar
+// install without re-asking the customer for directions. No new table — just
+// a bulk read across km_logs/engineer_locations, keyed via serial.
+export const fetchPrevLocationMap = async (tickets: { id: string; serial?: string }[]): Promise<Record<string, PrevLocation>> => {
+    try {
+        const serials = Array.from(new Set(tickets.map((t) => t.serial).filter((s): s is string => !!s && !s.startsWith('NO-SN-'))));
+        if (!serials.length) return {};
+        const { data: sameSerial } = await supabase.from('tickets').select('id, serial').in('serial', serials);
+        const byId: Record<string, string> = {};
+        (sameSerial || []).forEach((t: any) => { byId[t.id] = t.serial; });
+        const allIds = Object.keys(byId);
+        if (!allIds.length) return {};
+        const [{ data: arrivals }, { data: closes }] = await Promise.all([
+            supabase.from('km_logs').select('ticket_id, lat, lng, captured_at').in('ticket_id', allIds).eq('entry_type', 'arrival').not('lat', 'is', null),
+            supabase.from('engineer_locations').select('ticket_id, lat, lng, recorded_at').in('ticket_id', allIds).eq('event_type', 'ticket_close').not('lat', 'is', null),
+        ]);
+        const points = [
+            ...(arrivals || []).map((l: any) => ({ ticketId: l.ticket_id, lat: l.lat, lng: l.lng, at: l.captured_at })),
+            ...(closes || []).map((l: any) => ({ ticketId: l.ticket_id, lat: l.lat, lng: l.lng, at: l.recorded_at })),
+        ];
+        const bestBySerial: Record<string, PrevLocation> = {};
+        points.forEach((p) => {
+            const serial = byId[p.ticketId];
+            if (!serial) return;
+            const cur = bestBySerial[serial];
+            if (!cur || new Date(p.at) > new Date(cur.at)) bestBySerial[serial] = { ticketId: p.ticketId, lat: p.lat, lng: p.lng, at: p.at };
+        });
+        return bestBySerial;
+    } catch (err) {
+        console.error('fetchPrevLocationMap:', err);
+        return {};
+    }
+};

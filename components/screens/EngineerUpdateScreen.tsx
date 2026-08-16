@@ -16,7 +16,7 @@ import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingSer
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel, WorkPanelState } from '@/services/visitStartService';
 import { fetchTicketById } from '@/services/engineerUpdateService';
 
-const VISIT_BLOCKED_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'];
+export const VISIT_BLOCKED_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'];
 
 const statusColor: Record<string, { bg: string; color: string }> = {
     'Assigned': { bg: '#dbeafe', color: '#1e40af' },
@@ -40,7 +40,7 @@ function sessInfoLine(sessions: number, totalMin: number, suffix: string): strin
     return `📋 ${sessions} session(s) done${totalMin ? ` — ${Math.floor(totalMin / 60)}h ${totalMin % 60}m ${suffix}` : ''}`;
 }
 
-function WorkPanel({
+export function WorkPanel({
     panel, busy, onVisitStart, onVisitStop, onWorkStart, onReachedLocation, onWorkHold,
 }: {
     panel: WorkPanelState; busy: boolean;

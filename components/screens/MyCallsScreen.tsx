@@ -3,22 +3,29 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
-import { punchIn, punchOut, saveWorkLog, deleteWorkLog } from '@/services/myCallsService';
+import { punchIn, punchOut, saveWorkLog, deleteWorkLog, fetchPrevLocationMap, PrevLocation } from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
 import KmCaptureModal from './tickets/KmCaptureModal';
-import { hasKmEntryToday } from '@/services/kmTrackingService';
+import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
 import { fetchWorkLogsByDate } from '@/services/myCallsService';
 import WorkLogShareModal from './WorkLogShareModal';
 import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
-import { updateTicketStatus } from '@/services/engineerUpdateService';
+import { updateTicketStatus, fetchTicketById } from '@/services/engineerUpdateService';
 import {
   fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports,
   DrCallSummary, DailyReportRecord,
 } from '@/services/engDailyReportService';
+import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
+import { WorkPanel, VISIT_BLOCKED_STATUSES } from './EngineerUpdateScreen';
+import WarrantyClaimModal from './tickets/WarrantyClaimModal';
+import EngVoidWarrantyModal from './tickets/EngVoidWarrantyModal';
+import PartIndentModal from './tickets/PartIndentModal';
+import MSCDispatchPanel from './tickets/MSCDispatchPanel';
+import { isCspManager } from '@/lib/permissions';
 
 // ─── Time slots helper ──────────────────────────────────────────────────────
 
@@ -68,6 +75,8 @@ export default function MyCallsScreen() {
   const { data: session } = useSession();
   const engId = (session?.user as any)?.email ?? (session?.user as any)?.id ?? '';
   const engName = (session?.user as any)?.name ?? '';
+  const roleType = (session?.user as any)?.roleType ?? '';
+  const cspMgr = isCspManager(session);
 
   const { punchLog, workLogs, myTickets, myTasks, loading, error, refetch } = useMyCalls(engId, engName);
 
@@ -89,10 +98,41 @@ export default function MyCallsScreen() {
 
   // Ticket list — mirrors HTML's My Calls ticket cards + Update modal
   const [ticketSearch, setTicketSearch] = useState('');
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<'active' | '' | 'closed'>('active');
   const [expandedAddr, setExpandedAddr] = useState<string | null>(null);
   const [updateTicket, setUpdateTicket] = useState<any | null>(null);
   const [updateForm, setUpdateForm] = useState({ newStatus: '', note: '', labour: '', faultCode: '' });
   const [updateSaving, setUpdateSaving] = useState(false);
+
+  // Visit/Work panel + warranty/parts — mirrors EngineerUpdateScreen's fuller
+  // Update modal (matches HTML's single shared openEngUpdate() everywhere).
+  const [panelBusy, setPanelBusy] = useState(false);
+  const [kmGateTicket, setKmGateTicket] = useState<any | null>(null);
+  const [catchupTicket, setCatchupTicket] = useState<{ newTicket: any; skipTicketId: string } | null>(null);
+  const [reachedTicket, setReachedTicket] = useState<any | null>(null);
+  const [holdTicket, setHoldTicket] = useState<any | null>(null);
+  const [holdRemark, setHoldRemark] = useState('');
+  const [holdSaving, setHoldSaving] = useState(false);
+  const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
+  const [voidModalOpen, setVoidModalOpen] = useState(false);
+  const [partIndentOpen, setPartIndentOpen] = useState(false);
+
+  // Previous Location — mirrors HTML's mcBuildPrevLocMap()/mcConfirmPrevLocation().
+  const [prevLocMap, setPrevLocMap] = useState<Record<string, PrevLocation>>({});
+  const [prevLocModal, setPrevLocModal] = useState<{ pl: PrevLocation; t: any } | null>(null);
+  useEffect(() => {
+    if (myTickets.length) fetchPrevLocationMap(myTickets).then(setPrevLocMap);
+  }, [myTickets]);
+  const hasPrevLoc = (t: any): PrevLocation | null => {
+    const pl = t.serial ? prevLocMap[t.serial] : undefined;
+    return pl && pl.ticketId !== t.id ? pl : null;
+  };
+  const handleConfirmPrevLocation = (t: any) => {
+    const pl = hasPrevLoc(t);
+    if (!pl) return;
+    const msg = `📍 આ લોકેશન આ ડિવાઇસ (સિરિયલ: ${t.serial}) ની પાછલી વિઝિટ વખતે સેવ થયેલ છે.\n\nનેવિગેટ કરતા પહેલા એક વાર કન્ફર્મ કરો કે તમે એ જ સરનામે/જગ્યાએ જવાના છો — વચ્ચે કસ્ટમરનું લોકેશન બદલાઈ પણ ગયું હોઈ શકે છે.`;
+    if (confirm(msg)) setPrevLocModal({ pl, t });
+  };
 
   const openTicketUpdate = (t: any) => {
     setUpdateTicket(t);
@@ -103,6 +143,96 @@ export default function MyCallsScreen() {
   const allowedForUpdate = updateTicket
     ? getAllowedStatuses(updateTicket.status, 'engineer', updateTicket.service_type, updateTicket.call_type, updateTicket.warranty_coverage)
     : [];
+
+  // Refreshes the open modal's ticket in place after a panel action, without
+  // dropping the modal (mirrors EngineerUpdateScreen's reloadSelected()).
+  const reloadUpdateTicket = async (id: string) => {
+    const fresh = await fetchTicketById(id);
+    if (fresh) setUpdateTicket(fresh);
+    await refetch();
+  };
+
+  const handleVisitStart = async (t: any) => {
+    if (roleType === 'engineer' && t.service_type !== 'Carry In') {
+      const today = new Date().toLocaleDateString('en-CA');
+      const skipKey = `kmSkip_${engId}_${today}`;
+      let skipTicket: string | null = null;
+      try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+      if (skipTicket) { setCatchupTicket({ newTicket: t, skipTicketId: skipTicket }); return; }
+      const hasOpening = await hasKmEntryToday(engId, 'opening');
+      if (!hasOpening) { setKmGateTicket(t); return; }
+    }
+    setPanelBusy(true);
+    const r = await startVisit(t, engId, engName, roleType);
+    setPanelBusy(false);
+    if (!r.success) alert('Error: ' + r.error); else await reloadUpdateTicket(t.id);
+  };
+
+  const handleVisitStop = async (t: any) => {
+    setPanelBusy(true);
+    const r = await stopVisit(t, engId, engName);
+    setPanelBusy(false);
+    if (!r.success) alert('Error: ' + r.error); else await reloadUpdateTicket(t.id);
+  };
+
+  const handleKmGateDone = async () => {
+    if (!kmGateTicket) return;
+    const t = kmGateTicket;
+    setKmGateTicket(null);
+    setPanelBusy(true);
+    const r = await startVisit(t, engId, engName, roleType);
+    setPanelBusy(false);
+    if (!r.success) alert('Error: ' + r.error); else await reloadUpdateTicket(t.id);
+  };
+
+  const handleCatchupDone = async () => {
+    if (!catchupTicket) return;
+    const { newTicket } = catchupTicket;
+    try { window.localStorage.removeItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+    setCatchupTicket(null);
+    await handleVisitStart(newTicket);
+  };
+
+  const handleWorkStart = async (t: any) => {
+    setPanelBusy(true);
+    const r = await doWorkStart(t, engId, engName, roleType);
+    setPanelBusy(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    alert(`Work Started! ✅ Time In: ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+    await reloadUpdateTicket(t.id);
+  };
+
+  const handleReachedLocationClick = async (t: any) => {
+    const already = await hasArrivalKmForTicket(engId, t.id);
+    if (already) { alert('✅ Arrival KM is already recorded for this call today.'); return; }
+    setReachedTicket(t);
+  };
+
+  const handleReachedLocationDone = async (skipped?: boolean) => {
+    if (!reachedTicket) return;
+    const t = reachedTicket;
+    setReachedTicket(null);
+    const r = await recordReachedLocation(t, engId, engName, !!skipped);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    if (skipped) { try { window.localStorage.setItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`, t.id); } catch { /* localStorage unavailable */ } }
+    alert(`📍 Reached Location saved${skipped ? '\n\n⏭️ KM skip karyu — next call na Visit Start (travel start) par farjiyat KM levase.' : ''}\n\nNow go inside and tap 🔧 Work Start when you begin work.`);
+    await reloadUpdateTicket(t.id);
+  };
+
+  const handleConfirmHold = async () => {
+    if (!holdTicket) return;
+    if (!holdRemark.trim()) { alert('Reason is mandatory!'); return; }
+    setHoldSaving(true);
+    const r = await doWorkHold(holdTicket, engId, engName, holdRemark.trim());
+    setHoldSaving(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    const t = holdTicket;
+    setHoldTicket(null); setHoldRemark('');
+    alert('Work paused ✅\nYou can now go to another call.\nCome back and tap Work Start to resume.');
+    await reloadUpdateTicket(t.id);
+  };
+
+  const workPanel = updateTicket ? computeWorkPanel(updateTicket) : null;
 
   const handleTicketUpdateSave = async () => {
     if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
@@ -232,15 +362,29 @@ export default function MyCallsScreen() {
     .filter((t) => t.planned_date === todayDateStr && isTicketActive(t.status))
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
 
+  // CSP managers can browse closed calls too (matches HTML's window._isCspMgr
+  // gate); regular engineers only ever see their open calls.
+  const statusFilteredTickets = !cspMgr ? activeTickets
+    : ticketStatusFilter === 'closed' ? closedTickets
+      : ticketStatusFilter === '' ? myTickets
+        : activeTickets;
+
   const ticketSearchQ = ticketSearch.trim().toLowerCase();
-  const visibleTickets = activeTickets.filter((t) => {
+  const visibleTickets = statusFilteredTickets.filter((t) => {
     if (!ticketSearchQ) return true;
     return (t.id || '').toLowerCase().includes(ticketSearchQ)
       || (t.cname || '').toLowerCase().includes(ticketSearchQ)
       || (t.mobile || '').includes(ticketSearchQ)
       || (t.model || '').toLowerCase().includes(ticketSearchQ)
       || (t.serial || '').toLowerCase().includes(ticketSearchQ);
-  }).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+  }).sort((a, b) => {
+    // Active calls bubble to the top even in "All Status", then newest first
+    // within each group — matches HTML's sort in renderMyCalls().
+    const aOpen = isTicketActive(a.status);
+    const bOpen = isTicketActive(b.status);
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    return (b.id || '').localeCompare(a.id || '');
+  });
 
   // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
@@ -469,13 +613,22 @@ export default function MyCallsScreen() {
             <button onClick={() => setDailyReportOpen(true)} style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}>📋 Daily Report</button>
           </div>
         </div>
-        <input
-          type="text"
-          placeholder="🔍 Search ticket, customer, mobile, model, serial..."
-          value={ticketSearch}
-          onChange={(e) => setTicketSearch(e.target.value)}
-          style={{ ...styles.formInput, marginBottom: '12px' }}
-        />
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="🔍 Search ticket, customer, mobile, model, serial..."
+            value={ticketSearch}
+            onChange={(e) => setTicketSearch(e.target.value)}
+            style={{ ...styles.formInput, flex: 1, minWidth: 200 }}
+          />
+          {cspMgr && (
+            <select value={ticketStatusFilter} onChange={(e) => setTicketStatusFilter(e.target.value as any)} style={{ ...styles.formInput, width: 140 }}>
+              <option value="active">Active Only</option>
+              <option value="">All Status</option>
+              <option value="closed">Closed Only</option>
+            </select>
+          )}
+        </div>
         {visibleTickets.length === 0 ? (
           <div style={styles.emptyMessage}>No calls</div>
         ) : (
@@ -540,11 +693,19 @@ export default function MyCallsScreen() {
                       </a>
                     </div>
                   )}
+                  {hasPrevLoc(t) && (
+                    <div
+                      onClick={() => handleConfirmPrevLocation(t)}
+                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: colors.primary, marginBottom: '8px', marginLeft: addr ? '6px' : 0 }}
+                    >
+                      📍 Previous Location
+                    </div>
+                  )}
                   <button
                     onClick={() => openTicketUpdate(t)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: colors.primary, color: '#fff' }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: isTicketActive(t.status) ? colors.primary : '#f1f5f9', color: isTicketActive(t.status) ? '#fff' : colors.text }}
                   >
-                    ✏️ Update
+                    {isTicketActive(t.status) ? '✏️ Update' : '👁️ View'}
                   </button>
                 </div>
               );
@@ -805,6 +966,39 @@ export default function MyCallsScreen() {
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 13 }}>
+              <div style={{ fontWeight: 600 }}>{updateTicket.brand_name} {updateTicket.model} | {updateTicket.serial}</div>
+              <div style={{ color: '#6b7280', marginTop: 2 }}>{updateTicket.problem}</div>
+            </div>
+
+            {!VISIT_BLOCKED_STATUSES.includes(updateTicket.status || '') && workPanel && (
+              <WorkPanel
+                panel={workPanel}
+                busy={panelBusy}
+                onVisitStart={() => handleVisitStart(updateTicket)}
+                onVisitStop={() => handleVisitStop(updateTicket)}
+                onWorkStart={() => handleWorkStart(updateTicket)}
+                onReachedLocation={() => handleReachedLocationClick(updateTicket)}
+                onWorkHold={() => setHoldTicket(updateTicket)}
+              />
+            )}
+
+            {(updateTicket.call_type === 'Non-Warranty' || updateTicket.call_type === 'Non-Warranty Repeat') && !updateTicket.warranty_claim_pending && (
+              <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
+            )}
+            {updateTicket.warranty_claim_pending && (
+              <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
+            )}
+            {updateTicket.warranty_coverage !== 'Out of Coverage' && (
+              <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>
+            )}
+            {updateTicket.status === 'Sent to MSC' && (
+              <MSCDispatchPanel ticketId={updateTicket.id} readOnly byUser={engName} />
+            )}
+            {!['Closed', 'Call Cancel', 'Customer Reject', 'Pending Customer Approval'].includes(updateTicket.status || '') && (
+              <button onClick={() => setPartIndentOpen(true)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, alignSelf: 'flex-start' }}>📦 Request Part</button>
+            )}
+
             {allowedForUpdate.length > 0 ? (
               <>
                 <div style={styles.formGroup}>
@@ -837,6 +1031,111 @@ export default function MyCallsScreen() {
                 ⏳ No status update available for: <strong>{updateTicket.status}</strong>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {warrantyModalOpen && updateTicket && (
+        <WarrantyClaimModal
+          ticket={updateTicket}
+          submittedBy={engName}
+          onClose={() => setWarrantyModalOpen(false)}
+          onDone={async () => { setWarrantyModalOpen(false); setUpdateTicket(null); await refetch(); }}
+        />
+      )}
+      {voidModalOpen && updateTicket && (
+        <EngVoidWarrantyModal
+          ticket={updateTicket}
+          byUser={engName}
+          onClose={() => setVoidModalOpen(false)}
+          onDone={async () => { setVoidModalOpen(false); setUpdateTicket(null); await refetch(); }}
+        />
+      )}
+      {partIndentOpen && updateTicket && (
+        <PartIndentModal
+          ticket={updateTicket}
+          byUser={engName}
+          isEngineerOnSite={updateTicket.service_type === 'On Site'}
+          onClose={() => setPartIndentOpen(false)}
+          onDone={async () => { setPartIndentOpen(false); setUpdateTicket(null); await refetch(); }}
+        />
+      )}
+      {kmGateTicket && (
+        <KmCaptureModal
+          type="opening"
+          engId={engId}
+          engName={engName}
+          ticketId={null}
+          onClose={() => setKmGateTicket(null)}
+          onDone={handleKmGateDone}
+        />
+      )}
+      {catchupTicket && (
+        <KmCaptureModal
+          type="arrival"
+          engId={engId}
+          engName={engName}
+          ticketId={catchupTicket.skipTicketId}
+          onClose={() => setCatchupTicket(null)}
+          onDone={handleCatchupDone}
+        />
+      )}
+      {reachedTicket && (
+        <KmCaptureModal
+          type="arrival"
+          engId={engId}
+          engName={engName}
+          ticketId={reachedTicket.id}
+          allowSkip
+          onClose={() => setReachedTicket(null)}
+          onDone={handleReachedLocationDone}
+        />
+      )}
+      {holdTicket && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>⏸️ Work on Hold</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Work log will be paused. You can start another call and come back to resume this one.</div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }}>Reason for hold <span style={{ color: '#dc2626' }}>*</span></label>
+              <textarea
+                value={holdRemark}
+                onChange={(e) => setHoldRemark(e.target.value)}
+                rows={3}
+                placeholder="e.g. Customer not available, waiting for part, going to urgent call..."
+                style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 8, padding: 10, fontSize: 13, resize: 'none', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setHoldTicket(null); setHoldRemark(''); }} style={{ flex: 1, padding: 10, background: '#f1f5f9', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+              <button onClick={handleConfirmHold} disabled={holdSaving} style={{ flex: 1, padding: 10, background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, opacity: holdSaving ? 0.6 : 1 }}>
+                {holdSaving ? 'Saving...' : '⏸️ Put on Hold'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prevLocModal && (
+        <Modal
+          isOpen
+          onClose={() => setPrevLocModal(null)}
+          title={`📍 Previous Location — ${prevLocModal.t.cname || prevLocModal.t.serial}`}
+          footer={
+            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+              <button onClick={() => setPrevLocModal(null)} style={{ flex: 1, padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>⬅ Back to My Calls</button>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${prevLocModal.pl.lat},${prevLocModal.pl.lng}`}
+                target="_blank" rel="noreferrer"
+                style={{ flex: 1, textAlign: 'center', textDecoration: 'none', padding: '8px 16px', background: colors.primary, color: '#fff', borderRadius: 6, fontSize: 14, fontWeight: 600 }}
+              >
+                🧭 Get Directions
+              </a>
+            </div>
+          }
+        >
+          <div style={{ fontSize: 12, color: colors.textMuted }}>
+            Recorded {new Date(prevLocModal.pl.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Ticket {prevLocModal.pl.ticketId})
           </div>
         </Modal>
       )}
