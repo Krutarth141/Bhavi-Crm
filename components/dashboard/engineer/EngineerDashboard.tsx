@@ -22,7 +22,7 @@ import CustomersScreen from '@/components/screens/CustomersScreen';
 import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
 import InventoryScreen from '@/components/screens/InventoryScreen';
 import AMCScreen from '@/components/screens/AMCScreen';
-import WorkLogScreen from '@/components/screens/WorkLogScreen';
+import WorkLogScreen, { EngineerWorkLogScreen } from '@/components/screens/WorkLogScreen';
 import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
 import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScreen';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
@@ -30,12 +30,13 @@ import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
-type EngineerTab = 'overview' | 'my-calls' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
+type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
     | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
 
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
     { id: 'my-calls', label: '📞 My Calls' },
+    { id: 'work-log', label: '🗒️ Work Log' },
     { id: 'tasks', label: '📋 My Tasks' },
     { id: 'tickets', label: '🎫 My Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
@@ -62,6 +63,8 @@ export default function EngineerDashboard() {
     const { data: session } = useSession();
     const cspMgr = isCspManager(session);
     const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
+    const engId = (session?.user as any)?.email ?? uid ?? '';
+    const engName = (session?.user as any)?.name ?? '';
     const { isVisible } = useNavVisibility(uid);
     const allNavItems = cspMgr ? [...NAV_ITEMS, ...CSP_EXTRA_ITEMS] : NAV_ITEMS;
     const visibleNavItems = allNavItems.filter((item) => item.id === 'overview' || isVisible(item.id));
@@ -80,6 +83,7 @@ export default function EngineerDashboard() {
         switch (activeTab) {
             case 'overview': return <DashboardOverview role="engineer" />;
             case 'my-calls': return <MyCallsScreen />;
+            case 'work-log': return <EngineerWorkLogScreen engId={engId} engName={engName} />;
             case 'tasks': return <TasksScreen />;
             case 'tickets': return <TicketsScreen />;
             case 'eng-parts': return <EngPartsScreen />;

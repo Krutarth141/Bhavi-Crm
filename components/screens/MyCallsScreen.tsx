@@ -3,15 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
-import { punchIn, punchOut, saveWorkLog, deleteWorkLog, fetchPrevLocationMap, PrevLocation } from '@/services/myCallsService';
+import { punchIn, punchOut, fetchPrevLocationMap, PrevLocation, startReturnTrip, finishReturnTrip, needsClosingKm } from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
 import KmCaptureModal from './tickets/KmCaptureModal';
 import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
-import { fetchWorkLogsByDate } from '@/services/myCallsService';
-import WorkLogShareModal from './WorkLogShareModal';
 import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
 import { updateTicketStatus, fetchTicketById } from '@/services/engineerUpdateService';
@@ -26,19 +24,10 @@ import EngVoidWarrantyModal from './tickets/EngVoidWarrantyModal';
 import PartIndentModal from './tickets/PartIndentModal';
 import MSCDispatchPanel from './tickets/MSCDispatchPanel';
 import { isCspManager } from '@/lib/permissions';
-
-// ─── Time slots helper ──────────────────────────────────────────────────────
-
-function generateTimeSlots(): string[] {
-  const slots: string[] = [];
-  for (let h = 7; h <= 21; h++) {
-    for (const m of ['00', '30']) {
-      slots.push(`${String(h).padStart(2, '0')}:${m}`);
-    }
-  }
-  return slots;
-}
-const TIME_SLOTS = generateTimeSlots();
+import { createTicket, ensureGroupId } from '@/services/ticketService';
+import { useTicketForm } from '@/hooks/useTicketForm';
+import { fetchTargets } from '@/services/targetsService';
+import { EngineerTarget } from '@/types/targets';
 
 // ─── Status badge helper ─────────────────────────────────────────────────────
 
@@ -61,14 +50,6 @@ function getPriorityBadgeStyle(priority: string): React.CSSProperties {
   return { ...styles.badge, ...styles.badgeOpen };
 }
 
-function getLogTypeBadgeStyle(logType: string): React.CSSProperties {
-  const t = (logType ?? 'work').toLowerCase();
-  if (t === 'travel') return { ...styles.badge, backgroundColor: '#e0f2fe', color: '#0369a1' };
-  if (t === 'meeting') return { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' };
-  if (t === 'training') return { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' };
-  return { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' };
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function MyCallsScreen() {
@@ -77,20 +58,33 @@ export default function MyCallsScreen() {
   const engName = (session?.user as any)?.name ?? '';
   const roleType = (session?.user as any)?.roleType ?? '';
   const cspMgr = isCspManager(session);
+  const memberRole = roleType === 'work_controller' ? 'WC' : 'Engineer';
 
-  const { punchLog, workLogs, myTickets, myTasks, loading, error, refetch } = useMyCalls(engId, engName);
+  const { punchLog, workLogs, myTickets, loading, error, refetch } = useMyCalls(engId, engName);
 
-  // Work log form state
-  const [wlFrom, setWlFrom] = useState('');
-  const [wlTo, setWlTo] = useState('');
-  const [wlTask, setWlTask] = useState('');
-  const [wlLogType, setWlLogType] = useState('work');
-  const [wlSubmitted, setWlSubmitted] = useState(false);
-  const [wlSaving, setWlSaving] = useState(false);
-  const [shareLogs, setShareLogs] = useState<{ date: string; logs: typeof workLogs } | null>(null);
-  const [searchDate, setSearchDate] = useState(new Date().toLocaleDateString('en-CA'));
-  const [searchResults, setSearchResults] = useState<typeof workLogs | null>(null);
-  const [searching, setSearching] = useState(false);
+  // Return to Office / Return to Home — mirrors HTML's rtoHtml bar in
+  // renderMyCalls(): derived from today's open travel work_log entry.
+  const [rtoBusy, setRtoBusy] = useState(false);
+  const openReturnLog = workLogs.find((l: any) => l.to_time === 'OPEN' && ((l.task_description || '').includes('Return to Office') || (l.task_description || '').includes('Return to Home')));
+  const isReturningToOffice = !!openReturnLog && (openReturnLog.task_description || '').includes('Return to Office');
+  const isReturningToHome = !!openReturnLog && (openReturnLog.task_description || '').includes('Return to Home');
+
+  // My Target — mirrors HTML's loadMyTargetWidget().
+  const [myTarget, setMyTarget] = useState<EngineerTarget | null>(null);
+  useEffect(() => {
+    if (!engId) return;
+    fetchTargets(new Date().toISOString().slice(0, 7)).then((rows) => {
+      setMyTarget(rows.find((r) => r.eng_id === engId) || null);
+    });
+  }, [engId]);
+
+  // New Call / Add Product (Same Customer) — mirrors HTML's openEngNewCall()
+  // and addProductForSameCustomer() (the shared ticket-create form, reused
+  // here from TicketsScreen's underlying services/hooks).
+  const { formData: callForm, handleFormChange: handleCallFormChange, setFormValues: setCallFormValues, resetForm: resetCallForm } = useTicketForm();
+  const [newCallOpen, setNewCallOpen] = useState(false);
+  const [newCallSaving, setNewCallSaving] = useState(false);
+  const [groupBanner, setGroupBanner] = useState<{ groupId: string; anchor: any } | null>(null);
 
   // Daily Report / Past Reports — mirrors HTML's My Calls header buttons.
   const [dailyReportOpen, setDailyReportOpen] = useState(false);
@@ -132,6 +126,95 @@ export default function MyCallsScreen() {
     if (!pl) return;
     const msg = `📍 આ લોકેશન આ ડિવાઇસ (સિરિયલ: ${t.serial}) ની પાછલી વિઝિટ વખતે સેવ થયેલ છે.\n\nનેવિગેટ કરતા પહેલા એક વાર કન્ફર્મ કરો કે તમે એ જ સરનામે/જગ્યાએ જવાના છો — વચ્ચે કસ્ટમરનું લોકેશન બદલાઈ પણ ગયું હોઈ શકે છે.`;
     if (confirm(msg)) setPrevLocModal({ pl, t });
+  };
+
+  // Return to Office / Return to Home — mirrors HTML's startReturnToOffice()/
+  // reachedOffice()/startReturnToHome()/reachedHome(). KM catch-up (skipped
+  // arrival KM) is picked up first, same gate as the next call's Visit Start.
+  const [rtoCatchupKind, setRtoCatchupKind] = useState<{ kind: 'office' | 'home'; skipTicketId: string } | null>(null);
+  const [rtoClosingKind, setRtoClosingKind] = useState<{ kind: 'office' | 'home'; logId: string } | null>(null);
+
+  const runStartReturnTrip = async (kind: 'office' | 'home') => {
+    setRtoBusy(true);
+    const r = await startReturnTrip(engId, engName, memberRole, kind);
+    setRtoBusy(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    await refetch();
+  };
+
+  const handleStartReturnTrip = async (kind: 'office' | 'home') => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const skipKey = `kmSkip_${engId}_${today}`;
+    let skipTicket: string | null = null;
+    try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+    if (skipTicket) { setRtoCatchupKind({ kind, skipTicketId: skipTicket }); return; }
+    await runStartReturnTrip(kind);
+  };
+
+  const handleRtoCatchupDone = async () => {
+    if (!rtoCatchupKind) return;
+    const { kind } = rtoCatchupKind;
+    try { window.localStorage.removeItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+    setRtoCatchupKind(null);
+    await runStartReturnTrip(kind);
+  };
+
+  const finishReturn = async (logId: string, kind: 'office' | 'home') => {
+    setRtoBusy(true);
+    const r = await finishReturnTrip(logId, engId, engName, memberRole, kind);
+    setRtoBusy(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    await refetch();
+  };
+
+  const handleReachedReturn = async (logId: string, kind: 'office' | 'home') => {
+    const needsClosing = await needsClosingKm(engId);
+    if (needsClosing) { setRtoClosingKind({ kind, logId }); return; }
+    await finishReturn(logId, kind);
+  };
+
+  const handleRtoClosingDone = async () => {
+    if (!rtoClosingKind) return;
+    const { logId, kind } = rtoClosingKind;
+    setRtoClosingKind(null);
+    await finishReturn(logId, kind);
+  };
+
+  // New Call / Add Product (Same Customer) — mirrors HTML's openEngNewCall().
+  const handleOpenNewCall = () => {
+    resetCallForm();
+    setGroupBanner(null);
+    setCallFormValues({ assigned_to: engId, assigned_name: engName });
+    setNewCallOpen(true);
+  };
+
+  const handleAddProductSameCustomer = async (t: any) => {
+    const r = await ensureGroupId(t);
+    if (!r.success || !r.groupId) { alert('❌ ' + (r.error || 'Could not link call group')); return; }
+    resetCallForm();
+    setCallFormValues({
+      cname: t.cname, mobile: t.mobile, alt_mobile: t.alt_mobile || '', address: t.address || '',
+      city: t.city || '', state: t.state || 'Gujarat', pin: t.pin || '', area: t.area || '',
+      brand_name: t.brand_name || '', wc_type: t.wc_type || 'ICP',
+      assigned_to: engId, assigned_name: engName,
+    });
+    setGroupBanner({ groupId: r.groupId, anchor: t });
+    setNewCallOpen(true);
+  };
+
+  const handleSaveNewCall = async () => {
+    if (!callForm.cname || !callForm.mobile || !callForm.serial) { alert('❌ Fill required fields'); return; }
+    setNewCallSaving(true);
+    const ticketData: any = { ...callForm };
+    if (groupBanner) ticketData.group_id = groupBanner.groupId;
+    const result = await createTicket(ticketData);
+    setNewCallSaving(false);
+    if (!result.success) { alert('❌ Error: ' + result.error); return; }
+    alert('✅ Created! ID: ' + result.id);
+    setNewCallOpen(false);
+    setGroupBanner(null);
+    resetCallForm();
+    await refetch();
   };
 
   const openTicketUpdate = (t: any) => {
@@ -243,13 +326,6 @@ export default function MyCallsScreen() {
     else alert('Error: ' + r.error);
   };
 
-  const handleSearchLogs = async () => {
-    setSearching(true);
-    const r = await fetchWorkLogsByDate(engId, searchDate);
-    setSearchResults(r.data || []);
-    setSearching(false);
-  };
-
   // ── Punch In / Out ───────────────────────────────────────────────────────────
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
   const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
@@ -297,63 +373,6 @@ export default function MyCallsScreen() {
     }
   };
 
-  // ── Save Work Log ─────────────────────────────────────────────────────────
-  const handleSaveWorkLog = async () => {
-    setWlSubmitted(true);
-    if (!wlFrom || !wlTo || !wlTask.trim()) return;
-    setWlSaving(true);
-    const today = new Date().toLocaleDateString('en-CA');
-    const result = await saveWorkLog({
-      eng_id: engId,
-      eng_name: engName,
-      member_role: 'Engineer',
-      log_date: today,
-      from_time: wlFrom,
-      to_time: wlTo,
-      task_description: wlTask.trim(),
-      log_type: wlLogType,
-    });
-    setWlSaving(false);
-    if (result.success) {
-      setWlFrom('');
-      setWlTo('');
-      setWlTask('');
-      setWlLogType('work');
-      setWlSubmitted(false);
-      refetch();
-    } else {
-      alert('❌ ' + result.error);
-    }
-  };
-
-  // ── Delete Work Log ───────────────────────────────────────────────────────
-  const handleDeleteWorkLog = async (id: string) => {
-    if (!confirm('Delete this work log entry?')) return;
-    const result = await deleteWorkLog(id);
-    if (result.success) {
-      refetch();
-    } else {
-      alert('❌ ' + result.error);
-    }
-  };
-
-  // ── WhatsApp Share ────────────────────────────────────────────────────────
-  const handleWhatsAppShare = () => {
-    const today = new Date().toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-    const punchLine = punchLog?.punch_in_time
-      ? `🕐 Punch In: ${punchLog.punch_in_time}${punchLog.punch_out_time ? ` | Out: ${punchLog.punch_out_time}` : ''}`
-      : '🕐 Not punched in today';
-    const logLines = workLogs
-      .map((l) => `• ${l.from_time}–${l.to_time}: ${l.task_description}`)
-      .join('\n');
-    const text = `📋 Work Log — ${today}\n${engName}\n\n${punchLine}\n\n${logLines}\n\n🎫 Tickets: ${myTickets.length} | Tasks: ${myTasks.length}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   // ── Derived KPIs ──────────────────────────────────────────────────────────
   const activeTickets = myTickets.filter((t) => isTicketActive(t.status));
   const closedTickets = myTickets.filter((t) => !isTicketActive(t.status));
@@ -361,6 +380,24 @@ export default function MyCallsScreen() {
   const todayRoute = myTickets
     .filter((t) => t.planned_date === todayDateStr && isTicketActive(t.status))
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
+
+  // My Daily Calls chart — mirrors HTML's last7 bar chart in renderMyCalls().
+  const dailyCounts: Record<string, number> = {};
+  myTickets.forEach((t) => {
+    if (!t.created_at) return;
+    const d = new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    dailyCounts[d] = (dailyCounts[d] || 0) + 1;
+  });
+  const last7 = Object.entries(dailyCounts).slice(-7);
+  const maxDaily = Math.max(...last7.map(([, v]) => v), 1);
+
+  // My Target — mirrors HTML's loadMyTargetWidget() progress bar.
+  const targetCalls = myTarget?.target_calls || 0;
+  const targetMonth = new Date().toISOString().slice(0, 7);
+  const closedThisMonth = myTickets.filter((t) => t.status === 'Closed' && t.updated_at && t.updated_at.slice(0, 7) === targetMonth).length;
+  const targetPct = targetCalls ? Math.min(100, Math.round((closedThisMonth / targetCalls) * 100)) : 0;
+  const targetColor = targetPct >= 80 ? '#0e9f6e' : targetPct >= 50 ? '#f59e0b' : '#f05252';
+  const targetEmoji = targetPct >= 100 ? '🏆' : targetPct >= 80 ? '🔥' : targetPct >= 50 ? '💪' : '🎯';
 
   // CSP managers can browse closed calls too (matches HTML's window._isCspMgr
   // gate); regular engineers only ever see their open calls.
@@ -410,17 +447,6 @@ export default function MyCallsScreen() {
       {/* 1. Header */}
       <div style={{ ...styles.sectionHeader, marginBottom: '20px' }}>
         <h2 style={{ ...styles.sectionTitle, fontSize: '22px' }}>📞 My Calls</h2>
-        <button
-          onClick={handleWhatsAppShare}
-          style={{
-            ...styles.btn,
-            backgroundColor: '#25d366',
-            color: '#fff',
-            padding: '8px 16px',
-          }}
-        >
-          📤 WhatsApp Share
-        </button>
       </div>
 
       {/* 2. Punch Bar */}
@@ -494,20 +520,65 @@ export default function MyCallsScreen() {
         <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
       )}
 
+      {/* 2b. Return to Office / Return to Home — mirrors HTML's rtoHtml bar. */}
+      {punchLog?.punch_in_time && !punchLog?.punch_out_time && (
+        openReturnLog ? (
+          <div style={{ background: isReturningToOffice ? '#1e3a5f' : '#3f2d5c', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, borderRadius: 10, flexWrap: 'wrap' }}>
+            <div style={{ color: isReturningToOffice ? '#93c5fd' : '#d8b4fe', fontSize: 13, fontWeight: 600 }}>
+              🚗 Traveling to {isReturningToOffice ? 'Office' : 'Home'}... (since {openReturnLog.from_time})
+            </div>
+            <button
+              disabled={rtoBusy}
+              onClick={() => handleReachedReturn(openReturnLog.id, isReturningToOffice ? 'office' : 'home')}
+              style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: rtoBusy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: rtoBusy ? 0.6 : 1 }}
+            >
+              ✅ Reached {isReturningToOffice ? 'Office' : 'Home'}
+            </button>
+          </div>
+        ) : (
+          <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, borderRadius: 10, flexWrap: 'wrap' }}>
+            <div style={{ color: '#166534', fontSize: 13, fontWeight: 600 }}>🏁 End of day — mark your return trip</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button disabled={rtoBusy} onClick={() => handleStartReturnTrip('office')} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: rtoBusy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: rtoBusy ? 0.6 : 1 }}>🏢 Return to Office</button>
+              <button disabled={rtoBusy} onClick={() => handleStartReturnTrip('home')} style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: rtoBusy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: rtoBusy ? 0.6 : 1 }}>🏡 Return to Home</button>
+            </div>
+          </div>
+        )
+      )}
+      {rtoCatchupKind && (
+        <KmCaptureModal
+          type="arrival"
+          engId={engId}
+          engName={engName}
+          ticketId={rtoCatchupKind.skipTicketId}
+          onClose={() => setRtoCatchupKind(null)}
+          onDone={handleRtoCatchupDone}
+        />
+      )}
+      {rtoClosingKind && (
+        <KmCaptureModal
+          type="closing"
+          engId={engId}
+          engName={engName}
+          allowSkip
+          onClose={() => setRtoClosingKind(null)}
+          onDone={handleRtoClosingDone}
+        />
+      )}
+
       {/* 3. KPI Row */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(3, 1fr)',
           gap: '12px',
           marginBottom: '20px',
         }}
       >
         {[
-          { label: 'Total Tickets', value: myTickets.length, color: colors.primary },
-          { label: 'Active Tickets', value: activeTickets.length, color: colors.warning },
-          { label: 'Closed Tickets', value: closedTickets.length, color: colors.success },
-          { label: 'Tasks', value: myTasks.length, color: '#7c3aed' },
+          { label: 'Total', value: myTickets.length, color: colors.primary },
+          { label: 'Active', value: activeTickets.length, color: colors.warning },
+          { label: 'Closed', value: closedTickets.length, color: colors.success },
         ].map((kpi) => (
           <div
             key={kpi.label}
@@ -568,49 +639,56 @@ export default function MyCallsScreen() {
         </div>
       )}
 
-      {/* 5. Active Tasks */}
-      {myTasks.length > 0 && (
+      {/* 5. My Daily Calls chart — mirrors HTML's last7 bar chart. */}
+      {last7.length > 0 && (
         <div style={{ ...styles.card, marginBottom: '20px' }}>
-          <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '12px' }}>
-            ✅ Active Tasks
-          </div>
+          <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '12px' }}>📊 My Daily Calls</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {myTasks.map((task) => (
-              <div
-                key={task.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: colors.bg,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span style={{ fontSize: '12px', color: colors.textMuted, fontWeight: 600 }}>
-                  #{task.task_no ?? task.id}
-                </span>
-                <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>
-                  {task.title ?? task.task_description ?? '—'}
-                </span>
-                {task.priority && (
-                  <span style={getPriorityBadgeStyle(task.priority)}>{task.priority}</span>
-                )}
-                <span style={getStatusBadgeStyle(task.status)}>{task.status}</span>
+            {last7.map(([d, v]) => (
+              <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 50, fontSize: 12, color: colors.textMuted, flexShrink: 0 }}>{d}</div>
+                <div style={{ flex: 1, background: colors.bg, borderRadius: 6, overflow: 'hidden', height: 22 }}>
+                  <div style={{ background: colors.primary, height: '100%', width: `${Math.round((v / maxDaily) * 100)}%`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6, color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                    {v}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* 5b. My Tickets — searchable list with Update action */}
+      {/* 5b. My Target — mirrors HTML's loadMyTargetWidget(). */}
+      {targetCalls > 0 && (
+        <div style={{ ...styles.card, marginBottom: '20px', borderLeft: `4px solid ${targetColor}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
+              {targetEmoji} {new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })} Target
+            </h3>
+            <span style={{ fontSize: 20, fontWeight: 800, color: targetColor }}>{closedThisMonth} / {targetCalls}</span>
+          </div>
+          <div style={{ background: '#f1f5f9', borderRadius: 99, height: 14, overflow: 'hidden' }}>
+            <div style={{ background: targetColor, height: '100%', width: `${targetPct}%`, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6 }}>
+              {targetPct > 15 && <span style={{ fontSize: 10, color: '#fff', fontWeight: 700 }}>{targetPct}%</span>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: colors.textMuted }}>
+            <span>Closed this month</span><span>Target: {targetCalls} calls</span>
+          </div>
+          {!!myTarget?.target_amount && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#065f46', fontWeight: 600 }}>💰 Revenue Target: ₹{myTarget.target_amount}</div>
+          )}
+        </div>
+      )}
+
+      {/* 5c. My Tickets — searchable list with Update action */}
       <div style={{ ...styles.card, marginBottom: '20px' }}>
         <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
           <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🎫 My Calls ({visibleTickets.length})</span>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => setPastReportsOpen(true)} style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}>🕐 Past Reports</button>
             <button onClick={() => setDailyReportOpen(true)} style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}>📋 Daily Report</button>
+            <button onClick={handleOpenNewCall} style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSm }}>➕ New Call</button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
@@ -701,6 +779,12 @@ export default function MyCallsScreen() {
                       📍 Previous Location
                     </div>
                   )}
+                  <div
+                    onClick={() => handleAddProductSameCustomer(t)}
+                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#065f46', marginBottom: '8px', marginLeft: (addr || hasPrevLoc(t)) ? '6px' : 0 }}
+                  >
+                    ➕ Add Product (Same Customer)
+                  </div>
                   <button
                     onClick={() => openTicketUpdate(t)}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: isTicketActive(t.status) ? colors.primary : '#f1f5f9', color: isTicketActive(t.status) ? '#fff' : colors.text }}
@@ -713,232 +797,6 @@ export default function MyCallsScreen() {
           </div>
         )}
       </div>
-
-      {/* 6. Work Log Entry Form */}
-      <div style={{ ...styles.card, marginBottom: '20px' }}>
-        <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '14px' }}>
-          ➕ Add Work Log Entry
-        </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: '12px',
-            marginBottom: '12px',
-          }}
-        >
-          {/* From Time */}
-          <div style={styles.formGroup}>
-            <label style={styles.formLabel}>From Time</label>
-            <select
-              value={wlFrom}
-              onChange={(e) => setWlFrom(e.target.value)}
-              style={{
-                ...styles.formInput,
-                borderColor: wlSubmitted && !wlFrom ? colors.danger : colors.border,
-              }}
-            >
-              <option value="">-- Select --</option>
-              {TIME_SLOTS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* To Time */}
-          <div style={styles.formGroup}>
-            <label style={styles.formLabel}>To Time</label>
-            <select
-              value={wlTo}
-              onChange={(e) => setWlTo(e.target.value)}
-              style={{
-                ...styles.formInput,
-                borderColor: wlSubmitted && !wlTo ? colors.danger : colors.border,
-              }}
-            >
-              <option value="">-- Select --</option>
-              {TIME_SLOTS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Log Type */}
-          <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Log Type</label>
-            <select
-              value={wlLogType}
-              onChange={(e) => setWlLogType(e.target.value)}
-              style={styles.formInput}
-            >
-              <option value="work">Work</option>
-              <option value="travel">Travel</option>
-              <option value="meeting">Meeting</option>
-              <option value="training">Training</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Task Description */}
-        <div style={{ ...styles.formGroup, marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={styles.formLabel}>Task Description *</label>
-            <AIWriteButton type="worklog" onInsert={(text) => setWlTask(text)} />
-          </div>
-          <input
-            type="text"
-            placeholder="What did you work on?"
-            value={wlTask}
-            onChange={(e) => setWlTask(e.target.value)}
-            style={{
-              ...styles.formInput,
-              borderColor: wlSubmitted && !wlTask.trim() ? colors.danger : colors.border,
-            }}
-          />
-          {wlSubmitted && !wlTask.trim() && (
-            <span style={{ fontSize: '11px', color: colors.danger, marginTop: '2px' }}>
-              Task description is required.
-            </span>
-          )}
-        </div>
-
-        <button
-          onClick={handleSaveWorkLog}
-          disabled={wlSaving}
-          style={{
-            ...styles.btn,
-            ...styles.btnPrimary,
-            opacity: wlSaving ? 0.6 : 1,
-            cursor: wlSaving ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {wlSaving ? '⏳ Saving...' : '💾 Save Entry'}
-        </button>
-      </div>
-
-      {/* 7. Today's Work Log List */}
-      <div style={{ ...styles.card, marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <div style={{ ...styles.sectionTitle, fontSize: '15px' }}>🗒️ Today's Work Log</div>
-          {workLogs.length > 0 && (
-            <button
-              onClick={() => setShareLogs({ date: new Date().toLocaleDateString('en-CA'), logs: workLogs })}
-              style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              📲 Share
-            </button>
-          )}
-        </div>
-        {workLogs.length === 0 ? (
-          <div style={styles.emptyMessage}>No work log entries for today</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {workLogs.map((log) => (
-              <div
-                key={log.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  backgroundColor: colors.bg,
-                  flexWrap: 'wrap',
-                }}
-              >
-                {/* Time range badge */}
-                <span
-                  style={{
-                    ...styles.badge,
-                    backgroundColor: '#e0e7ff',
-                    color: '#3730a3',
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap' as const,
-                  }}
-                >
-                  {log.from_time} – {log.to_time}
-                </span>
-
-                {/* Log type badge */}
-                <span style={getLogTypeBadgeStyle(log.log_type ?? 'work')}>
-                  {log.log_type ?? 'work'}
-                </span>
-
-                {/* Description */}
-                <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>
-                  {log.task_description}
-                </span>
-
-                {/* Delete */}
-                <button
-                  onClick={() => handleDeleteWorkLog(log.id)}
-                  title="Delete entry"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    color: colors.danger,
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                  }}
-                >
-                  🗑️
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 8. Search Past Logs */}
-      <div style={styles.card}>
-        <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '14px' }}>
-          🔍 Search Past Logs
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '12px' }}>
-          <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={{ fontSize: '12px', color: colors.textMuted, display: 'block', marginBottom: '4px' }}>Date</label>
-            <input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} style={{ ...styles.formInput, width: '100%' }} />
-          </div>
-          <button onClick={handleSearchLogs} disabled={searching} style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSm, opacity: searching ? 0.6 : 1 }}>
-            {searching ? 'Loading...' : '🔍 Search'}
-          </button>
-        </div>
-        {searchResults !== null && (
-          searchResults.length === 0 ? (
-            <div style={styles.emptyMessage}>No logs found for this date</div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.primary, padding: '4px 10px', background: '#eff6ff', borderRadius: '6px' }}>
-                  {new Date(searchDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — {searchResults.length} entries
-                </div>
-                <button
-                  onClick={() => setShareLogs({ date: searchDate, logs: searchResults })}
-                  style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  📲 Share
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {searchResults.map((l) => (
-                  <div key={l.id} style={{ display: 'flex', gap: '10px', padding: '8px 10px', background: colors.bg, borderRadius: '8px' }}>
-                    <div style={{ flexShrink: 0, fontSize: '11px', fontWeight: 700, color: '#4c1d95', background: '#ede9fe', padding: '3px 8px', borderRadius: '99px', whiteSpace: 'nowrap' }}>
-                      {l.from_time}–{l.to_time}
-                    </div>
-                    <div style={{ fontSize: '13px', color: colors.text }}>{l.task_description}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )
-        )}
-      </div>
-
-      {shareLogs && (
-        <WorkLogShareModal date={shareLogs.date} logs={shareLogs.logs} name={engName} onClose={() => setShareLogs(null)} />
-      )}
 
       {dailyReportOpen && (
         <DailyReportModal engId={engId} engName={engName} onClose={() => setDailyReportOpen(false)} />
@@ -1136,6 +994,98 @@ export default function MyCallsScreen() {
         >
           <div style={{ fontSize: 12, color: colors.textMuted }}>
             Recorded {new Date(prevLocModal.pl.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Ticket {prevLocModal.pl.ticketId})
+          </div>
+        </Modal>
+      )}
+
+      {newCallOpen && (
+        <Modal
+          isOpen
+          onClose={() => { setNewCallOpen(false); setGroupBanner(null); }}
+          title="➕ New Call"
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setNewCallOpen(false); setGroupBanner(null); }} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button
+                onClick={handleSaveNewCall}
+                disabled={newCallSaving}
+                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: newCallSaving ? 0.6 : 1 }}
+              >
+                {newCallSaving ? 'Saving...' : '💾 Save'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {groupBanner && (
+              <div style={{ background: '#ecfdf5', border: '1.5px solid #6ee7b7', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#065f46' }}>
+                🔗 Linked to Call Group <b>{groupBanner.groupId}</b> — Customer/Address/Brand same as {groupBanner.anchor.id} used. Just fill in Model No, Serial No, Call Type &amp; Problem — Save creates a new ticket ID under the same group.
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Name *</label>
+                <input type="text" name="cname" value={callForm.cname} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Mobile *</label>
+                <input type="text" name="mobile" value={callForm.mobile} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>City *</label>
+                <input type="text" name="city" value={callForm.city} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Alt Mobile</label>
+                <input type="text" name="alt_mobile" value={callForm.alt_mobile} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>State</label>
+                <input type="text" name="state" value={callForm.state} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>PIN</label>
+                <input type="text" name="pin" value={callForm.pin} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Area</label>
+                <input type="text" name="area" value={callForm.area} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Address</label>
+                <input type="text" name="address" value={callForm.address} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Brand</label>
+                <input type="text" name="brand_name" value={callForm.brand_name} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Model</label>
+                <input type="text" name="model" value={callForm.model} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Serial *</label>
+                <input type="text" name="serial" value={callForm.serial} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Call Type</label>
+                <select name="call_type" value={callForm.call_type} onChange={handleCallFormChange} style={styles.formInput}>
+                  {['Warranty', 'Non-Warranty', 'AMC'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>SE Call ID</label>
+                <input type="text" name="se_call_id" value={callForm.se_call_id} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+            </div>
+            <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+              <label style={styles.formLabel}>Problem *</label>
+              <textarea name="problem" value={callForm.problem} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+            </div>
+            <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+              <label style={styles.formLabel}>Description</label>
+              <textarea name="description" value={callForm.description} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+            </div>
           </div>
         </Modal>
       )}

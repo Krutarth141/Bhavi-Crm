@@ -193,6 +193,65 @@ export const fetchWorkLogsByDate = async (
     }
 };
 
+// Return to Office / Return to Home — mirrors HTML's startReturnToOffice()/
+// reachedOffice()/startReturnToHome()/reachedHome(): an "OPEN" travel work_log
+// entry brackets the return trip; any other open log for the day is closed
+// out first, matching HTML's "close any other open travel/work log first".
+export const startReturnTrip = async (
+    engId: string, engName: string, memberRole: string, kind: 'office' | 'home'
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const now = new Date();
+        const nowTime = now.toTimeString().slice(0, 5);
+        const nowDate = now.toLocaleDateString('en-CA');
+        const { data: openLogs } = await supabase.from('work_logs').select('id')
+            .eq('eng_id', engId).eq('log_date', nowDate).eq('to_time', 'OPEN');
+        for (const ol of (openLogs || [])) {
+            await supabase.from('work_logs').update({ to_time: nowTime }).eq('id', ol.id);
+        }
+        const { error } = await supabase.from('work_logs').insert([{
+            eng_id: engId, eng_name: engName, member_role: memberRole,
+            log_date: nowDate, from_time: nowTime, to_time: 'OPEN',
+            task_description: kind === 'office' ? '🏠 Return to Office' : '🏡 Return to Home',
+            log_type: 'travel', created_at: now.toISOString(),
+        }]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: String(err) }; }
+};
+
+export const finishReturnTrip = async (
+    logId: string, engId: string, engName: string, memberRole: string, kind: 'office' | 'home'
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const now = new Date();
+        const nowTime = now.toTimeString().slice(0, 5);
+        const nowDate = now.toLocaleDateString('en-CA');
+        const { error } = await supabase.from('work_logs').update({ to_time: nowTime }).eq('id', logId);
+        if (error) throw error;
+        await supabase.from('work_logs').insert([{
+            eng_id: engId, eng_name: engName, member_role: memberRole,
+            log_date: nowDate, from_time: nowTime, to_time: nowTime,
+            task_description: kind === 'office' ? '🏢 Reached Office' : '🏡 Reached Home',
+            log_type: 'work', created_at: now.toISOString(),
+        }]).then(() => undefined);
+        return { success: true };
+    } catch (err) { return { success: false, error: String(err) }; }
+};
+
+// True when the day's most recent KM entry isn't already a 'closing' one —
+// mirrors HTML's kmTodayLogs() check before Reached Office/Home so the
+// closing odometer photo is captured once per open travel leg.
+export const needsClosingKm = async (engId: string): Promise<boolean> => {
+    try {
+        const today = new Date().toLocaleDateString('en-CA');
+        const { data } = await supabase.from('km_logs').select('entry_type')
+            .eq('eng_id', engId).eq('log_date', today).order('captured_at', { ascending: true });
+        if (!data || !data.length) return false;
+        return data[data.length - 1].entry_type !== 'closing';
+    } catch { return false; }
+};
+
 export interface PrevLocation { ticketId: string; lat: number; lng: number; at: string; }
 
 // Mirrors HTML's mcBuildPrevLocMap(): bulk lookup of the most recent GPS point
