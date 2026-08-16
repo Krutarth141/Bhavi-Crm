@@ -27,6 +27,8 @@ export interface EngineerTicket {
     spares?: TicketSpare[];
     rerepair?: boolean;
     rerepair_foc?: boolean;
+    visit_in?: string;
+    visit_date?: string;
 }
 
 export interface UpdateForm {

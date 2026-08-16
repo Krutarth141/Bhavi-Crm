@@ -92,6 +92,21 @@ export const createTicket = async (ticketData: Partial<Ticket>): Promise<{ succe
     }
 };
 
+export const ensureGroupId = async (ticket: Ticket): Promise<{ success: boolean; groupId?: string; error?: string }> => {
+    if (ticket.group_id) return { success: true, groupId: ticket.group_id };
+    try {
+        const { error } = await supabase.from('tickets').update({ group_id: ticket.id }).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true, groupId: ticket.id };
+    } catch (err) {
+        const msg = (err as any)?.message || String(err);
+        if (msg.indexOf('group_id') !== -1) {
+            return { success: false, error: 'Setup needed: add a "group_id" (text) column to the tickets table, then try again.' };
+        }
+        return { success: false, error: msg };
+    }
+};
+
 export const updateTicket = async (ticketId: string, updates: Partial<Ticket>): Promise<{ success: boolean; error?: string }> => {
     try {
         // Auto-update status based on engineer assignment:

@@ -27,6 +27,11 @@ export const hasKmEntryToday = async (engId: string, type: 'opening' | 'arrival'
     return logs.some((l) => l.entry_type === type);
 };
 
+export const hasArrivalKmForTicket = async (engId: string, ticketId: string): Promise<boolean> => {
+    const logs = await fetchTodayKmLogs(engId);
+    return logs.some((l) => l.entry_type === 'arrival' && l.ticket_id === ticketId);
+};
+
 export const fetchTodayMaxReading = async (engId: string): Promise<number | null> => {
     const logs = await fetchTodayKmLogs(engId);
     let max: number | null = null;

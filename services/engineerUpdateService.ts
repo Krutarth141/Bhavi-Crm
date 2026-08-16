@@ -9,7 +9,7 @@ export const fetchEngineerTickets = async (
     try {
         let query = supabase
             .from('tickets')
-            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, address, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at')
+            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, address, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date')
             .order('updated_at', { ascending: false })
             .limit(100);
 
@@ -30,6 +30,22 @@ export const fetchEngineerTickets = async (
     } catch (err) {
         console.error('fetchEngineerTickets:', err);
         return [];
+    }
+};
+
+// Re-fetches a single ticket after a Visit/Work/Hold panel action so the open
+// Update modal can reflect the fresh timeline without a full list reload.
+export const fetchTicketById = async (id: string): Promise<EngineerTicket | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, address, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date')
+            .eq('id', id).maybeSingle();
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.error('fetchTicketById:', err);
+        return null;
     }
 };
 

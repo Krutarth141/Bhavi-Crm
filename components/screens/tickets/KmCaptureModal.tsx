@@ -8,13 +8,14 @@ interface Props {
     engId: string;
     engName: string;
     ticketId?: string | null;
+    allowSkip?: boolean;
     onClose: () => void;
-    onDone: () => void;
+    onDone: (skipped?: boolean) => void;
 }
 
 const TITLES: Record<string, string> = { opening: '🏢 Opening KM — Day Start', arrival: '📍 Arrival KM — Reached Customer', closing: '🏁 Closing KM — Day End' };
 
-export default function KmCaptureModal({ type, engId, engName, ticketId, onClose, onDone }: Props) {
+export default function KmCaptureModal({ type, engId, engName, ticketId, allowSkip, onClose, onDone }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const [photo, setPhoto] = useState<string | null>(null);
@@ -128,6 +129,11 @@ export default function KmCaptureModal({ type, engId, engName, ticketId, onClose
                     <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: '10px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
                         {saving ? 'Saving...' : '💾 Save KM Entry'}
                     </button>
+                    {allowSkip && (
+                        <button onClick={() => onDone(true)} disabled={saving} style={{ width: '100%', padding: '8px', marginTop: 6, background: 'none', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            ⏭️ Skip — record on next Visit Start
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

@@ -74,6 +74,7 @@ export interface Ticket {
     coverage_remark?: string;
     follow_up_date?: string;
     follow_up_note?: string;
+    group_id?: string;
 }
 
 export const statusBadges: Record<string, string> = {
