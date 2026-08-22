@@ -12,7 +12,6 @@ import MyReportScreen from '@/components/screens/MyReportScreen';
 // New screens
 import MyCallsScreen from '@/components/screens/MyCallsScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
-import EngineerUpdateScreen from '@/components/screens/EngineerUpdateScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import { isCspManager } from '@/lib/permissions';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
@@ -30,27 +29,30 @@ import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
-type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'tickets' | 'eng-parts' | 'reports' | 'attendance' | 'engineer-update'
-    | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits';
+type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'reports' | 'attendance'
+    | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits'
+    | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report';
 
+// Base items every engineer gets — mirrors HTML's setupNav() regular-engineer
+// branch (sv('nav-tickets',false); sv('nav-eng-parts',false) there).
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'work-log', label: '🗒️ Work Log' },
     { id: 'tasks', label: '📋 My Tasks' },
-    { id: 'tickets', label: '🎫 My Tickets' },
-    { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'reports', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
-    { id: 'engineer-update', label: '🛠️ Engineer Update' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
 
-// CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras.
+// CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
+// also where HTML turns nav-tickets and nav-eng-parts back on.
 const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
+    { id: 'tickets', label: '🎫 All Tickets' },
+    { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'pending', label: '📋 Pending List' },
     { id: 'route-planning', label: '🗺️ Route Planning' },
     { id: 'customers', label: '👥 Customers' },
@@ -85,15 +87,14 @@ export default function EngineerDashboard() {
             case 'my-calls': return <MyCallsScreen />;
             case 'work-log': return <EngineerWorkLogScreen engId={engId} engName={engName} />;
             case 'tasks': return <TasksScreen />;
-            case 'tickets': return <TicketsScreen />;
-            case 'eng-parts': return <EngPartsScreen />;
             case 'reports': return cspMgr ? <ReportsScreen /> : <MyReportScreen />;
             case 'attendance': return <AttendanceScreen />;
-            case 'engineer-update': return <EngineerUpdateScreen />;
             case 'km-report': return <KmTrackingScreen />;
             case 'payment-collection': return <PaymentCollectionScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
+            case 'tickets': return cspMgr ? <TicketsScreen /> : null;
+            case 'eng-parts': return cspMgr ? <EngPartsScreen /> : null;
             case 'pending': return cspMgr ? <PendingListScreen /> : null;
             case 'route-planning': return cspMgr ? <RoutePlanningScreen /> : null;
             case 'customers': return cspMgr ? <CustomersScreen /> : null;
