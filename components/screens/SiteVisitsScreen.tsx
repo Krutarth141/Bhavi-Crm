@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { isCspManager } from '@/lib/permissions';
-import { hasKmEntryToday } from '@/services/kmTrackingService';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import {
     SiteVisit, SiteVisitFormData, emptySiteVisitForm, SV_TYPES, SV_TYPE_META, SV_STATUS_META, SV_STATUS_ORDER, SvStatus,
@@ -112,12 +111,8 @@ export default function SiteVisitsScreen() {
         setModalOpen(false);
         await load();
     };
-
     const handleTravelStart = async (v: SiteVisit) => {
-        if (isEng) {
-            const hasOpening = await hasKmEntryToday(myId, 'opening');
-            if (!hasOpening) { setKmVisitId(v.id); setKmStep('opening'); return; }
-        }
+        if (isEng) { setKmVisitId(v.id); setKmStep('opening'); return; }
         const r = await svTravelStart(v.id);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };

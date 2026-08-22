@@ -116,29 +116,66 @@ export const saveFieldTask = async (
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
-export const ftTravelStart = async (id: number): Promise<{ success: boolean; error?: string }> => {
+// Mirrors HTML's _ftAutoWorkLog(): every Other Work lifecycle step (Travel
+// Start / Reached / Done) also lands in Work Log with date/time and location,
+// exactly like a call's Travel/Work Start does. Closes any still-open log for
+// the day first, chaining travel -> work -> done. Best-effort — a failure
+// here must never fail the lifecycle action itself.
+async function ftAutoWorkLog(
+    id: number, task: FieldTask | undefined, logType: 'travel' | 'work' | 'done', actionLabel: string,
+    engId: string, engName: string, memberRole: string
+): Promise<void> {
+    try {
+        const now = new Date();
+        const dateNow = now.toLocaleDateString('en-CA');
+        const timeNow = now.toTimeString().slice(0, 5);
+        const loc = task?.address || task?.location;
+        const label = `${task?.customer_name || 'Task'}${task?.task_type ? ' | ' + task.task_type : ''}${loc ? ' | 📍 ' + loc : ''}`;
+        const { data: openLogs } = await supabase.from('work_logs').select('id').eq('eng_id', engId).eq('log_date', dateNow).eq('to_time', 'OPEN');
+        for (const ol of (openLogs || [])) {
+            await supabase.from('work_logs').update({ to_time: timeNow }).eq('id', ol.id);
+        }
+        await supabase.from('work_logs').insert({
+            eng_id: engId, eng_name: engName, member_role: memberRole,
+            log_date: dateNow, from_time: timeNow, to_time: logType === 'done' ? timeNow : 'OPEN',
+            task_description: `${actionLabel} — ${label}`,
+            ticket_id: `FT${id}`, log_type: logType === 'done' ? 'work' : logType, created_at: now.toISOString(),
+        });
+    } catch { /* best-effort */ }
+}
+
+export const ftTravelStart = async (
+    id: number, engId: string, engName: string, memberRole: string, task?: FieldTask
+): Promise<{ success: boolean; error?: string }> => {
     try {
         const now = new Date();
         const { error } = await supabase.from('field_tasks').update({ status: 'Traveling', travel_start_at: now.toISOString(), updated_at: now.toISOString() }).eq('id', id);
         if (error) throw error;
+        await ftAutoWorkLog(id, task, 'travel', '🚗 Travel Start', engId, engName, memberRole);
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
-export const ftReached = async (id: number): Promise<{ success: boolean; error?: string }> => {
+export const ftReached = async (
+    id: number, engId: string, engName: string, memberRole: string, task?: FieldTask
+): Promise<{ success: boolean; error?: string }> => {
     try {
         const now = new Date();
         const { error } = await supabase.from('field_tasks').update({ status: 'Reached', reached_at: now.toISOString(), updated_at: now.toISOString() }).eq('id', id);
         if (error) throw error;
+        await ftAutoWorkLog(id, task, 'work', '📍 Reached', engId, engName, memberRole);
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
-export const ftDone = async (id: number): Promise<{ success: boolean; error?: string }> => {
+export const ftDone = async (
+    id: number, engId: string, engName: string, memberRole: string, task?: FieldTask
+): Promise<{ success: boolean; error?: string }> => {
     try {
         const now = new Date();
         const { error } = await supabase.from('field_tasks').update({ status: 'Done', done_at: now.toISOString(), done_date: now.toLocaleDateString('en-CA'), updated_at: now.toISOString() }).eq('id', id);
         if (error) throw error;
+        await ftAutoWorkLog(id, task, 'done', '✅ Task Done', engId, engName, memberRole);
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }
 };

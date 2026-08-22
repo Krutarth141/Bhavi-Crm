@@ -27,6 +27,7 @@ export default function FieldTasksScreen() {
     const canAdminList = isAdm || isWC || cspMgr;
     const myId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';
+    const memberRole = isWC ? 'WC' : (isEng ? 'Engineer' : 'Other');
 
     const { engineers } = useEngineers();
     const [tasks, setTasks] = useState<FieldTask[]>([]);
@@ -101,27 +102,29 @@ export default function FieldTasksScreen() {
     };
 
     // Travel Start — opening KM required first if not yet captured today (engineers only)
+    // Travel Start — opening KM required first if not yet captured today (engineers only)
     const handleTravelStart = async (t: FieldTask) => {
         if (isEng) {
             const hasOpening = await hasKmEntryToday(myId, 'opening');
             if (!hasOpening) { setKmTaskId(t.id); setKmStep('opening'); return; }
         }
-        const r = await ftTravelStart(t.id);
+        const r = await ftTravelStart(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
     const handleReached = async (t: FieldTask) => {
         if (isEng) { setKmTaskId(t.id); setKmStep('arrival'); return; }
-        const r = await ftReached(t.id);
+        const r = await ftReached(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
     const handleKmDone = async () => {
         if (kmTaskId == null || !kmStep) return;
-        const r = kmStep === 'opening' ? await ftTravelStart(kmTaskId) : await ftReached(kmTaskId);
+        const t = tasks.find((x) => x.id === kmTaskId);
+        const r = kmStep === 'opening' ? await ftTravelStart(kmTaskId, myId, myName, memberRole, t) : await ftReached(kmTaskId, myId, myName, memberRole, t);
         setKmTaskId(null); setKmStep(null);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
     const handleDone = async (t: FieldTask) => {
-        const r = await ftDone(t.id);
+        const r = await ftDone(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
     const handleCancel = async (t: FieldTask) => {

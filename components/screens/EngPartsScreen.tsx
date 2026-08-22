@@ -29,27 +29,14 @@ export default function EngPartsScreen({ isEngineerView }: Props) {
   } = useEngParts();
 
   const isEngRole = isEngineerView === true || roleType === 'engineer';
-  const showCspManagerView = isEngRole && isCspManager(session);
-  const showEngineerView = isEngRole && !showCspManagerView;
+  const cspMgr = isEngRole && isCspManager(session);
+  // HTML: isFullAccess = isAdmin || isCspMgr — CSP managers get the SAME full
+  // admin page as a real admin (stock overview, issue/use/warranty/return
+  // tools, approve+reject on any request), not a cut-down view.
+  const showEngineerView = isEngRole && !cspMgr;
 
   if (loading) return <div style={styles.loadingText}>Loading parts data...</div>;
   if (error) return <div style={{ padding: '20px', color: colors.danger }}>❌ {error}</div>;
-
-  if (showCspManagerView) {
-    // HTML: isEng && isCspMgr → Pending Requests–only view (approve/reject
-    // any engineer's Receive/Return request), not the plain self-service view.
-    return (
-      <EngPartsAdmin
-        inventory={inventory}
-        engStock={engStock}
-        movements={movements}
-        engineers={engineers}
-        pendingRequests={pendingRequests}
-        onRefetch={refetch}
-        cspManagerMode
-      />
-    );
-  }
 
   return showEngineerView
     ? (
