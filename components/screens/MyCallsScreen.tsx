@@ -14,7 +14,7 @@ import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
 import { updateTicketStatus, fetchTicketById } from '@/services/engineerUpdateService';
 import {
-  fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports,
+  fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports, hasDailyReportToday,
   DrCallSummary, DailyReportRecord,
 } from '@/services/engDailyReportService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
@@ -28,6 +28,8 @@ import { createTicket, ensureGroupId } from '@/services/ticketService';
 import { useTicketForm } from '@/hooks/useTicketForm';
 import { fetchTargets } from '@/services/targetsService';
 import { EngineerTarget } from '@/types/targets';
+import { approveTicket, rejectTicket, removeApprovalPart } from '@/services/customerApprovalService';
+import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
 
 // ─── Status badge helper ─────────────────────────────────────────────────────
 
@@ -114,6 +116,14 @@ export default function MyCallsScreen() {
   const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
   const [voidModalOpen, setVoidModalOpen] = useState(false);
   const [partIndentOpen, setPartIndentOpen] = useState(false);
+
+  // Estimate Approve/Reject — engineers handle this directly on their own
+  // "Pending Customer Approval" call, same modal admin/WC uses (mirrors
+  // HTML's openApproval()/processApproval()).
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [approvalForm, setApprovalForm] = useState<EstimateForm>(emptyEstimateForm);
+  const [approvalInspCharges, setApprovalInspCharges] = useState('300');
+  const [approvalProcessing, setApprovalProcessing] = useState(false);
 
   // Previous Location — mirrors HTML's mcBuildPrevLocMap()/mcConfirmPrevLocation().
   const [prevLocMap, setPrevLocMap] = useState<Record<string, PrevLocation>>({});
@@ -222,6 +232,10 @@ export default function MyCallsScreen() {
   };
 
   const openTicketUpdate = (t: any) => {
+    if (roleType === 'engineer' && !cspMgr && !isTicketActive(t.status)) {
+      alert('🔒 Closed call ni details engineer ne available nathi.\nFakt open (active) calls j joi shakay.');
+      return;
+    }
     setUpdateTicket(t);
     const allowed = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage);
     setUpdateForm({
@@ -345,19 +359,77 @@ export default function MyCallsScreen() {
     else alert('Error: ' + r.error);
   };
 
-  // ── Punch In / Out ───────────────────────────────────────────────────────────
+  const openEstimateApproval = () => {
+    if (!updateTicket) return;
+    setApprovalForm({ ...emptyEstimateForm, labourAmt: String(updateTicket.service_charges || updateTicket.labor || 0) });
+    setApprovalInspCharges(String(updateTicket.service_charges || updateTicket.labor || 300));
+    setApprovalOpen(true);
+  };
+
+  const { partsAfterDisc: approvalPartsAfterDisc, labourAfterDisc: approvalLabourAfterDisc, final: approvalFinal, saved: approvalSaved } =
+    calcEstimate(approvalForm, (updateTicket?.spares || []) as ApprovalSpare[]);
+
+  const handleApproveEstimate = async () => {
+    if (!updateTicket) return;
+    if (!approvalForm.remark.trim()) { alert('Remark is required'); return; }
+    setApprovalProcessing(true);
+    const r = await approveTicket(updateTicket, approvalFinal, Number(approvalForm.labourAmt), approvalForm.remark, engName);
+    setApprovalProcessing(false);
+    if (r.success) {
+      setApprovalOpen(false); setUpdateTicket(null);
+      alert(`✅ Approved! Status → ${r.newStatus}`);
+      await refetch();
+    } else alert('Error: ' + r.error);
+  };
+
+  const handleRejectEstimate = async () => {
+    if (!updateTicket) return;
+    if (!approvalForm.remark.trim()) { alert('Remark is required'); return; }
+    const charges = Number(approvalInspCharges);
+    if (isNaN(charges) || charges < 0) { alert('Enter valid Inspection/Visit Charges'); return; }
+    if (!confirm(`Customer Reject — Inspection/Visit Charges will be finalized at ₹${charges}. Continue?`)) return;
+    setApprovalProcessing(true);
+    const r = await rejectTicket(updateTicket, approvalForm.remark, charges, engName);
+    setApprovalProcessing(false);
+    if (r.success) { setApprovalOpen(false); setUpdateTicket(null); alert('❌ Rejected! Inspection Charges: ₹' + charges + ' saved as final.'); await refetch(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleRemoveApprovalPart = async (idx: number) => {
+    if (!updateTicket) return;
+    if (!confirm('Remove this part?')) return;
+    const r = await removeApprovalPart(updateTicket, idx, engName);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    if (r.allRemoved) {
+      alert('✅ All parts removed. Call is back to In Progress — you can close it directly.');
+      setApprovalOpen(false); setUpdateTicket(null); await refetch();
+    } else {
+      setUpdateTicket((t: any) => t ? { ...t, spares: r.spares } : t);
+    }
+  };
+
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
   const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
+  // Forces the Daily Report to be shown (skippable) before the punch-out
+  // selfie — mirrors HTML's startPunchOutDailyReport(), auto-skipped if
+  // today's report is already submitted.
+  const [forcedDailyReport, setForcedDailyReport] = useState(false);
 
   const handlePunchIn = async () => {
     const hasOpening = await hasKmEntryToday(engId, 'opening');
     if (!hasOpening) { setKmCaptureType('opening'); return; }
     setPunchModalMode('in');
   };
+  const proceedToPunchOutReportGate = async () => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const already = await hasDailyReportToday(engId, today);
+    if (already) { setPunchModalMode('out'); return; }
+    setForcedDailyReport(true);
+  };
   const handlePunchOut = async () => {
     const hasClosing = await hasKmEntryToday(engId, 'closing');
     if (!hasClosing) { setKmCaptureType('closing'); return; }
-    setPunchModalMode('out');
+    await proceedToPunchOutReportGate();
   };
 
   const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
@@ -532,8 +604,15 @@ export default function MyCallsScreen() {
           engId={engId}
           engName={engName}
           onClose={() => setKmCaptureType(null)}
-          onDone={() => { const mode = kmCaptureType === 'opening' ? 'in' : 'out'; setKmCaptureType(null); setPunchModalMode(mode); }}
+          onDone={() => {
+            const type = kmCaptureType;
+            setKmCaptureType(null);
+            if (type === 'opening') setPunchModalMode('in'); else proceedToPunchOutReportGate();
+          }}
         />
+      )}
+      {forcedDailyReport && (
+        <DailyReportModal engId={engId} engName={engName} forcedHint onClose={() => { setForcedDailyReport(false); setPunchModalMode('out'); }} />
       )}
       {punchModalMode && (
         <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
@@ -872,6 +951,9 @@ export default function MyCallsScreen() {
             {updateTicket.status === 'Sent to MSC' && (
               <MSCDispatchPanel ticketId={updateTicket.id} readOnly byUser={engName} />
             )}
+            {updateTicket.status === 'Pending Customer Approval' && roleType === 'engineer' && (
+              <button onClick={openEstimateApproval} style={{ padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>✅ Approve / Reject Estimate</button>
+            )}
             {!['Closed', 'Call Cancel', 'Customer Reject', 'Pending Customer Approval'].includes(updateTicket.status || '') && (
               <button onClick={() => setPartIndentOpen(true)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, alignSelf: 'flex-start' }}>📦 Request Part</button>
             )}
@@ -1001,6 +1083,83 @@ export default function MyCallsScreen() {
           onClose={() => setPartIndentOpen(false)}
           onDone={async () => { setPartIndentOpen(false); setUpdateTicket(null); await refetch(); }}
         />
+      )}
+      {approvalOpen && updateTicket && (
+        <Modal
+          isOpen
+          onClose={() => setApprovalOpen(false)}
+          title={`Estimate — ${updateTicket.cname || ''}`}
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setApprovalOpen(false)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button onClick={handleRejectEstimate} disabled={approvalProcessing} style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: approvalProcessing ? 0.6 : 1 }}>❌ Customer Reject</button>
+              <button onClick={handleApproveEstimate} disabled={approvalProcessing} style={{ padding: '8px 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: approvalProcessing ? 0.6 : 1 }}>✅ Customer Approved</button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 13 }}>
+              <div><strong>{updateTicket.brand_name} {updateTicket.model}</strong> | {updateTicket.serial}</div>
+              <div style={{ color: '#6b7280', marginTop: 2 }}>{updateTicket.problem} | {updateTicket.call_type}</div>
+            </div>
+
+            {(updateTicket.spares || []).filter((s: any) => s.requested).length > 0 && (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>Parts Required:</div>
+                {(updateTicket.spares || []).map((s: any, i: number) => s.requested && (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span>{s.code ? `${s.code} ` : ''}{s.name} × {s.qty}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 600 }}>₹{((s.qty || 0) * (s.price || 0)).toFixed(0)}</span>
+                      <button onClick={() => handleRemoveApprovalPart(i)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 11 }}>✕ Remove</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Labour / Service ₹</label>
+                <input type="number" value={approvalForm.labourAmt} onChange={(e) => setApprovalForm((f) => ({ ...f, labourAmt: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Parts Discount %</label>
+                <input type="number" value={approvalForm.partsDisc} onChange={(e) => setApprovalForm((f) => ({ ...f, partsDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Labour Discount %</label>
+                <input type="number" value={approvalForm.labourDisc} onChange={(e) => setApprovalForm((f) => ({ ...f, labourDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+              </div>
+            </div>
+
+            <div style={{ background: '#d1fae5', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <span>Parts (after {approvalForm.partsDisc}% disc)</span>
+                <span>₹{approvalPartsAfterDisc.toFixed(0)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
+                <span>Labour (after {approvalForm.labourDisc}% disc)</span>
+                <span>₹{approvalLabourAfterDisc.toFixed(0)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid #a7f3d0', paddingTop: 8 }}>
+                <span>Final Estimate</span>
+                <span style={{ color: '#065f46' }}>₹{approvalFinal.toFixed(0)}</span>
+              </div>
+              {approvalSaved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{approvalSaved.toFixed(0)}</div>}
+            </div>
+
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', display: 'block', marginBottom: 4 }}>Inspection / Visit Charges ₹ <span style={{ fontWeight: 400 }}>(billed if customer rejects)</span></label>
+              <input type="number" value={approvalInspCharges} onChange={(e) => setApprovalInspCharges(e.target.value)} style={styles.formInput} />
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Remark * <span style={{ color: '#dc2626' }}>(required)</span></label>
+              <textarea value={approvalForm.remark} onChange={(e) => setApprovalForm((f) => ({ ...f, remark: e.target.value }))} rows={2} placeholder="Note about approval/rejection..." style={{ ...styles.formInput, resize: 'vertical' }} />
+            </div>
+          </div>
+        </Modal>
       )}
       {kmGateTicket && (
         <KmCaptureModal
@@ -1203,7 +1362,7 @@ const PENDING_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
   { key: 'customer_reject', label: 'Customer Reject (today)' },
 ];
 
-function DailyReportModal({ engId, engName, onClose }: { engId: string; engName: string; onClose: () => void }) {
+function DailyReportModal({ engId, engName, onClose, forcedHint }: { engId: string; engName: string; onClose: () => void; forcedHint?: boolean }) {
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [cs, setCs] = useState<DrCallSummary | null>(null);
   const [petrolKm, setPetrolKm] = useState('');
@@ -1243,7 +1402,9 @@ function DailyReportModal({ engId, engName, onClose }: { engId: string; engName:
       title="📋 Daily Report"
       footer={
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+          <button onClick={onClose} style={forcedHint ? { padding: '8px 16px', border: '1px solid #fde68a', background: 'white', color: '#b45309', borderRadius: 6, cursor: 'pointer', fontSize: 14 } : { padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+            {forcedHint ? '⏭️ Skip (pachhi karish)' : 'Cancel'}
+          </button>
           <button
             onClick={handleSave}
             disabled={saving || loading || !cs}
@@ -1255,6 +1416,11 @@ function DailyReportModal({ engId, engName, onClose }: { engId: string; engName:
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {forcedHint && (
+          <div style={{ background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#4338ca', fontWeight: 600 }}>
+            🕐 Punch Out — pehla Daily Report submit/share karo (auto bharai gayu chhe), pachhi selfie aavse. Athva Skip karo.
+          </div>
+        )}
         <div style={styles.formGroup}>
           <label style={styles.formLabel}>Date</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.formInput} />
@@ -1295,7 +1461,10 @@ function DailyReportModal({ engId, engName, onClose }: { engId: string; engName:
             </div>
 
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Remarks</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={styles.formLabel}>Remarks</label>
+                <AIWriteButton type="dailyreport" onInsert={(text) => setRemarks(text)} />
+              </div>
               <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} style={{ ...styles.formInput, resize: 'vertical' }} placeholder="Anything else worth noting..." />
             </div>
           </>

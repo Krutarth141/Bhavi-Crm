@@ -303,6 +303,17 @@ export const saveDailyReportSelf = async (params: {
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
+// Mirrors HTML's startPunchOutDailyReport() auto-skip check: has today's
+// Daily Report already been submitted?
+export const hasDailyReportToday = async (engId: string, date: string): Promise<boolean> => {
+    try {
+        const { data, error } = await supabase.from('daily_reports').select('id')
+            .eq('eng_id', engId).eq('report_date', date).limit(1);
+        if (error) throw error;
+        return !!(data && data.length);
+    } catch (err) { console.error('hasDailyReportToday:', err); return false; }
+};
+
 // Mirrors HTML's openPastReports(): last 30 reports for this engineer.
 export const fetchPastDailyReports = async (engId: string): Promise<DailyReportRecord[]> => {
     try {

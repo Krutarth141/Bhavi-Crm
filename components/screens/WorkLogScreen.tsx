@@ -245,12 +245,16 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
                                 </span>
                                 <span style={getLogTypeBadgeStyle(log.log_type ?? 'work')}>{log.log_type ?? 'work'}</span>
                                 <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>{log.task_description}</span>
-                                <button
-                                    onClick={() => handleDeleteWorkLog(log.id)} title="Delete entry"
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: colors.danger, padding: '2px 6px', borderRadius: '4px' }}
-                                >
-                                    🗑️
-                                </button>
+                                {log.log_type === 'work' || log.log_type === 'travel' ? (
+                                    <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>⚡ Auto</span>
+                                ) : (
+                                    <button
+                                        onClick={() => handleDeleteWorkLog(log.id)} title="Delete entry"
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: colors.danger, padding: '2px 6px', borderRadius: '4px' }}
+                                    >
+                                        🗑️
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
