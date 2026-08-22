@@ -31,7 +31,7 @@ export default function AMCScreen() {
             c.product?.toLowerCase().includes(q) ||
             c.serial_no?.toLowerCase().includes(q);
         const matchStatus = !statusFilter ||
-            (statusFilter === 'active' && !isExpired(c.amc_end) && !isExpiringSoon(c.amc_end)) ||
+            (statusFilter === 'active' && !isExpired(c.amc_end)) ||
             (statusFilter === 'expiring' && isExpiringSoon(c.amc_end)) ||
             (statusFilter === 'expired' && isExpired(c.amc_end));
         return matchSearch && matchStatus;

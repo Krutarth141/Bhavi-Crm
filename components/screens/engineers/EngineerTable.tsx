@@ -6,10 +6,9 @@ interface Props {
     engineers: Engineer[];
     onEdit: (eng: Engineer) => void;
     onToggleActive: (id: string, current: boolean) => void;
-    onDelete: (id: string) => void;
 }
 
-export default function EngineerTable({ engineers, onEdit, onToggleActive, onDelete }: Props) {
+export default function EngineerTable({ engineers, onEdit, onToggleActive }: Props) {
     if (!engineers.length) {
         return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>No engineers found</p>;
     }
@@ -72,7 +71,6 @@ export default function EngineerTable({ engineers, onEdit, onToggleActive, onDel
                             </td>
                             <td style={{ display: 'flex', gap: 6 }}>
                                 <button className="btn btn-sm btn-secondary" onClick={() => onEdit(eng)}>✏️ Edit</button>
-                                <button className="btn btn-sm btn-danger" onClick={() => onDelete(eng.id)}>🗑️</button>
                             </td>
                         </tr>
                     ))}

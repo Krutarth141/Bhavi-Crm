@@ -84,7 +84,7 @@ const createServiceTicket = async (a: Record<string, string>, ctx: Record<string
         description: descLines.join('\n'),
         action: '',
         assigned_name: '',
-        warranty_coverage: a.warrantyStatus === 'Warranty' ? 'Under Coverage' : 'Out of Coverage',
+        warranty_coverage: a.warrantyStatus === 'Warranty' ? null : 'NA',
         wc_type: 'CSP',
         service_charges: chargeAmount,
         timeline: [{ action: 'Complaint Registered', by: 'Customer (AI Assistant)', at: new Date().toISOString(), note: `Via Bhavi AI Assistant — ${ctx.device || ''} / ${ctx.issue || ''}` }],

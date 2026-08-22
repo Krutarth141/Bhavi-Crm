@@ -482,7 +482,7 @@ export default function CustomerAccountScreen() {
                 )}
             </div>
             <div style={s.footer}>
-                <Link href="/service-request" style={{ ...s.btnOutline, textAlign: 'center', textDecoration: 'none', display: 'block' }}>🏠 Back to Home</Link>
+                <Link href="/" style={{ ...s.btnOutline, textAlign: 'center', textDecoration: 'none', display: 'block' }}>🏠 Back to Home</Link>
                 <button style={s.btnDanger} onClick={doSignOut}>🚪 Sign Out</button>
             </div>
 

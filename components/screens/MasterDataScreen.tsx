@@ -83,6 +83,7 @@ export default function MasterDataScreen() {
                         onEdit={editProblemType}
                         onToggle={toggleProblem}
                         onDelete={removeProblemType}
+                        onRefresh={fetchAll}
                     />
                 );
 

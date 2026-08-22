@@ -41,8 +41,8 @@ export default function PaymentCollectionScreen() {
     const byEng = useMemo(() => {
         const g: Record<string, PcEngineerGroup> = {};
         tickets.forEach(t => {
-            const k = t.assigned_to || 'unassigned';
-            if (!g[k]) g[k] = { name: t.assigned_name || 'Unassigned', pendingRows: [], receivedRows: [], pending: 0, received: 0 };
+            const k = t.payment_collected_by_id || t.assigned_to || 'unassigned';
+            if (!g[k]) g[k] = { name: t.payment_collected_by || t.assigned_name || 'Unassigned', pendingRows: [], receivedRows: [], pending: 0, received: 0 };
             const amt = pcAmount(t);
             if (t.payment_received) { g[k].receivedRows.push(t); g[k].received += amt; }
             else { g[k].pendingRows.push(t); g[k].pending += amt; }

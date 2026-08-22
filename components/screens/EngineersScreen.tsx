@@ -57,18 +57,6 @@ export default function EngineersScreen() {
         } catch (e: any) { alert(e.message); }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this engineer? This cannot be undone.')) return;
-        try {
-            const res = await fetch(`/api/admin/engineers/${id}`, {
-                method: 'DELETE',
-                credentials: 'include',
-            });
-            if (!res.ok) throw new Error('Delete failed');
-            await loadEngineers();
-        } catch (e: any) { alert(e.message); }
-    };
-
     return (
         <div className="screen-container">
             {/* Header */}
@@ -119,7 +107,6 @@ export default function EngineersScreen() {
                         engineers={displayList}
                         onEdit={handleEdit}
                         onToggleActive={handleToggleActive}
-                        onDelete={handleDelete}
                     />
                 )}
             </div>

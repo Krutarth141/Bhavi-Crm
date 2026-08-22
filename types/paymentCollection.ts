@@ -21,6 +21,8 @@ export interface PaymentTicket {
     payment_received?: boolean;
     payment_received_at?: string | null;
     payment_received_by?: string | null;
+    payment_collected_by?: string | null;
+    payment_collected_by_id?: string | null;
     invoice_done?: boolean;
     invoice_no?: string | null;
     timeline?: any[];

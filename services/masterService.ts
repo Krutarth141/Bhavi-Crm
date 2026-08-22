@@ -218,6 +218,24 @@ export const importModels = async (
     return count;
 };
 
+export const importProblemTypes = async (
+    rows: { problem: string; brand?: string }[],
+    brands: Brand[]
+): Promise<number> => {
+    let count = 0;
+    for (const row of rows) {
+        if (!row.problem?.trim()) continue;
+        const brand = brands.find(b => b.name.toLowerCase() === (row.brand || '').toLowerCase());
+        try {
+            const { error } = await supabase
+                .from('problem_types')
+                .insert([{ problem: row.problem.trim(), brand_id: brand?.id || null, is_active: true }]);
+            if (!error) count++;
+        } catch (_) { }
+    }
+    return count;
+};
+
 // ─── Edit (update) ────────────────────────────────────────────────────────────
 
 export const updateSubCategory = async (id: string, form: SubCategoryForm): Promise<void> => {

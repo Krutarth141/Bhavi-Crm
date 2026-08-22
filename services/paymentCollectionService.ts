@@ -9,10 +9,10 @@ export const fetchPaymentCollectionTickets = async (
 ): Promise<{ tickets: PaymentTicket[]; setupNeeded: boolean }> => {
     try {
         let q = supabase.from('tickets')
-            .select('id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, invoice_done, invoice_no')
+            .select('id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, payment_collected_by, payment_collected_by_id, invoice_done, invoice_no')
             .not('payment_mode', 'is', null)
             .order('updated_at', { ascending: false });
-        if (!canManage) q = q.eq('assigned_to', myId);
+        if (!canManage) q = q.or(`assigned_to.eq.${myId},payment_collected_by_id.eq.${myId}`);
         const { data, error } = await q;
         if (error) throw error;
         return { tickets: data || [], setupNeeded: false };

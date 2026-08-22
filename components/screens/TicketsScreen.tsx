@@ -1,9 +1,9 @@
 ﻿'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tickets';
-import { getAllowedStatuses, validateStatusChangeReason } from '@/types/ticketStatus';
+import { getAllowedStatuses, validateStatusChangeReason, isTicketActive } from '@/types/ticketStatus';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
@@ -288,7 +288,7 @@ export default function TicketsScreen() {
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
-      const matchesStatus = filterStatus === 'all' || ticket.status === filterStatus;
+      const matchesStatus = filterStatus === 'all' ? isTicketActive(ticket.status) : ticket.status === filterStatus;
       const matchesSearch = ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.mobile.includes(searchTerm) ||
         ticket.serial.includes(searchTerm) ||
@@ -299,6 +299,12 @@ export default function TicketsScreen() {
       return matchesStatus && matchesSearch && matchesInvoice;
     });
   }, [tickets, filterStatus, searchTerm, invoiceFilter]);
+
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [filterStatus, searchTerm, invoiceFilter, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / pageSize));
+  const pagedTickets = useMemo(() => filteredTickets.slice((page - 1) * pageSize, page * pageSize), [filteredTickets, page, pageSize]);
 
   const handleApproveWarrantyClaim = async (ticket: Ticket) => {
     if (!confirm('Approve warranty claim? This will convert the call to Warranty type and set charges to zero.')) return;
@@ -417,6 +423,11 @@ export default function TicketsScreen() {
           <option value="pending">🧾 Invoice Pending</option>
           <option value="done">✅ Invoice Done</option>
         </select>
+        <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={styles.filterSelect}>
+          <option value={50}>50 / page</option>
+          <option value={100}>100 / page</option>
+          <option value={250}>250 / page</option>
+        </select>
       </div>
 
       {loading ? <div style={styles.loadingText}>Loading...</div> : filteredTickets.length === 0 ? <div style={styles.emptyMessage}>{tickets.length === 0 ? 'No tickets' : 'No matches'}</div> : (
@@ -440,7 +451,7 @@ export default function TicketsScreen() {
               </tr>
             </thead>
             <tbody>
-              {filteredTickets.map((t) => (
+              {pagedTickets.map((t) => (
                 <tr key={t.id} style={styles.tableRow} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = colors.card)}>
                   <td style={styles.tableCell}><strong>{t.id}</strong></td>
                   <td style={{ ...styles.tableCell, fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString()}</td>
@@ -476,6 +487,13 @@ export default function TicketsScreen() {
               ))}
             </tbody>
           </table>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 4px', fontSize: '13px', color: colors.textMuted }}>
+            <span>{filteredTickets.length} ticket{filteredTickets.length !== 1 ? 's' : ''} — page {page} of {totalPages}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, opacity: page <= 1 ? 0.5 : 1 }}>← Prev</button>
+              <button disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, opacity: page >= totalPages ? 0.5 : 1 }}>Next →</button>
+            </div>
+          </div>
         </div>
       )}
 

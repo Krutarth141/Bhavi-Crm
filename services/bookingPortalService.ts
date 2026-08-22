@@ -50,7 +50,7 @@ export const submitRepairTicket = async (params: {
         problem: params.problem,
         description: desc,
         assigned_name: '',
-        warranty_coverage: params.warrantyType === 'out_of_warranty' ? 'Out of Coverage' : 'Other',
+        warranty_coverage: params.warrantyType === 'out_of_warranty' ? 'NA' : 'Other',
         wc_type: 'CSP',
         service_charges: svcCharges,
         customer_signature: params.signatureB64 || undefined,

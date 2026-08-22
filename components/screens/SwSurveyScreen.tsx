@@ -8,6 +8,8 @@ import {
     swNewRoom, swNewBoard, swBoardTotal, swRoomTotal, swSurveyTotal,
 } from '@/types/swSurvey';
 import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey } from '@/services/swSurveyService';
+import { fetchSites } from '@/services/autoSitesService';
+import { AutoSite } from '@/types/autoSites';
 
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13, boxSizing: 'border-box' as const };
 
@@ -17,18 +19,21 @@ export default function SwSurveyScreen() {
 
     const [surveys, setSurveys] = useState<SwSurvey[]>([]);
     const [loading, setLoading] = useState(true);
+    const [sites, setSites] = useState<AutoSite[]>([]);
 
     const [editing, setEditing] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
     const [clientName, setClientName] = useState('');
     const [siteName, setSiteName] = useState('');
+    const [siteId, setSiteId] = useState<number | null>(null);
     const [surveyDate, setSurveyDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [rooms, setRooms] = useState<SwRoom[]>([]);
     const [saving, setSaving] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
-        setSurveys(await fetchSwSurveys());
+        const [s, st] = await Promise.all([fetchSwSurveys(), fetchSites()]);
+        setSurveys(s); setSites(st);
         setLoading(false);
     }, []);
 
@@ -36,16 +41,22 @@ export default function SwSurveyScreen() {
 
     const openCreate = () => {
         setEditId(null);
-        setClientName(''); setSiteName(''); setSurveyDate(new Date().toLocaleDateString('en-CA'));
+        setClientName(''); setSiteName(''); setSiteId(null); setSurveyDate(new Date().toLocaleDateString('en-CA'));
         setRooms([swNewRoom('Room 1')]);
         setEditing(true);
     };
 
     const openEdit = (s: SwSurvey) => {
         setEditId(s.id);
-        setClientName(s.client_name || ''); setSiteName(s.site_name || ''); setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
+        setClientName(s.client_name || ''); setSiteName(s.site_name || ''); setSiteId(s.site_id ?? null); setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
         setRooms((s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]));
         setEditing(true);
+    };
+
+    const handleSiteSelect = (id: string) => {
+        setSiteId(id ? Number(id) : null);
+        const site = sites.find((x) => x.id === Number(id));
+        if (site) { setClientName(site.client_name || ''); setSiteName(site.site_name || ''); }
     };
 
     const handleDelete = async (s: SwSurvey) => {
@@ -70,7 +81,7 @@ export default function SwSurveyScreen() {
         if (!clientName.trim()) { alert('Client name is required.'); return; }
         setSaving(true);
         const data: SwSurveyData = { rooms };
-        const r = await saveSwSurvey(editId, clientName.trim(), siteName.trim(), surveyDate, data, myName);
+        const r = await saveSwSurvey(editId, clientName.trim(), siteName.trim(), surveyDate, data, myName, siteId);
         setSaving(false);
         if (!r.success) { alert('Error saving: ' + r.error); return; }
         setEditing(false);
@@ -115,6 +126,13 @@ export default function SwSurveyScreen() {
                 </div>
 
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700 }}>Auto Site (optional)</label>
+                        <select value={siteId ?? ''} onChange={e => handleSiteSelect(e.target.value)} style={fieldStyle}>
+                            <option value="">— Not linked —</option>
+                            {sites.map(s => <option key={s.id} value={s.id}>{s.client_name} — {s.site_name}</option>)}
+                        </select>
+                    </div>
                     <div style={{ flex: 1, minWidth: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Client Name *</label><input type="text" value={clientName} onChange={e => setClientName(e.target.value)} style={fieldStyle} /></div>
                     <div style={{ flex: 1, minWidth: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Site Name</label><input type="text" value={siteName} onChange={e => setSiteName(e.target.value)} style={fieldStyle} /></div>
                     <div style={{ width: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Survey Date</label><input type="date" value={surveyDate} onChange={e => setSurveyDate(e.target.value)} style={fieldStyle} /></div>

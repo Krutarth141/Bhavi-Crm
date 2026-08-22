@@ -1,15 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useSession } from 'next-auth/react';
+import { supabase } from '@/lib/supabase';
 import { WalkInEntry } from '@/types/walkin';
 import { useWalkIn } from '@/hooks/useWalkIn';
+import { updateWalkIn, deleteWalkIn } from '@/services/walkInService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA');
 }
+
+const PRODUCT_TYPE_COLORS: Record<string, string> = {
+  Inward: '#1d4ed8', Outward: '#0e9f6e', Other: '#7c3aed', Purchase: '#d97706', 'For Checking Only': '#0369a1',
+};
 
 export default function WalkInReportScreen() {
   const { data: session } = useSession();
@@ -21,9 +27,18 @@ export default function WalkInReportScreen() {
   const [fromDate, setFromDate] = useState(getToday());
   const [toDate, setToDate] = useState(getToday());
   const [search, setSearch] = useState('');
+  const [wcFilter, setWcFilter] = useState('');
+  const [wcs, setWcs] = useState<{ user_id: string; name: string }[]>([]);
   const [results, setResults] = useState<WalkInEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  // WC filter dropdown — mirrors HTML's renderWalkInReport() WC fetch.
+  useEffect(() => {
+    supabase.from('users').select('user_id, name')
+      .or('role_type.eq.work_controller,role.eq.work_controller').eq('is_active', true).order('name')
+      .then(({ data }) => setWcs(data || []));
+  }, []);
 
   const handleSearch = async () => {
     setLoading(true);
@@ -36,13 +51,58 @@ export default function WalkInReportScreen() {
     }
   };
 
+  const filteredResults = useMemo(() => (wcFilter ? results.filter((r) => r.wc_id === wcFilter) : results), [results, wcFilter]);
+
+  // Mirrors HTML's mkCard KPI breakdown (Inward/Outward/Other × Customers/Products + totals).
+  const kpis = useMemo(() => {
+    const k = { inwardCusts: 0, inwardProds: 0, outwardCusts: 0, outwardProds: 0, otherCusts: 0, otherProds: 0 };
+    filteredResults.forEach((entry) => {
+      const products = entry.products || [];
+      const hasIn = products.some((p) => p.type === 'Inward' || p.type === 'For Checking Only');
+      const hasOut = products.some((p) => p.type === 'Outward');
+      const hasOther = products.some((p) => p.type === 'Other' || p.type === 'Purchase');
+      if (hasIn) k.inwardCusts++;
+      if (hasOut) k.outwardCusts++;
+      if (hasOther) k.otherCusts++;
+      products.forEach((p) => {
+        if (p.type === 'Inward' || p.type === 'For Checking Only') k.inwardProds++;
+        else if (p.type === 'Outward') k.outwardProds++;
+        else k.otherProds++;
+      });
+    });
+    return k;
+  }, [filteredResults]);
+
+  const byDate = useMemo(() => {
+    const map: Record<string, WalkInEntry[]> = {};
+    filteredResults.forEach((e) => { (map[e.visit_date] ||= []).push(e); });
+    return Object.entries(map);
+  }, [filteredResults]);
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const handleDeparture = async (entry: WalkInEntry) => {
+    setBusyId(entry.id);
+    const r = await updateWalkIn(entry.id, { departure_time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
+    setBusyId(null);
+    if (!r.success) { alert('❌ ' + r.error); return; }
+    await handleSearch();
+  };
+  const handleDelete = async (entry: WalkInEntry) => {
+    if (!confirm(`Delete walk-in entry for ${entry.customer_name}?`)) return;
+    setBusyId(entry.id);
+    const r = await deleteWalkIn(entry.id);
+    setBusyId(null);
+    if (!r.success) { alert('❌ ' + r.error); return; }
+    await handleSearch();
+  };
+
   const handleExportExcel = () => {
-    if (results.length === 0) {
+    if (filteredResults.length === 0) {
       alert('No data to export');
       return;
     }
 
-    const rows = results.map((entry) => ({
+    const rows = filteredResults.map((entry) => ({
       'Token #': entry.token_no,
       'Visit Date': entry.visit_date,
       'Customer Name': entry.customer_name,
@@ -101,6 +161,14 @@ export default function WalkInReportScreen() {
           />
         </div>
 
+        <div style={styles.formGroup}>
+          <label style={styles.formLabel}>WC</label>
+          <select value={wcFilter} onChange={(e) => setWcFilter(e.target.value)} style={{ ...styles.filterInput, minWidth: '150px', flex: 'unset' }}>
+            <option value="">All WC</option>
+            {wcs.map((w) => <option key={w.user_id} value={w.user_id}>{w.name}</option>)}
+          </select>
+        </div>
+
         <div style={{ ...styles.formGroup, flex: 1, minWidth: '200px' }}>
           <label style={styles.formLabel}>Search</label>
           <input
@@ -130,9 +198,9 @@ export default function WalkInReportScreen() {
             color: '#fff',
           }}
           onClick={handleExportExcel}
-          disabled={results.length === 0}
-          onMouseEnter={(e) => results.length > 0 && Object.assign(e.currentTarget.style, { background: '#15803d', color: '#fff' })}
-          onMouseLeave={(e) => results.length > 0 && Object.assign(e.currentTarget.style, { background: '#16a34a', color: '#fff' })}
+          disabled={filteredResults.length === 0}
+          onMouseEnter={(e) => filteredResults.length > 0 && Object.assign(e.currentTarget.style, { background: '#15803d', color: '#fff' })}
+          onMouseLeave={(e) => filteredResults.length > 0 && Object.assign(e.currentTarget.style, { background: '#16a34a', color: '#fff' })}
         >
           📥 Export Excel
         </button>
@@ -141,86 +209,87 @@ export default function WalkInReportScreen() {
       {/* Results */}
       {loading ? (
         <div style={styles.loadingText}>Searching...</div>
-      ) : searched && results.length === 0 ? (
+      ) : searched && filteredResults.length === 0 ? (
         <div style={styles.emptyMessage}>No walk-in entries found for the selected criteria</div>
-      ) : results.length > 0 ? (
+      ) : filteredResults.length > 0 ? (
         <>
-          <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '8px' }}>
-            {results.length} record{results.length !== 1 ? 's' : ''} found
+          {/* KPI cards — mirrors HTML's mkCard breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
+            {[
+              { label: 'Inward Customers', val: kpis.inwardCusts, color: '#1d4ed8' },
+              { label: 'Inward Products', val: kpis.inwardProds, color: '#1d4ed8' },
+              { label: 'Outward Customers', val: kpis.outwardCusts, color: '#059669' },
+              { label: 'Outward Products', val: kpis.outwardProds, color: '#047857' },
+            ].map((c) => (
+              <div key={c.label} style={{ ...styles.card, textAlign: 'center' as const, padding: '14px 10px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.color, textTransform: 'uppercase' }}>{c.label}</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: c.color }}>{c.val}</div>
+              </div>
+            ))}
           </div>
-          <div style={styles.card}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.tableHeader}>Token #</th>
-                    <th style={styles.tableHeader}>Visit Date</th>
-                    <th style={styles.tableHeader}>Customer Name</th>
-                    <th style={styles.tableHeader}>Mobile</th>
-                    <th style={styles.tableHeader}>Arrival</th>
-                    <th style={styles.tableHeader}>Departure</th>
-                    <th style={styles.tableHeader}>Work Controller</th>
-                    <th style={styles.tableHeader}>Products</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((entry) => (
-                    <tr
-                      key={entry.id}
-                      style={styles.tableRow}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = colors.card)}
-                    >
-                      <td style={styles.tableCell}>
-                        <span
-                          style={{
-                            background: '#dbeafe',
-                            color: '#1d4ed8',
-                            borderRadius: '20px',
-                            padding: '3px 10px',
-                            fontWeight: 700,
-                            fontSize: '13px',
-                          }}
-                        >
-                          #{entry.token_no}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 16 }}>
+            {[
+              { label: 'Other Customers', val: kpis.otherCusts, color: '#92400e' },
+              { label: 'Other Products', val: kpis.otherProds, color: '#78350f' },
+              { label: 'Total Customers', val: kpis.inwardCusts + kpis.outwardCusts + kpis.otherCusts, color: '#7c3aed' },
+              { label: 'Total Products', val: kpis.inwardProds + kpis.outwardProds + kpis.otherProds, color: '#9333ea' },
+            ].map((c) => (
+              <div key={c.label} style={{ ...styles.card, textAlign: 'center' as const, padding: '14px 10px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.color, textTransform: 'uppercase' }}>{c.label}</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: c.color }}>{c.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {byDate.map(([date, dayEntries]) => (
+            <div key={date} style={{ ...styles.card, marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: colors.primary, marginBottom: 12, padding: '4px 10px', background: '#eff6ff', borderRadius: 6, display: 'inline-block' }}>
+                📅 {new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} — {dayEntries.length} customers
+              </div>
+              {dayEntries.map((entry) => (
+                <div key={entry.id} style={{ background: '#f8fafc', borderRadius: 10, padding: 12, marginBottom: 8, borderLeft: `3px solid ${colors.primary}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        <span style={{ background: '#1d4ed8', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 5, marginRight: 6 }}>#{entry.token_no}</span>
+                        {entry.customer_name} <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 400 }}>{entry.mobile}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                        🕐 In: <b>{entry.arrival_time}</b>{entry.departure_time ? <> {' | '}Out: <b>{entry.departure_time}</b></> : <> {' | '}<span style={{ color: '#f59e0b' }}>Still in office</span></>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {!entry.departure_time ? (
+                        <button onClick={() => handleDeparture(entry)} disabled={busyId === entry.id} style={{ background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, opacity: busyId === entry.id ? 0.6 : 1 }}>
+                          ⏰ Departure
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: '#065f46', background: '#d1fae5', padding: '2px 8px', borderRadius: 99 }}>Out: {entry.departure_time}</span>
+                      )}
+                      {currentUserRole !== 'engineer' && (
+                        <button onClick={() => handleDelete(entry)} disabled={busyId === entry.id} style={{ background: 'none', border: '1.5px solid #fca5a5', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: '#dc2626', cursor: 'pointer', opacity: busyId === entry.id ? 0.6 : 1 }} title="Delete this entry">
+                          🗑️ Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {(entry.products || []).map((p, idx) => {
+                      const tc = PRODUCT_TYPE_COLORS[p.type] || '#7c3aed';
+                      return (
+                        <span key={idx} style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 6, padding: '3px 8px', fontSize: 11 }}>
+                          {p.brand && <b>{p.brand} </b>}{p.model} <span style={{ color: tc }}>[{p.type}]</span>
+                          {p.warranty && <span style={{ color: p.warranty === 'In Warranty' ? '#065f46' : '#991b1b' }}> ({p.warranty})</span>}
+                          {p.remarks && <> — {p.remarks}</>}
                         </span>
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>{entry.visit_date}</td>
-                      <td style={styles.tableCell}>
-                        <strong>{entry.customer_name}</strong>
-                      </td>
-                      <td style={{ ...styles.tableCell, color: colors.primary, fontWeight: 600 }}>
-                        {entry.mobile}
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>
-                        {entry.arrival_time || '—'}
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>
-                        {entry.departure_time || '—'}
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>
-                        {entry.wc_name || '—'}
-                      </td>
-                      <td style={styles.tableCell}>
-                        <span
-                          style={{
-                            background: '#f0fdf4',
-                            color: '#16a34a',
-                            borderRadius: '20px',
-                            padding: '3px 10px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {entry.products?.length ?? 0}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      );
+                    })}
+                  </div>
+                  {entry.wc_name && <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>By: {entry.wc_name}</div>}
+                </div>
+              ))}
             </div>
-          </div>
+          ))}
         </>
       ) : null}
     </div>
