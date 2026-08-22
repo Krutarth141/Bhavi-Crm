@@ -9,6 +9,18 @@ import {
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
+// Mirrors HTML's autoTranslateToGu() — unofficial Google Translate endpoint,
+// debounced 600ms, silent on failure.
+async function translateToGu(text: string): Promise<string> {
+    if (!text.trim()) return '';
+    try {
+        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=gu&dt=t&q=' + encodeURIComponent(text.trim());
+        const r = await fetch(url);
+        const d = await r.json();
+        return (d && d[0] && d[0].map((s: any) => s[0]).join('')) || '';
+    } catch { return ''; }
+}
+
 interface PeonWithTasks {
     userId: string;
     name: string;
@@ -31,6 +43,20 @@ export default function PeonActivityScreen() {
     const [newLabel, setNewLabel] = useState('');
     const [newGlabel, setNewGlabel] = useState('');
     const [newTime, setNewTime] = useState('');
+    const [newGuLoading, setNewGuLoading] = useState(false);
+
+    // Auto-translate the English task name to Gujarati as the admin types —
+    // mirrors HTML's oninput="autoTranslateToGu(this.value)".
+    useEffect(() => {
+        if (!newLabel.trim()) return;
+        setNewGuLoading(true);
+        const timer = setTimeout(async () => {
+            const translated = await translateToGu(newLabel);
+            if (translated) setNewGlabel(translated);
+            setNewGuLoading(false);
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [newLabel]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -145,7 +171,10 @@ export default function PeonActivityScreen() {
                                     <input type="text" value={newIcon} onChange={e => setNewIcon(e.target.value)} placeholder="Icon" style={{ width: 54, padding: 8, border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 18, textAlign: 'center' }} />
                                     <input type="text" value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Task name (English)..." style={{ flex: 1, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13 }} />
                                 </div>
-                                <input type="text" value={newGlabel} onChange={e => setNewGlabel(e.target.value)} placeholder="ગુજરાતી નામ (optional)..." style={{ padding: '8px 12px', border: '1.5px solid #a5f3fc', borderRadius: 8, fontSize: 13, background: '#f0fdff' }} />
+                                <div style={{ position: 'relative' }}>
+                                    <input type="text" value={newGlabel} onChange={e => setNewGlabel(e.target.value)} placeholder="ગુજરાતી નામ (optional)..." style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1.5px solid #a5f3fc', borderRadius: 8, fontSize: 13, background: '#f0fdff' }} />
+                                    {newGuLoading && <span style={{ position: 'absolute', right: 10, top: 8, fontSize: 11, color: '#0369a1' }}>⏳</span>}
+                                </div>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                     <label style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Scheduled Time:</label>
                                     <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} style={{ padding: 8, border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13 }} />
@@ -219,6 +248,20 @@ function EditTaskModal({ task, onSave, onClose }: { task: TaskRow; onSave: (labe
     const [icon, setIcon] = useState(task.icon);
     const [label, setLabel] = useState(task.label);
     const [glabel, setGlabel] = useState(task.glabel);
+    const [guLoading, setGuLoading] = useState(false);
+
+    // Live-translate as the English name is edited — mirrors HTML's edit
+    // modal oninput handler.
+    useEffect(() => {
+        if (label === task.label || !label.trim()) return;
+        setGuLoading(true);
+        const timer = setTimeout(async () => {
+            const translated = await translateToGu(label);
+            if (translated) setGlabel(translated);
+            setGuLoading(false);
+        }, 600);
+        return () => clearTimeout(timer);
+    }, [label, task.label]);
 
     return (
         <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -229,7 +272,10 @@ function EditTaskModal({ task, onSave, onClose }: { task: TaskRow; onSave: (labe
                         <input type="text" value={icon} onChange={e => setIcon(e.target.value)} style={{ width: 50, padding: 8, border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 18, textAlign: 'center' }} />
                         <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="English name..." style={{ flex: 1, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13 }} />
                     </div>
-                    <input type="text" value={glabel} onChange={e => setGlabel(e.target.value)} placeholder="ગુજરાતી નામ..." style={{ padding: '8px 12px', border: '1.5px solid #a5f3fc', borderRadius: 8, fontSize: 13, background: '#f0fdff' }} />
+                    <div style={{ position: 'relative' }}>
+                        <input type="text" value={glabel} onChange={e => setGlabel(e.target.value)} placeholder="ગુજરાતી નામ..." style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1.5px solid #a5f3fc', borderRadius: 8, fontSize: 13, background: '#f0fdff' }} />
+                        {guLoading && <span style={{ position: 'absolute', right: 10, top: 8, fontSize: 11, color: '#0369a1' }}>⏳</span>}
+                    </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                     <button onClick={onClose} style={{ flex: 1, padding: 11, border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: 14, fontWeight: 600, background: '#fff', cursor: 'pointer' }}>Cancel</button>

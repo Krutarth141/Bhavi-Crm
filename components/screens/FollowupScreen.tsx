@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FollowupTicket, FollowupFilterType } from '@/types/followup';
 import { fetchFollowups, markFollowupDone, snoozeFollowup, setFollowup, searchTicketsForFollowup } from '@/services/followupService';
+import { fetchCompanyInfo } from '@/services/settingsService';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 const filterColors: Record<FollowupFilterType, string> = { overdue: '#ef4444', today: '#f59e0b', upcoming: '#3b82f6', all: '#6366f1' };
@@ -33,8 +34,9 @@ export default function FollowupScreen() {
     const upcoming = all.filter(r => (r.follow_up_date || '') > today);
     const filtered = filter === 'overdue' ? overdue : filter === 'today' ? todayList : filter === 'upcoming' ? upcoming : all;
 
-    const handleWhatsApp = (r: FollowupTicket) => {
-        const msg = `Dear ${r.cname},\n\nThis is a follow-up regarding your service request for: ${r.model}\nIssue: ${r.problem}\n\nPlease contact us to schedule the service.`;
+    const handleWhatsApp = async (r: FollowupTicket) => {
+        const ci = await fetchCompanyInfo();
+        const msg = `Dear ${r.cname},\n\nThis is a follow-up from *${ci?.company_name || 'Bhavi Electronics'}*.\n\nRegarding your service request for: *${r.model}*\nIssue: ${r.problem}\n\nPlease contact us to schedule the service.\n\n${ci?.phone ? '📞 ' + ci.phone : ''}`;
         let mob = (r.mobile || '').replace(/\D/g, '');
         if (mob.length === 10) mob = '91' + mob;
         window.open(`https://wa.me/${mob}?text=${encodeURIComponent(msg)}`, '_blank');
