@@ -34,25 +34,29 @@ export const deleteTarget = async (id: number): Promise<{ success: boolean; erro
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
-// Fetch actual call counts + revenue from tickets for comparison
+const nextMonth = (ym: string): string => {
+    const [y, m] = ym.split('-').map(Number);
+    return m >= 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+};
+
 export const fetchActualPerformance = async (month: string): Promise<Record<string, { calls: number; revenue: number }>> => {
     try {
-        const from = month + '-01';
-        const to = month + '-31';
+        const from = `${month}-01T00:00:00`;
+        const to = `${nextMonth(month)}-01T00:00:00`;
         const { data } = await supabase
             .from('tickets')
-            .select('assigned_name, status, service_charges, final_charges, call_type')
-            .gte('created_at', from)
-            .lte('created_at', to);
+            .select('assigned_to, labor, other_charge, final_charges, spares')
+            .eq('status', 'Closed')
+            .gte('updated_at', from)
+            .lt('updated_at', to);
         const result: Record<string, { calls: number; revenue: number }> = {};
         (data || []).forEach((t: any) => {
-            const name = t.assigned_name || 'Unassigned';
-            if (!result[name]) result[name] = { calls: 0, revenue: 0 };
-            result[name].calls++;
-            if (t.call_type !== 'Warranty') {
-                const rev = parseFloat(t.final_charges || t.service_charges || 0);
-                result[name].revenue += rev;
-            }
+            const id = t.assigned_to || 'Unassigned';
+            if (!result[id]) result[id] = { calls: 0, revenue: 0 };
+            result[id].calls++;
+            const parts = (t.spares || []).reduce((a: number, s: any) => a + (s.qty || 1) * (s.price || 0), 0);
+            const rev = parseFloat(t.final_charges) || (parseFloat(t.labor) || 0) + (parseFloat(t.other_charge) || 0) + parts;
+            result[id].revenue += rev;
         });
         return result;
     } catch { return {}; }

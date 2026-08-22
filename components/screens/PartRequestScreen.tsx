@@ -1,15 +1,25 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { usePartRequests } from '@/hooks/usePartRequests';
 import { PartRequest, PartRequestFilter } from '@/types/partRequest';
 
 export default function PartRequestScreen() {
+    const { data: session } = useSession();
+    // Matches HTML's renderEPPending()/canApprove: Work Controllers may only
+    // approve Engineer Return Requests, and never see the Reject button —
+    // Admin/CSP manager get full access to both RECEIVE and RETURN types.
+    const isWC = (session?.user as any)?.roleType === 'work_controller';
+
     const [filter, setFilter] = useState<PartRequestFilter>('PENDING');
     const { requests, loading, error, pending, approved, rejected, approve, reject, refetch } = usePartRequests(filter);
     const [processing, setProcessing] = useState<string | null>(null);
 
+    const canApproveReq = (req: PartRequest) => !isWC || req.type === 'RETURN';
+
     const handleApprove = async (req: PartRequest) => {
+        if (!canApproveReq(req)) return;
         const partNames = (req.parts || []).map(p => `${p.qty}×${p.part_name || p.part_id}`).join(', ');
         if (!confirm(`Approve request for ${req.engineer_name}?\nParts: ${partNames || 'see request'}`)) return;
         setProcessing(req.id);
@@ -19,6 +29,7 @@ export default function PartRequestScreen() {
     };
 
     const handleReject = async (req: PartRequest) => {
+        if (isWC) return;
         const reason = prompt('Rejection reason (optional):');
         if (reason === null) return;
         setProcessing(req.id);
@@ -35,6 +46,12 @@ export default function PartRequestScreen() {
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
+
+            {isWC && (
+                <div style={{ padding: '10px 16px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', borderRadius: 6, marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+                    ℹ️ You can only approve Engineer Return Requests.
+                </div>
+            )}
 
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
@@ -105,12 +122,16 @@ export default function PartRequestScreen() {
                                                     <td style={{ padding: '10px 12px' }}>
                                                         {isPending ? (
                                                             <div style={{ display: 'flex', gap: 6 }}>
-                                                                <button onClick={() => handleApprove(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
-                                                                    ✅ Approve
-                                                                </button>
-                                                                <button onClick={() => handleReject(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
-                                                                    ❌ Reject
-                                                                </button>
+                                                                {canApproveReq(r) && (
+                                                                    <button onClick={() => handleApprove(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
+                                                                        ✅ Approve
+                                                                    </button>
+                                                                )}
+                                                                {!isWC && (
+                                                                    <button onClick={() => handleReject(r)} disabled={isProcessing} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, opacity: isProcessing ? 0.5 : 1 }}>
+                                                                        ❌ Reject
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         ) : '—'}
                                                     </td>

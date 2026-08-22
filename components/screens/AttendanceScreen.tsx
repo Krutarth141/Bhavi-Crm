@@ -20,7 +20,12 @@ export default function AttendanceScreen() {
     const adminName = (session?.user as any)?.name ?? 'Admin';
     const role = (session?.user as any)?.roleType;
     const myId = ((session?.user as any)?.email || ''); // holds user_id
-    const isAdmin = role === 'admin' || isCspManager(session);
+    // Matches HTML's admin/WC gate (currentUser.role==='admin') — WC accounts
+    // have DB role='admin' with role_type='work_controller', so this must use
+    // the DB `role` column (session.user.role), not `roleType` (role_type),
+    // otherwise WCs are silently scoped down to their own punch row only.
+    const dbRole = (session?.user as any)?.role;
+    const isAdmin = dbRole === 'admin' || isCspManager(session);
 
     const [from, setFrom] = useState(todayStr());
     const [to, setTo] = useState(todayStr());

@@ -1,120 +1,140 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTargets } from '@/hooks/useTargets';
 import { useEngineers } from '@/hooks/useEngineers';
-import { TargetFormData, emptyTargetForm } from '@/types/targets';
 
 const pct = (actual: number, target: number) => target ? Math.min(Math.round(actual / target * 100), 100) : 0;
 
 export default function TargetsScreen() {
-    const { targets, actual, loading, error, month, setMonth, save, remove } = useTargets();
+    const { targets, actual, loading, error, month, setMonth, save } = useTargets();
     const { engineers } = useEngineers();
-    const [form, setForm] = useState<TargetFormData>(emptyTargetForm);
-    const [saving, setSaving] = useState(false);
-    const [showForm, setShowForm] = useState(false);
+    const [saving, setSaving] = useState<string | null>(null);
+    // Mirrors HTML's "Set Monthly Targets" table — one editable row per
+    // active engineer (not just engineers who already have a target).
+    const [rowInputs, setRowInputs] = useState<Record<string, { calls: string; amount: string }>>({});
 
-    const handleSave = async () => {
-        if (!form.eng_name || !form.month) { alert('Engineer and month required'); return; }
-        setSaving(true);
-        const r = await save(form);
-        if (r.success) { setForm(emptyTargetForm); setShowForm(false); }
-        else alert('Error: ' + r.error);
-        setSaving(false);
+    useEffect(() => {
+        const map: Record<string, { calls: string; amount: string }> = {};
+        (engineers as any[]).forEach((e: any) => {
+            const t = targets.find((x) => x.eng_id === (e.user_id || e.eng_id));
+            map[e.user_id || e.eng_id] = {
+                calls: t?.target_calls != null ? String(t.target_calls) : '',
+                amount: t?.target_amount != null ? String(t.target_amount) : '',
+            };
+        });
+        setRowInputs(map);
+    }, [engineers, targets]);
+
+    const handleSaveRow = async (eng: any) => {
+        const engId = eng.user_id || eng.eng_id;
+        const row = rowInputs[engId] || { calls: '', amount: '' };
+        setSaving(engId);
+        const r = await save({ eng_id: engId, eng_name: eng.name, month, target_calls: row.calls, target_amount: row.amount });
+        setSaving(null);
+        if (!r.success) alert('Error: ' + r.error);
     };
 
-    const handleEngSelect = (engId: string) => {
-        const eng = (engineers as any[]).find((e: any) => e.id?.toString() === engId || e.user_id === engId);
-        setForm(f => ({ ...f, eng_id: eng?.user_id || engId, eng_name: eng?.name || '' }));
-    };
-
-    const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
+    const fieldStyle = { padding: '5px 8px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '13px', width: 110, boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🎯 Engineer Targets</h1>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }} />
-                    <button onClick={() => setShowForm(!showForm)} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
-                        {showForm ? '✕ Cancel' : '➕ Set Target'}
-                    </button>
-                </div>
+                <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }} />
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
-            {showForm && (
-                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-                    <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>Set Monthly Target</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
-                        <div>
-                            <label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Engineer *</label>
-                            <select style={fieldStyle} value={form.eng_id} onChange={e => handleEngSelect(e.target.value)}>
-                                <option value="">Select Engineer</option>
-                                {(engineers as any[]).map((e: any) => <option key={e.id || e.user_id} value={e.user_id}>{e.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Month *</label>
-                            <input type="month" style={fieldStyle} value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))} />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Target Calls</label>
-                            <input type="number" style={fieldStyle} value={form.target_calls} onChange={e => setForm(f => ({ ...f, target_calls: e.target.value }))} placeholder="e.g. 30" />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 12, display: 'block', marginBottom: 3, fontWeight: 500 }}>Target Revenue (₹)</label>
-                            <input type="number" style={fieldStyle} value={form.target_amount} onChange={e => setForm(f => ({ ...f, target_amount: e.target.value }))} placeholder="e.g. 50000" />
+            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p> : (
+                <>
+                    {/* Set Monthly Targets — every active engineer, editable inline */}
+                    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, marginBottom: 24 }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: '#374151' }}>⚙️ Set Monthly Targets — {month}</h3>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                <thead>
+                                    <tr style={{ background: '#f9fafb' }}>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Engineer</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Call Target</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Revenue Target (₹)</th>
+                                        <th style={{ padding: 8, textAlign: 'left' }}>Save</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(engineers as any[]).map((e: any) => {
+                                        const engId = e.user_id || e.eng_id;
+                                        const row = rowInputs[engId] || { calls: '', amount: '' };
+                                        return (
+                                            <tr key={engId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                <td style={{ padding: 8, fontWeight: 600 }}>{e.name}</td>
+                                                <td style={{ padding: 8 }}>
+                                                    <input type="number" min={0} placeholder="e.g. 30" style={fieldStyle} value={row.calls}
+                                                        onChange={ev => setRowInputs(r => ({ ...r, [engId]: { ...row, calls: ev.target.value } }))} />
+                                                </td>
+                                                <td style={{ padding: 8 }}>
+                                                    <input type="number" min={0} placeholder="e.g. 50000" style={fieldStyle} value={row.amount}
+                                                        onChange={ev => setRowInputs(r => ({ ...r, [engId]: { ...row, amount: ev.target.value } }))} />
+                                                </td>
+                                                <td style={{ padding: 8 }}>
+                                                    <button onClick={() => handleSaveRow(e)} disabled={saving === engId} style={{ padding: '5px 12px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: saving === engId ? 0.6 : 1 }}>
+                                                        {saving === engId ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <button onClick={handleSave} disabled={saving} style={{ marginTop: 12, padding: '8px 20px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>
-                        {saving ? 'Saving...' : '💾 Save Target'}
-                    </button>
-                </div>
-            )}
 
-            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p> :
-                targets.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No targets set for {month}</p> : (
-                    <div style={{ display: 'grid', gap: 12 }}>
-                        {targets.map(t => {
-                            const a = actual[t.eng_name] || { calls: 0, revenue: 0 };
-                            const callPct = pct(a.calls, t.target_calls || 0);
-                            const revPct = pct(a.revenue, Number(t.target_amount) || 0);
-                            return (
-                                <div key={t.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                        <div>
-                                            <div style={{ fontWeight: 700, fontSize: 16 }}>{t.eng_name}</div>
-                                            <div style={{ fontSize: 12, color: '#6b7280' }}>{t.month}</div>
+                    {/* Achievement Report — every active engineer, "no target set" shown when missing */}
+                    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
+                        <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, color: '#374151' }}>📊 Achievement Report — {month}</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 12 }}>
+                            {(engineers as any[]).map((e: any) => {
+                                const engId = e.user_id || e.eng_id;
+                                const t = targets.find((x) => x.eng_id === engId);
+                                const a = actual[engId] || { calls: 0, revenue: 0 };
+                                const callTarget = Number(t?.target_calls) || 0;
+                                const revTarget = Number(t?.target_amount) || 0;
+                                const callPct = pct(a.calls, callTarget);
+                                const revPct = pct(a.revenue, revTarget);
+                                const barC = callPct >= 80 ? '#0e9f6e' : callPct >= 50 ? '#f59e0b' : '#f05252';
+                                const emoji = callPct >= 100 ? '🏆' : callPct >= 80 ? '🔥' : callPct >= 50 ? '💪' : '🎯';
+                                return (
+                                    <div key={engId} style={{ background: '#fff', borderRadius: 12, padding: 14, border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{emoji} {e.name}</div>
+                                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Calls Closed</div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                            <span style={{ fontWeight: 700, fontSize: 18, color: barC }}>{a.calls}</span>
+                                            <span style={{ fontSize: 13, color: '#64748b' }}>{callTarget ? `/ ${callTarget}` : ' — no target set'}</span>
                                         </div>
-                                        <button onClick={() => remove(t.id)} style={{ padding: '3px 10px', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑️</button>
+                                        {callTarget > 0 && (
+                                            <div style={{ background: '#f1f5f9', borderRadius: 99, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                                                <div style={{ background: barC, height: '100%', width: `${callPct}%`, borderRadius: 99 }} />
+                                            </div>
+                                        )}
+                                        {revTarget > 0 && (
+                                            <>
+                                                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Revenue</div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                    <span style={{ fontWeight: 700, fontSize: 15, color: '#065f46' }}>₹{Math.round(a.revenue).toLocaleString()}</span>
+                                                    <span style={{ fontSize: 12, color: '#64748b' }}>/ ₹{revTarget.toLocaleString()}</span>
+                                                </div>
+                                                <div style={{ background: '#f1f5f9', borderRadius: 99, height: 10, overflow: 'hidden' }}>
+                                                    <div style={{ background: '#0e9f6e', height: '100%', width: `${revPct}%`, borderRadius: 99 }} />
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-                                                Calls: <strong>{a.calls}</strong> / {t.target_calls || 0}
-                                                <span style={{ marginLeft: 8, color: callPct >= 100 ? '#059669' : callPct >= 70 ? '#d97706' : '#dc2626', fontWeight: 700 }}>{callPct}%</span>
-                                            </div>
-                                            <div style={{ height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
-                                                <div style={{ height: '100%', width: callPct + '%', background: callPct >= 100 ? '#059669' : callPct >= 70 ? '#d97706' : '#dc2626', borderRadius: 4, transition: 'width 0.3s' }} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-                                                Revenue: <strong>₹{a.revenue.toLocaleString()}</strong> / ₹{Number(t.target_amount || 0).toLocaleString()}
-                                                <span style={{ marginLeft: 8, color: revPct >= 100 ? '#059669' : revPct >= 70 ? '#d97706' : '#dc2626', fontWeight: 700 }}>{revPct}%</span>
-                                            </div>
-                                            <div style={{ height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
-                                                <div style={{ height: '100%', width: revPct + '%', background: revPct >= 100 ? '#059669' : revPct >= 70 ? '#d97706' : '#dc2626', borderRadius: 4, transition: 'width 0.3s' }} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
-                )}
+                </>
+            )}
         </div>
     );
 }

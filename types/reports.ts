@@ -197,7 +197,8 @@ export type ReportTab =
     | 'punch'
     | 'daily'
     | 'wcdaily'
-    | 'import';
+    | 'import'
+    | 'tat';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -282,4 +283,5 @@ export const REPORT_TABS: { key: ReportTab; label: string }[] = [
     { key: 'daily', label: '📋 Engineer Daily' },
     { key: 'wcdaily', label: '🎯 WC Daily' },
     { key: 'import', label: '📥 Import Calls' },
+    { key: 'tat', label: '⏱️ TAT Compliance' },
 ];

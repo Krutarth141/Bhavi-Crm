@@ -13,7 +13,11 @@ import MyReportScreen from '@/components/screens/MyReportScreen';
 import MyCallsScreen from '@/components/screens/MyCallsScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
-import { isCspManager } from '@/lib/permissions';
+import { isCspManager, isAutoEng } from '@/lib/permissions';
+import AutoSitesScreen from '@/components/screens/AutoSitesScreen';
+import AutoVisitsReportScreen from '@/components/screens/AutoVisitsReportScreen';
+import SwSurveyScreen from '@/components/screens/SwSurveyScreen';
+import AutoInventoryScreen from '@/components/screens/AutoInventoryScreen';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
 import ReportsScreen from '@/components/screens/ReportsScreen';
 import PendingListScreen from '@/components/screens/PendingListScreen';
@@ -31,7 +35,8 @@ import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
 type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'reports' | 'attendance'
     | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits'
-    | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report';
+    | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
+    | 'auto-sites' | 'sw-survey' | 'auto-visits-report' | 'auto-inventory';
 
 // Base items every engineer gets — mirrors HTML's setupNav() regular-engineer
 // branch (sv('nav-tickets',false); sv('nav-eng-parts',false) there).
@@ -61,14 +66,28 @@ const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'amc', label: '🛡️ AMC' },
 ];
 
+// "Auto engineer" accounts (ENG002/ENG008) — mirrors HTML's isAutoEng nav
+// gate, granted independent of CSP-manager status.
+const AUTO_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
+    { id: 'auto-sites', label: '🏢 Auto Sites' },
+    { id: 'sw-survey', label: '📝 SW Survey' },
+    { id: 'auto-visits-report', label: '📊 Auto Visits Report' },
+    { id: 'auto-inventory', label: '📦 Auto Inventory' },
+];
+
 export default function EngineerDashboard() {
     const { data: session } = useSession();
     const cspMgr = isCspManager(session);
+    const autoEng = isAutoEng(session);
     const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
     const engId = (session?.user as any)?.email ?? uid ?? '';
     const engName = (session?.user as any)?.name ?? '';
     const { isVisible } = useNavVisibility(uid);
-    const allNavItems = cspMgr ? [...NAV_ITEMS, ...CSP_EXTRA_ITEMS] : NAV_ITEMS;
+    const allNavItems = [
+        ...NAV_ITEMS,
+        ...(cspMgr ? CSP_EXTRA_ITEMS : []),
+        ...(autoEng ? AUTO_EXTRA_ITEMS : []),
+    ];
     const visibleNavItems = allNavItems.filter((item) => item.id === 'overview' || isVisible(item.id));
 
     const [activeTab, setActiveTab] = useState<EngineerTab>('overview');
@@ -101,6 +120,10 @@ export default function EngineerDashboard() {
             case 'inventory': return cspMgr ? <InventoryScreen /> : null;
             case 'amc': return cspMgr ? <AMCScreen /> : null;
             case 'work-log-report': return cspMgr ? <WorkLogScreen /> : null;
+            case 'auto-sites': return autoEng ? <AutoSitesScreen /> : null;
+            case 'sw-survey': return autoEng ? <SwSurveyScreen /> : null;
+            case 'auto-visits-report': return autoEng ? <AutoVisitsReportScreen /> : null;
+            case 'auto-inventory': return autoEng ? <AutoInventoryScreen /> : null;
             default: return null;
         }
     };

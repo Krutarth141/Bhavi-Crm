@@ -8,7 +8,7 @@ import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
-import { createTicket, updateTicket, updateTicketRemarks, closeTicket, ensureGroupId } from '@/services/ticketService';
+import { createTicket, updateTicket, closeTicket, ensureGroupId } from '@/services/ticketService';
 import { printTicket, getBadgeStyle } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
@@ -177,10 +177,29 @@ export default function TicketsScreen() {
       return;
     }
 
+    // View mode's Status / Assign-to-Engineer fields are quick-edit —
+    // mirrors HTML's quickStatusChange()/quickEngChange() dropdowns, which
+    // are always available on the ticket view (not gated behind a separate
+    // edit mode). Only include them in the update when actually changed.
+    const updates: Record<string, any> = { remarks: formData.remarks };
+    if (formData.status && formData.status !== selectedTicket.status) {
+      if (formData.status === 'Call Cancel') {
+        const reason = prompt('🚫 Cancel Reason (mandatory):');
+        if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
+        updates.remarks = updates.remarks ? `${updates.remarks}\n\nCancel reason: ${reason}` : `Cancel reason: ${reason}`;
+      }
+      updates.status = formData.status;
+    }
+    if (formData.assigned_to !== undefined && formData.assigned_to !== selectedTicket.assigned_to) {
+      updates.assigned_to = formData.assigned_to || null;
+      updates.assigned_name = formData.assigned_name || null;
+    }
+
     try {
-      const result = await updateTicketRemarks(selectedTicket.id, formData.remarks);
+      const result = await updateTicket(selectedTicket.id, updates);
       if (result.success) {
-        alert('✅ Remarks saved!');
+        alert('✅ Changes saved!');
+        setModalOpen(false);
         await fetchTickets();
       } else alert('❌ Failed');
     } catch (err) {
@@ -587,7 +606,7 @@ export default function TicketsScreen() {
                 <h3 style={styles.sectionHeader2}>🔧 Service</h3>
                 <div style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
-                  <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={modalMode === 'view'} />
+                  <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={false} />
                   <FormInput label="SE Call ID" name="se_call_id" value={formData.se_call_id} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   {modalMode === 'add' && (
                     <div style={{ ...styles.formGroup, gridColumn: '1 / -1', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 12 }}>
@@ -642,7 +661,7 @@ export default function TicketsScreen() {
                         options={engineers}
                         optionLabelKey="name"
                         optionValueKey="user_id"
-                        disabled={modalMode === 'view' || engineersLoading || engineersError !== null}
+                        disabled={engineersLoading || engineersError !== null}
                       />
                     </div>
                   )}
@@ -780,7 +799,7 @@ export default function TicketsScreen() {
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>
                   )}
                   <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
-                    💾 Save Remarks
+                    💾 Save Changes
                   </button>
                 </>
               ) : (

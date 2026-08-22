@@ -12,18 +12,28 @@ import SalesHistoryTab from '@/components/screens/inventory/SalesHistoryTab';
 import PartHistoryModal from '@/components/screens/inventory/PartHistoryModal';
 import BulkActionsBar from '@/components/screens/inventory/BulkActionsBar';
 import { useMasters } from '@/hooks/useMasters';
+import { isAccountant } from '@/lib/permissions';
 
 type ModalMode = 'add' | 'edit' | 'view' | null;
-type InvTab = 'stock' | 'purchase' | 'sales';
+type InvTab = 'stock' | 'purchase' | 'sales' | 'tally';
 
 export default function InventoryScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? 'Admin';
+    const roleType = (session?.user as any)?.roleType;
+    // Stock Tally is admin/Accountant only — mirrors HTML's
+    // currentUser.role==='admin'||window._isAcct gate on the 4th tab.
+    const canTally = roleType === 'admin' || isAccountant(session);
     const [activeTab, setActiveTab] = useState<InvTab>('stock');
 
     // Data fetching
     const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem, fetchInventory } = useInventory();
     const { brands } = useMasters();
+
+    // Stock Tally — physical stock-count reconciliation
+    const [tallyConsumablesOnly, setTallyConsumablesOnly] = useState(false);
+    const [tallyCounts, setTallyCounts] = useState<Record<string, string>>({});
+    const [tallySaving, setTallySaving] = useState(false);
 
     // UI State
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
@@ -70,6 +80,35 @@ export default function InventoryScreen() {
             return matchesSearch && matchesCategory && matchesStock;
         });
     }, [inventory, searchTerm, selectedCategory, stockFilter]);
+
+    const tallyItems = useMemo(() => {
+        return inventory.filter((item) => !tallyConsumablesOnly || item.is_consumable);
+    }, [inventory, tallyConsumablesOnly]);
+
+    const handleSaveTally = async () => {
+        const mismatches = tallyItems
+            .map((item) => ({ item, counted: tallyCounts[item.id] !== undefined ? parseFloat(tallyCounts[item.id]) : item.qty_in_stock }))
+            .filter(({ item, counted }) => !isNaN(counted) && counted !== item.qty_in_stock);
+
+        if (!mismatches.length) { alert('No mismatches — nothing to save.'); return; }
+        if (!confirm(`${mismatches.length} item(s) have a count mismatch. Save tally and correct stock levels?`)) return;
+
+        setTallySaving(true);
+        let done = 0;
+        for (const { item, counted } of mismatches) {
+            const delta = counted - item.qty_in_stock;
+            const r = await saveStockTransaction(
+                item,
+                { quantity: Math.abs(delta), date: new Date().toISOString().split('T')[0], note: `Stock Tally: system ${item.qty_in_stock} → counted ${counted}`, supplier: '', invoice: '', customer: '', sell_price: 0 },
+                delta > 0 ? 'in' : 'out',
+                userName,
+            );
+            if (r.success) done++;
+        }
+        setTallySaving(false);
+        setTallyCounts({});
+        alert(`✅ Tally saved — ${done}/${mismatches.length} item(s) corrected.`);
+    };
 
     const toggleSelectOne = (id: string) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -228,7 +267,7 @@ export default function InventoryScreen() {
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
-                    {([{ id: 'stock', label: '📦 Stock' }, { id: 'purchase', label: '🛒 Purchase' }, { id: 'sales', label: '💰 Sales' }] as { id: InvTab; label: string }[]).map(tab => (
+                    {([{ id: 'stock', label: '📦 Stock' }, { id: 'purchase', label: '🛒 Purchase' }, { id: 'sales', label: '💰 Sales' }, ...(canTally ? [{ id: 'tally', label: '🧮 Stock Tally' }] : [])] as { id: InvTab; label: string }[]).map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400, color: activeTab === tab.id ? '#185FA5' : '#6b7280', borderBottom: activeTab === tab.id ? '2px solid #185FA5' : '2px solid transparent', marginBottom: -1 }}>
                             {tab.label}
                         </button>
@@ -237,6 +276,64 @@ export default function InventoryScreen() {
 
                 {activeTab === 'purchase' && <PurchaseHistoryTab inventory={inventory} addedBy={userName} />}
                 {activeTab === 'sales' && <SalesHistoryTab inventory={inventory} addedBy={userName} />}
+
+                {activeTab === 'tally' && canTally && (
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
+                                <input type="checkbox" checked={tallyConsumablesOnly} onChange={(e) => setTallyConsumablesOnly(e.target.checked)} />
+                                Consumables only
+                            </label>
+                            <button
+                                onClick={handleSaveTally}
+                                disabled={tallySaving}
+                                style={{ padding: '10px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: tallySaving ? 0.6 : 1 }}
+                            >
+                                {tallySaving ? 'Saving...' : '💾 Save Tally & Generate Report'}
+                            </button>
+                        </div>
+                        <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                <thead>
+                                    <tr style={{ background: '#f8fafc' }}>
+                                        {['Item', 'Part Code', 'System Qty', 'Counted Qty', 'Mismatch'].map((h) => (
+                                            <th key={h} style={{ padding: 8, textAlign: 'left', fontWeight: 600 }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {tallyItems.map((item) => {
+                                        const countedStr = tallyCounts[item.id] ?? String(item.qty_in_stock);
+                                        const counted = parseFloat(countedStr);
+                                        const mismatch = !isNaN(counted) && counted !== item.qty_in_stock;
+                                        return (
+                                            <tr key={item.id} style={{ borderTop: '1px solid #f1f5f9', background: mismatch ? '#fffbeb' : undefined }}>
+                                                <td style={{ padding: 8, fontWeight: 600 }}>{item.item_name}</td>
+                                                <td style={{ padding: 8, color: '#64748b' }}>{item.part_code || '—'}</td>
+                                                <td style={{ padding: 8 }}>{item.qty_in_stock}</td>
+                                                <td style={{ padding: 8 }}>
+                                                    <input
+                                                        type="number"
+                                                        value={countedStr}
+                                                        onChange={(e) => setTallyCounts((c) => ({ ...c, [item.id]: e.target.value }))}
+                                                        style={{ width: 90, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                                                    />
+                                                </td>
+                                                <td style={{ padding: 8 }}>
+                                                    {mismatch && (
+                                                        <span style={{ color: counted > item.qty_in_stock ? '#059669' : '#dc2626', fontWeight: 700 }}>
+                                                            {counted > item.qty_in_stock ? '+' : ''}{counted - item.qty_in_stock}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
                 {activeTab === 'stock' && (
                     <>

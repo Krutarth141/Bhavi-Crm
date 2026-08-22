@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import { TicketRevenue, EngineerRevenue, MonthRevenue, calcTicketRevenue } from '@/types/profit';
-import { fetchRevenueTickets } from '@/services/profitService';
+import { fetchRevenueTickets, fetchCollectedAmount } from '@/services/profitService';
 
 export const useProfit = (from?: string, to?: string) => {
     const [tickets, setTickets] = useState<TicketRevenue[]>([]);
+    const [collected, setCollected] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const load = async () => {
         setLoading(true); setError(null);
-        try { setTickets(await fetchRevenueTickets(from, to)); }
+        try {
+            const [t, c] = await Promise.all([fetchRevenueTickets(from, to), fetchCollectedAmount(from, to)]);
+            setTickets(t); setCollected(c);
+        }
         catch (err) { setError((err as any).message); }
         finally { setLoading(false); }
     };
@@ -17,8 +21,11 @@ export const useProfit = (from?: string, to?: string) => {
     useEffect(() => { load(); }, [from, to]);
 
     // ── Derived ────────────────────────────────────────────────────────────────
-    const totalRevenue = tickets.reduce((s, t) => s + calcTicketRevenue(t), 0);
     const closedTickets = tickets.filter(t => t.status === 'Closed');
+    // Revenue/Labor are counted off CLOSED tickets only, matching HTML's
+    // loadProfit() (which queries status=eq.Closed directly).
+    const totalRevenue = closedTickets.reduce((s, t) => s + calcTicketRevenue(t), 0);
+    const laborRevenue = closedTickets.reduce((s, t) => s + (parseFloat(String(t.labor || 0)) || 0), 0);
     const avgPerCall = closedTickets.length ? totalRevenue / closedTickets.length : 0;
 
     // By engineer
@@ -52,5 +59,5 @@ export const useProfit = (from?: string, to?: string) => {
     });
     const monthRevenue = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
 
-    return { tickets, loading, error, totalRevenue, avgPerCall, engRevenue, monthRevenue, refetch: load };
+    return { tickets, loading, error, totalRevenue, avgPerCall, engRevenue, monthRevenue, collected, laborRevenue, refetch: load };
 };

@@ -14,3 +14,9 @@ export const ACCOUNTANT_ID = 'ACCT001';
 export function isAccountant(session: any): boolean {
     return (session?.user as any)?.email === ACCOUNTANT_ID;
 }
+
+export const AUTO_ENG_IDS = ['ENG002', 'ENG008'];
+
+export function isAutoEng(session: any): boolean {
+    return AUTO_ENG_IDS.includes((session?.user as any)?.email);
+}

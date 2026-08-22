@@ -13,6 +13,7 @@ import PunchLogsTab from '@/components/screens/reports/PunchLogsTab';
 import DailyReportsTab from '@/components/screens/reports/DailyReportsTab';
 import WCDailyReportsTab from '@/components/screens/reports/WCDailyReportsTab';
 import ImportCallsTab from '@/components/screens/reports/ImportCallsTab';
+import TatReportScreen from '@/components/screens/TatReportScreen';
 
 export default function ReportsScreen() {
   const { data: session } = useSession();
@@ -183,6 +184,8 @@ export default function ReportsScreen() {
               currentUserName={currentUserName}
             />
           )}
+
+          {activeTab === 'tat' && <TatReportScreen />}
         </>
       )}
     </div>

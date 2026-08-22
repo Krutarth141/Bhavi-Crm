@@ -12,6 +12,7 @@ export interface InventoryItem {
     description: string | null;
     part_code: string | null;
     gst_pct: number | null;
+    is_consumable?: boolean;
     created_at: string;
     updated_at: string;
 }

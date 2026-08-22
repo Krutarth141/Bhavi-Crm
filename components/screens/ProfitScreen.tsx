@@ -10,7 +10,7 @@ const monthStart = () => new Date().toISOString().slice(0, 7) + '-01';
 export default function ProfitScreen() {
     const [from, setFrom] = useState(monthStart());
     const [to, setTo] = useState(todayStr());
-    const { tickets, loading, error, totalRevenue, avgPerCall, engRevenue, monthRevenue } = useProfit(from, to);
+    const { tickets, loading, error, totalRevenue, avgPerCall, engRevenue, monthRevenue, collected, laborRevenue } = useProfit(from, to);
 
     const exportExcel = () => {
         const rows = tickets.map(t => ({
@@ -69,12 +69,17 @@ export default function ProfitScreen() {
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p> : (
                 <>
-                    {/* KPI cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+                    {/* KPI cards — mirrors HTML's Profit Dashboard 5 cards, plus the
+                        existing Total Calls figure kept alongside Closed Calls. */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 12 }}>
+                        {card('Closed Calls', String(tickets.filter(t => t.status === 'Closed').length), '#6366f1')}
                         {card('Total Revenue', '₹' + totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 }), '#059669')}
-                        {card('Non-W Calls', String(tickets.length), '#185FA5')}
-                        {card('Closed Calls', String(tickets.filter(t => t.status === 'Closed').length), '#7c3aed')}
-                        {card('Avg per Call', '₹' + avgPerCall.toLocaleString('en-IN', { maximumFractionDigits: 0 }), '#d97706')}
+                        {card('Cash Collected', '₹' + collected.toLocaleString('en-IN', { maximumFractionDigits: 0 }), '#d97706')}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 24 }}>
+                        {card('Labor Revenue', '₹' + laborRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 }), '#3b82f6')}
+                        {card('Avg per Call', '₹' + avgPerCall.toLocaleString('en-IN', { maximumFractionDigits: 0 }), '#ec4899')}
+                        {card('Total Calls (all statuses)', String(tickets.length), '#185FA5')}
                     </div>
 
                     {/* Engineer Revenue */}

@@ -28,11 +28,13 @@ import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import TatReportScreen from '@/components/screens/TatReportScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
+import PartRequestScreen from '@/components/screens/PartRequestScreen';
 
 type WorkControllerTab =
     | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
-    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'tat-report';
+    | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'tat-report'
+    | 'part-request';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
@@ -52,6 +54,7 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
     { id: 'tat-report', label: '⏱️ TAT Compliance' },
+    { id: 'part-request', label: '🧰 Part Requests' },
 ];
 
 export default function WorkControllerDashboard() {
@@ -95,6 +98,7 @@ export default function WorkControllerDashboard() {
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             case 'tat-report': return <TatReportScreen />;
+            case 'part-request': return <PartRequestScreen />;
             default: return null;
         }
     };

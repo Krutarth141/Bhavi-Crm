@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useMasters } from '@/hooks/useMasters';
+import { createSalesOrder } from '@/services/salesService';
 
 const SERVICE_CARDS = [
     { icon: '🖨️', name: 'Printer Repair', price: '₹649/-', href: '/service-request' },
@@ -47,10 +48,38 @@ export default function PublicHomeScreen() {
         setCart((prev) => prev.filter((item) => item.id !== id));
     };
 
+    // Checkout — creates a real sales_orders row (mirrors HTML's shop
+    // checkout, complaint.html:1585-1611) so the order shows up under
+    // Order Tracking / "My Orders" instead of only being a WhatsApp text.
+    const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [checkoutForm, setCheckoutForm] = useState({ name: '', mobile: '', address: '', notes: '' });
+    const [placingOrder, setPlacingOrder] = useState(false);
+    const [placedOrder, setPlacedOrder] = useState<{ orderNo: string; total: number } | null>(null);
+
     const whatsappCheckout = () => {
         const summary = cart.map((item) => `• ${item.name} - ${item.price ? `₹${item.price}` : 'Price on request'}`).join('\n');
-        const text = `Hello Bhavi Electronics, I would like to order:\n\n${summary || 'No items selected'}\n\nTotal: ₹${cartTotal}`;
+        const orderRef = placedOrder ? `\nOrder: ${placedOrder.orderNo}` : '';
+        const text = `Hello Bhavi Electronics, I would like to order:\n\n${summary || 'No items selected'}\n\nTotal: ₹${cartTotal}${orderRef}`;
         window.open(`https://wa.me/919574004969?text=${encodeURIComponent(text)}`, '_blank');
+    };
+
+    const handlePlaceOrder = async () => {
+        if (!checkoutForm.name.trim() || !checkoutForm.mobile.trim()) { alert('Name and mobile are required'); return; }
+        if (!cart.length) { alert('Your cart is empty'); return; }
+        setPlacingOrder(true);
+        const r = await createSalesOrder({
+            customer_name: checkoutForm.name.trim(),
+            customer_mobile: checkoutForm.mobile.trim(),
+            customer_address: checkoutForm.address.trim(),
+            notes: checkoutForm.notes.trim(),
+            items: cart.map((item) => ({ product_id: item.id, name: item.name, price: item.price, gst_percent: 18, qty: 1 })),
+            createdBy: 'Online Shop',
+        });
+        setPlacingOrder(false);
+        if (!r.success || !r.order) { alert('❌ ' + (r.error || 'Could not place order')); return; }
+        setPlacedOrder({ orderNo: r.order.order_no || r.order.id, total: r.order.total_amount || cartTotal });
+        setCart([]);
+        setCheckoutOpen(false);
     };
 
     return (
@@ -105,7 +134,7 @@ export default function PublicHomeScreen() {
 
                     <div style={styles.quickLinks}>
                         <Link href="/account" style={styles.quickLink}>My Account</Link>
-                        <Link href="/my-orders" style={styles.quickLink}>My Orders</Link>
+                        <Link href="/track-orders" style={styles.quickLink}>My Orders</Link>
                         <Link href="/service-request" style={styles.quickLink}>Service Flow</Link>
                         <Link href="/walk-in" style={styles.quickLink}>Walk-in Check-in</Link>
                     </div>
@@ -117,13 +146,25 @@ export default function PublicHomeScreen() {
 
                     {activeTab === 'shop' && (
                         <>
+                            {placedOrder && (
+                                <div style={styles.orderSuccessBar}>
+                                    <div>
+                                        <div style={{ fontWeight: 900 }}>✅ Order placed — {placedOrder.orderNo}</div>
+                                        <div style={{ fontSize: 12, opacity: 0.85 }}>Total ₹{placedOrder.total} — track it under My Orders.</div>
+                                    </div>
+                                    <Link href="/track-orders" style={styles.checkoutButton}>Track Order</Link>
+                                </div>
+                            )}
                             {cart.length > 0 && (
                                 <div style={styles.cartBar}>
                                     <div>
                                         <div style={styles.cartMeta}>{cart.length} item{cart.length > 1 ? 's' : ''}</div>
                                         <div style={styles.cartTotal}>₹{cartTotal}</div>
                                     </div>
-                                    <button type="button" onClick={whatsappCheckout} style={styles.checkoutButton}>Order on WhatsApp</button>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button type="button" onClick={whatsappCheckout} style={{ ...styles.checkoutButton, background: '#25D366' }}>WhatsApp</button>
+                                        <button type="button" onClick={() => setCheckoutOpen(true)} style={styles.checkoutButton}>Place Order</button>
+                                    </div>
                                 </div>
                             )}
 
@@ -153,6 +194,27 @@ export default function PublicHomeScreen() {
                     )}
                 </section>
             </div>
+
+            {checkoutOpen && (
+                <div style={styles.modalOverlay} onClick={() => setCheckoutOpen(false)}>
+                    <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>Place Order</h3>
+                        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#64748b' }}>{cart.length} item{cart.length > 1 ? 's' : ''} — ₹{cartTotal}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <input placeholder="Your Name *" value={checkoutForm.name} onChange={(e) => setCheckoutForm((f) => ({ ...f, name: e.target.value }))} style={styles.modalInput} />
+                            <input placeholder="Mobile Number *" value={checkoutForm.mobile} onChange={(e) => setCheckoutForm((f) => ({ ...f, mobile: e.target.value }))} style={styles.modalInput} />
+                            <textarea placeholder="Delivery Address" value={checkoutForm.address} onChange={(e) => setCheckoutForm((f) => ({ ...f, address: e.target.value }))} rows={2} style={{ ...styles.modalInput, resize: 'vertical' as const }} />
+                            <textarea placeholder="Notes (optional)" value={checkoutForm.notes} onChange={(e) => setCheckoutForm((f) => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...styles.modalInput, resize: 'vertical' as const }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                            <button type="button" onClick={() => setCheckoutOpen(false)} style={styles.modalCancelButton}>Cancel</button>
+                            <button type="button" onClick={handlePlaceOrder} disabled={placingOrder} style={{ ...styles.checkoutButton, flex: 1, opacity: placingOrder ? 0.6 : 1 }}>
+                                {placingOrder ? 'Placing...' : `Place Order — ₹${cartTotal}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -228,7 +290,12 @@ const styles: Record<string, React.CSSProperties> = {
     cartBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, background: '#102a5c', color: '#fff', borderRadius: 18, padding: 14, marginBottom: 14 },
     cartMeta: { fontSize: 12, opacity: 0.75 },
     cartTotal: { fontSize: 22, fontWeight: 900 },
-    checkoutButton: { border: 'none', background: '#f59e0b', color: '#fff', borderRadius: 12, padding: '10px 16px', fontWeight: 900, cursor: 'pointer' },
+    checkoutButton: { border: 'none', background: '#f59e0b', color: '#fff', borderRadius: 12, padding: '10px 16px', fontWeight: 900, cursor: 'pointer', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+    orderSuccessBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, background: '#0f766e', color: '#fff', borderRadius: 18, padding: 14, marginBottom: 14 },
+    modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000 },
+    modalBox: { background: '#fff', borderRadius: 18, padding: 22, width: 380, maxWidth: '100%', boxShadow: '0 24px 60px rgba(15,23,42,0.3)' },
+    modalInput: { width: '100%', boxSizing: 'border-box' as const, border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' },
+    modalCancelButton: { border: '1px solid #e2e8f0', background: '#fff', color: '#0f172a', borderRadius: 12, padding: '10px 16px', fontWeight: 700, cursor: 'pointer' },
     productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 },
     productCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 8 },
     productBrand: { color: '#64748b', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em' },
