@@ -95,7 +95,11 @@ export default function MyCallsScreen() {
   const [ticketStatusFilter, setTicketStatusFilter] = useState<'active' | '' | 'closed'>('active');
   const [expandedAddr, setExpandedAddr] = useState<string | null>(null);
   const [updateTicket, setUpdateTicket] = useState<any | null>(null);
-  const [updateForm, setUpdateForm] = useState({ newStatus: '', note: '', labour: '', faultCode: '' });
+  const [updateForm, setUpdateForm] = useState({
+    newStatus: '', note: '', labour: '', faultCode: '',
+    seCallId: '', pageCount: '', pageCountSkip: false, pageCountSkipReason: '',
+    otherCharge: '', visitDate: '', visitIn: '', visitOut: '', meterStart: '', meterEnd: '', mscCenter: '',
+  });
   const [updateSaving, setUpdateSaving] = useState(false);
 
   // Visit/Work panel + warranty/parts — mirrors EngineerUpdateScreen's fuller
@@ -220,7 +224,12 @@ export default function MyCallsScreen() {
   const openTicketUpdate = (t: any) => {
     setUpdateTicket(t);
     const allowed = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage);
-    setUpdateForm({ newStatus: allowed[0] || '', note: '', labour: String(t.labor || t.service_charges || ''), faultCode: t.fault_code || '' });
+    setUpdateForm({
+      newStatus: allowed[0] || '', note: '', labour: String(t.labor || t.service_charges || ''), faultCode: t.fault_code || '',
+      seCallId: t.se_call_id || '', pageCount: t.page_count != null ? String(t.page_count) : '', pageCountSkip: false, pageCountSkipReason: '',
+      otherCharge: t.other_charge != null ? String(t.other_charge) : '', visitDate: t.visit_date || '', visitIn: t.visit_in || '', visitOut: t.visit_out || '',
+      meterStart: t.meter_start || '', meterEnd: t.meter_end || '', mscCenter: '',
+    });
   };
 
   const allowedForUpdate = updateTicket
@@ -319,8 +328,18 @@ export default function MyCallsScreen() {
 
   const handleTicketUpdateSave = async () => {
     if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
+    if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && !updateForm.pageCount && !updateForm.pageCountSkip) {
+      alert('Page Count is mandatory for CSP calls (or check skip and give a reason)'); return;
+    }
+    if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && updateForm.pageCountSkip && !updateForm.pageCountSkipReason.trim()) {
+      alert('Reason is mandatory when skipping Page Count'); return;
+    }
     setUpdateSaving(true);
-    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, engName, updateForm.faultCode);
+    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, engName, updateForm.faultCode, {
+      seCallId: updateForm.seCallId, pageCount: updateForm.pageCount, pageCountSkip: updateForm.pageCountSkip, pageCountSkipReason: updateForm.pageCountSkipReason,
+      otherCharge: updateForm.otherCharge, visitDate: updateForm.visitDate, visitIn: updateForm.visitIn, visitOut: updateForm.visitOut,
+      meterStart: updateForm.meterStart, meterEnd: updateForm.meterEnd, mscCenter: updateForm.mscCenter,
+    });
     setUpdateSaving(false);
     if (r.success) { setUpdateTicket(null); refetch(); }
     else alert('Error: ' + r.error);
@@ -866,16 +885,81 @@ export default function MyCallsScreen() {
                     {allowedForUpdate.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                {updateForm.newStatus === 'Closed' && (
+                {updateForm.newStatus === 'Sent to MSC' && (
                   <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Service / Labour ₹</label>
-                    <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                    <label style={styles.formLabel}>MSC Center</label>
+                    <input type="text" value={updateForm.mscCenter} onChange={(e) => setUpdateForm((f) => ({ ...f, mscCenter: e.target.value }))} style={styles.formInput} placeholder="MSC center name" />
                   </div>
+                )}
+                {updateTicket.service_type === 'On Site' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Visit Date</label>
+                      <input type="date" value={updateForm.visitDate} onChange={(e) => setUpdateForm((f) => ({ ...f, visitDate: e.target.value }))} style={styles.formInput} />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Time In</label>
+                      <input type="time" value={updateForm.visitIn} onChange={(e) => setUpdateForm((f) => ({ ...f, visitIn: e.target.value }))} style={styles.formInput} />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Time Out</label>
+                      <input type="time" value={updateForm.visitOut} onChange={(e) => setUpdateForm((f) => ({ ...f, visitOut: e.target.value }))} style={styles.formInput} />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Meter Start</label>
+                      <input type="text" value={updateForm.meterStart} onChange={(e) => setUpdateForm((f) => ({ ...f, meterStart: e.target.value }))} style={styles.formInput} />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Meter End</label>
+                      <input type="text" value={updateForm.meterEnd} onChange={(e) => setUpdateForm((f) => ({ ...f, meterEnd: e.target.value }))} style={styles.formInput} />
+                    </div>
+                  </div>
+                )}
+                {updateForm.newStatus === 'Closed' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>Service / Labour ₹</label>
+                        <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                      </div>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>Other Charges ₹</label>
+                        <input type="number" value={updateForm.otherCharge} onChange={(e) => setUpdateForm((f) => ({ ...f, otherCharge: e.target.value }))} style={styles.formInput} placeholder="0" />
+                      </div>
+                    </div>
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, color: '#1e3a8a', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Estimate Total</span>
+                      <span>₹{(
+                        (updateTicket.spares || []).reduce((s: number, sp: any) => s + (Number(sp.price) || 0) * (Number(sp.qty) || 1), 0)
+                        + (Number(updateForm.labour) || 0)
+                        + (Number(updateForm.otherCharge) || 0)
+                      )}</span>
+                    </div>
+                  </>
                 )}
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>Fault Code</label>
                   <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
                 </div>
+                {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && (
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Canon SE Call ID</label>
+                    <input type="text" value={updateForm.seCallId} onChange={(e) => setUpdateForm((f) => ({ ...f, seCallId: e.target.value }))} style={styles.formInput} />
+                  </div>
+                )}
+                {updateTicket.wc_type === 'CSP' && (
+                  <div style={{ ...styles.formGroup, background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: 10 }}>
+                    <label style={styles.formLabel}>Page Count {updateForm.newStatus === 'Closed' && !updateForm.pageCountSkip && <span style={{ color: '#dc2626' }}>*</span>}</label>
+                    <input type="number" value={updateForm.pageCount} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCount: e.target.value }))} style={styles.formInput} disabled={updateForm.pageCountSkip} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600 }}>
+                      <input type="checkbox" checked={updateForm.pageCountSkip} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkip: e.target.checked }))} />
+                      Skip Page Count
+                    </label>
+                    {updateForm.pageCountSkip && (
+                      <input type="text" value={updateForm.pageCountSkipReason} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkipReason: e.target.value }))} style={{ ...styles.formInput, marginTop: 6 }} placeholder="Reason for skipping *" />
+                    )}
+                  </div>
+                )}
                 <div style={styles.formGroup}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <label style={styles.formLabel}>Update Note</label>
