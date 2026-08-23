@@ -74,6 +74,10 @@ export default function TATReminder() {
         setDismissed(true);
         try { window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'pending' } })); } catch { /* noop */ }
     };
+    const goToTicket = (ticketId: string) => {
+        setDismissed(true);
+        try { window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'my-calls', ticketId } })); } catch { /* noop */ }
+    };
 
     const row = (t: TatTicket, kind: 'overdue' | 'urgent') => {
         const dl = tatDeadline(t.tat_date);
@@ -84,7 +88,7 @@ export default function TATReminder() {
             const label = overdueHrs < 1 ? 'Just now' : overdueHrs < 24 ? `${overdueHrs}h overdue` : `${Math.floor(overdueHrs / 24)}d overdue`;
             const deadlineStr = isDayOnly ? 'End of Day' : dl.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
             return (
-                <div key={t.id} onClick={(e) => { e.stopPropagation(); goToPending(); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 5 }}>
+                <div key={t.id} onClick={(e) => { e.stopPropagation(); goToTicket(t.id); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 5 }}>
                     <div>
                         <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 13 }}>{t.id}</div>
                         <div style={{ fontSize: 11, color: '#6b7280' }}>{t.cname || ''}{t.model ? ` · ${t.model}` : ''}</div>
@@ -98,7 +102,7 @@ export default function TATReminder() {
         const label = minsLeft < 60 ? `${minsLeft}m left` : `${Math.floor(minsLeft / 60)}h ${minsLeft % 60 ? `${minsLeft % 60}m ` : ''}left`;
         const deadlineStr = isDayOnly ? 'End of Day' : dl.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
         return (
-            <div key={t.id} onClick={(e) => { e.stopPropagation(); goToPending(); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 5 }}>
+            <div key={t.id} onClick={(e) => { e.stopPropagation(); goToTicket(t.id); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 5 }}>
                 <div>
                     <div style={{ fontWeight: 700, color: '#d97706', fontSize: 13 }}>{t.id}</div>
                     <div style={{ fontSize: 11, color: '#6b7280' }}>{t.cname || ''}{t.model ? ` · ${t.model}` : ''}</div>

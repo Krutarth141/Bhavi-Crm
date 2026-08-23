@@ -173,49 +173,74 @@ export default function InquiriesScreen() {
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
                 : filtered.length === 0 ? <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#6b7280' }}>🔍 No inquiries found. Click "New Inquiry" to add one!</div>
-                    : (
-                        <div>
-                            {filtered.map(inq => {
-                                const isFollowup = inq.followup_date === today && inq.status !== 'Converted' && inq.status !== 'Lost';
-                                const isPast = !!inq.followup_date && inq.followup_date < today && inq.status !== 'Converted' && inq.status !== 'Lost';
-                                const color = INQUIRY_STATUS_COLORS[inq.status || ''] || '#6b7280';
-                                const noteLines = (inq.notes || '').split('\n').filter(Boolean);
-                                const lastNote = noteLines[noteLines.length - 1];
-                                return (
-                                    <div key={inq.id} style={{ background: isFollowup ? '#fffbeb' : isPast ? '#fff1f2' : 'white', border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}`, borderRadius: 8, padding: '14px 16px', marginBottom: 10 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
-                                            <div>
-                                                <div onClick={() => setDetailId(inq.id)} style={{ fontSize: 15, fontWeight: 700, cursor: 'pointer', color: '#185FA5' }}>
-                                                    {inq.customer_name}{inq.mobile ? `  📱 ${inq.mobile}` : ''}
+                    : (() => {
+                        // Split by status so each group is clearly separated
+                        // (index.html:24196-24217).
+                        const gConverted = filtered.filter(i => i.status === 'Converted');
+                        const gLost = filtered.filter(i => i.status === 'Lost');
+                        const gActive = filtered.filter(i => i.status !== 'Converted' && i.status !== 'Lost');
+                        const gFollowup = gActive.filter(i => !!i.followup_date).sort((a, b) => (a.followup_date || '').localeCompare(b.followup_date || ''));
+                        const gPending = gActive.filter(i => !i.followup_date);
+
+                        const renderCard = (inq: AutoInquiry) => {
+                            const isFollowup = inq.followup_date === today && inq.status !== 'Converted' && inq.status !== 'Lost';
+                            const isPast = !!inq.followup_date && inq.followup_date < today && inq.status !== 'Converted' && inq.status !== 'Lost';
+                            const color = INQUIRY_STATUS_COLORS[inq.status || ''] || '#6b7280';
+                            const noteLines = (inq.notes || '').split('\n').filter(Boolean);
+                            const lastNote = noteLines[noteLines.length - 1];
+                            return (
+                                <div key={inq.id} style={{ background: isFollowup ? '#fffbeb' : isPast ? '#fff1f2' : 'white', border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}`, borderRadius: 8, padding: '14px 16px', marginBottom: 10 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
+                                        <div>
+                                            <div onClick={() => setDetailId(inq.id)} style={{ fontSize: 15, fontWeight: 700, cursor: 'pointer', color: '#185FA5' }}>
+                                                {inq.customer_name}{inq.mobile ? `  📱 ${inq.mobile}` : ''}
+                                            </div>
+                                            {inq.inquiry_type && <div style={{ fontSize: 12, color: '#6b7280' }}>🔖 {inq.inquiry_type}</div>}
+                                            {inq.description && <div style={{ fontSize: 13, marginTop: 4 }}>{inq.description}</div>}
+                                            {inq.followup_date && (
+                                                <div style={{ fontSize: 12, marginTop: 4, color: isFollowup ? '#92400e' : isPast ? '#dc2626' : '#059669' }}>
+                                                    📅 Followup: {new Date(inq.followup_date + 'T00:00:00').toLocaleDateString('en-IN')}{isFollowup ? ' 🔔 TODAY!' : isPast ? ' ⚠️ OVERDUE' : ''}
                                                 </div>
-                                                {inq.inquiry_type && <div style={{ fontSize: 12, color: '#6b7280' }}>🔖 {inq.inquiry_type}</div>}
-                                                {inq.description && <div style={{ fontSize: 13, marginTop: 4 }}>{inq.description}</div>}
-                                                {inq.followup_date && (
-                                                    <div style={{ fontSize: 12, marginTop: 4, color: isFollowup ? '#92400e' : isPast ? '#dc2626' : '#059669' }}>
-                                                        📅 Followup: {new Date(inq.followup_date + 'T00:00:00').toLocaleDateString('en-IN')}{isFollowup ? ' 🔔 TODAY!' : isPast ? ' ⚠️ OVERDUE' : ''}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                                                <span style={{ fontSize: 11, background: `${color}22`, color, padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>{inq.status}</span>
-                                                {inq.assigned_name
-                                                    ? <span style={{ fontSize: 11, background: '#ede9fe', color: '#6d28d9', padding: '3px 9px', borderRadius: 99, fontWeight: 600 }}>👷 {inq.assigned_name}</span>
-                                                    : inq.created_by_name ? <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '3px 9px', borderRadius: 99, fontWeight: 600 }}>👤 {inq.created_by_name}</span> : null}
-                                                <button onClick={() => openUpdate(inq)} style={{ padding: '4px 10px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📝 Update</button>
-                                                {isAdmin && <button onClick={() => openEdit(inq)} style={{ padding: '4px 10px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✏️ Edit</button>}
-                                                {isAdmin && <button onClick={() => handleDelete(inq)} style={{ padding: '4px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
-                                            </div>
+                                            )}
                                         </div>
-                                        {lastNote && (
-                                            <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
-                                                💬 {lastNote}{noteLines.length > 1 ? <span style={{ color: '#94a3b8' }}> (+{noteLines.length - 1} more)</span> : null}
-                                            </div>
-                                        )}
+                                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <span style={{ fontSize: 11, background: `${color}22`, color, padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>{inq.status}</span>
+                                            {inq.assigned_name
+                                                ? <span style={{ fontSize: 11, background: '#ede9fe', color: '#6d28d9', padding: '3px 9px', borderRadius: 99, fontWeight: 600 }}>👷 {inq.assigned_name}</span>
+                                                : inq.created_by_name ? <span style={{ fontSize: 11, background: '#dbeafe', color: '#1d4ed8', padding: '3px 9px', borderRadius: 99, fontWeight: 600 }}>👤 {inq.created_by_name}</span> : null}
+                                            <button onClick={() => openUpdate(inq)} style={{ padding: '4px 10px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📝 Update</button>
+                                            {isAdmin && <button onClick={() => openEdit(inq)} style={{ padding: '4px 10px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>✏️ Edit</button>}
+                                            {isAdmin && <button onClick={() => handleDelete(inq)} style={{ padding: '4px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
+                                        </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )}
+                                    {lastNote && (
+                                        <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                                            💬 {lastNote}{noteLines.length > 1 ? <span style={{ color: '#94a3b8' }}> (+{noteLines.length - 1} more)</span> : null}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        };
+
+                        const renderSection = (title: string, emoji: string, color: string, arr: AutoInquiry[]) => arr.length === 0 ? null : (
+                            <div key={title} style={{ marginBottom: 18 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                    <div style={{ borderLeft: `4px solid ${color}`, paddingLeft: 10, fontSize: 15, fontWeight: 800, color: '#1e293b' }}>{emoji} {title}</div>
+                                    <span style={{ background: `${color}22`, color, padding: '2px 11px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>{arr.length}</span>
+                                </div>
+                                {arr.map(renderCard)}
+                            </div>
+                        );
+
+                        return (
+                            <div>
+                                {renderSection('Follow-up', '📞', '#f59e0b', gFollowup)}
+                                {renderSection('Pending / Open', '🕐', '#2563eb', gPending)}
+                                {renderSection('Converted (Won)', '✅', '#059669', gConverted)}
+                                {renderSection('Lost', '❌', '#6b7280', gLost)}
+                            </div>
+                        );
+                    })()}
 
             {/* Add Modal */}
             <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="🔍 New Inquiry" footer={

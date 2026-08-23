@@ -7,8 +7,8 @@ import Modal from '@/components/Modal';
 import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
 import {
     fetchSiteItems, fetchSiteVisits, fetchSitePayments,
-    addSiteItem, updateSiteItem, deleteSiteItem, markItemDelivered,
-    addSitePayment, deleteSitePayment, updateSite,
+    addSiteItem, updateSiteItem, deleteSiteItem, restoreSiteItem, markItemDelivered,
+    addSitePayment, deleteSitePayment, restoreSitePayment, updateSite,
     fetchSiteDispatches, createDispatch,
     fetchSiteContacts, addSiteContact, deleteSiteContact,
     addSiteVisitWithMaterial,
@@ -55,6 +55,15 @@ export default function AutoSitesScreen() {
     const [siteContacts, setSiteContacts] = useState<SiteContact[]>([]);
     const [tcSelectorOpen, setTcSelectorOpen] = useState(false);
     const [dcPrintParams, setDcPrintParams] = useState<Parameters<typeof printDeliveryChallan>[0] | null>(null);
+
+    // Session Trash — lets an engineer undo an accidental Site Item / Payment
+    // delete within the same session, mirroring HTML's trashPush()/openTrash()/
+    // restoreTrashItem() (index.html:24783-24812). Scoped to this screen only
+    // (not the app-wide trash HTML also uses for Inventory/Inquiries).
+    interface TrashEntry { trashId: number; type: 'Site Item' | 'Payment'; label: string; data: any; deletedAt: string; siteId: number }
+    const [sessionTrash, setSessionTrash] = useState<TrashEntry[]>([]);
+    const [trashOpen, setTrashOpen] = useState(false);
+    const [restoringId, setRestoringId] = useState<number | null>(null);
 
     const filtered = sites.filter(s => {
         if (!search.trim()) return true;
@@ -139,9 +148,13 @@ export default function AutoSitesScreen() {
     };
 
     const handleDeleteItem = async (item: AutoSiteItem) => {
-        if (!confirm(`Remove "${item.item_name}" from this site?`) || !detailSite) return;
+        if (!confirm(`Remove "${item.item_name}" from this site?\n\nYou can restore it from Trash during this session.`) || !detailSite) return;
         const r = await deleteSiteItem(item.id);
         if (r.success) {
+            setSessionTrash((prev) => [{
+                trashId: Date.now(), type: 'Site Item', label: item.item_name, data: item,
+                deletedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), siteId: detailSite.id,
+            }, ...prev]);
             const items = await fetchSiteItems(detailSite.id);
             setSiteItems(items);
             refetch();
@@ -183,13 +196,38 @@ export default function AutoSitesScreen() {
     };
 
     const handleDeletePayment = async (id: number) => {
-        if (!confirm('Delete this payment record?') || !detailSite) return;
+        if (!detailSite) return;
+        const payment = sitePayments.find((p) => p.id === id);
+        const label = payment ? `Payment ₹${payment.amount} (${payment.payment_mode})` : 'Payment';
+        if (!confirm(`Delete this payment record?\n\n${label}\n\nYou can restore it from Trash during this session.`)) return;
         const r = await deleteSitePayment(id);
         if (r.success) {
+            if (payment) {
+                setSessionTrash((prev) => [{
+                    trashId: Date.now(), type: 'Payment', label, data: payment,
+                    deletedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), siteId: detailSite.id,
+                }, ...prev]);
+            }
             const payments = await fetchSitePayments(detailSite.id);
             setSitePayments(payments);
             refetch();
         } else alert('Error: ' + r.error);
+    };
+
+    const handleRestoreTrash = async (trashId: number) => {
+        const entry = sessionTrash.find((t) => t.trashId === trashId);
+        if (!entry) return;
+        setRestoringId(trashId);
+        const r = entry.type === 'Site Item' ? await restoreSiteItem(entry.data) : await restoreSitePayment(entry.data);
+        setRestoringId(null);
+        if (!r.success) { alert('Restore failed: ' + r.error); return; }
+        setSessionTrash((prev) => prev.filter((t) => t.trashId !== trashId));
+        if (detailSite && detailSite.id === entry.siteId) {
+            if (entry.type === 'Site Item') setSiteItems(await fetchSiteItems(entry.siteId));
+            else setSitePayments(await fetchSitePayments(entry.siteId));
+        }
+        refetch();
+        alert(`✅ "${entry.label}" restored successfully!`);
     };
 
     const handleDispatchSave = async (params: { date: string; mode: string; deliveredBy: string; receiverName: string; notes: string; items: { item: AutoSiteItem; qty: number }[] }) => {
@@ -318,12 +356,16 @@ export default function AutoSitesScreen() {
             <Modal isOpen={!!detailSite} onClose={() => setDetailSite(null)} title={`📋 ${detailSite?.site_name || ''}`} size="lg">
                 {detailSite && (
                     <div>
-                        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e5e7eb', alignItems: 'center' }}>
                             {(['items', 'visits'] as const).map(tab => (
                                 <button key={tab} onClick={() => setDetailTab(tab)} style={{ padding: '7px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: detailTab === tab ? 600 : 400, color: detailTab === tab ? '#185FA5' : '#6b7280', borderBottom: detailTab === tab ? '2px solid #185FA5' : '2px solid transparent', marginBottom: -1 }}>
                                     {tab === 'items' ? `📦 Items (${siteItems.length})` : `📅 Visits (${siteVisits.length})`}
                                 </button>
                             ))}
+                            {/* index.html:24783-24812 — session Trash for undo-able deletes. */}
+                            <button onClick={() => setTrashOpen(true)} style={{ marginLeft: 'auto', marginBottom: 8, padding: '5px 12px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, color: '#6b7280' }}>
+                                🗑️ Trash{sessionTrash.length > 0 ? ` (${sessionTrash.length})` : ''}
+                            </button>
                         </div>
 
                         {detailTab === 'items' ? (
@@ -467,6 +509,31 @@ export default function AutoSitesScreen() {
                                 )}
                             </div>
                         )}
+                    </div>
+                )}
+            </Modal>
+
+            {/* Session Trash — index.html:24793-24809. */}
+            <Modal isOpen={trashOpen} onClose={() => setTrashOpen(false)} title="🗑️ Trash">
+                {sessionTrash.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: 24, fontSize: 13 }}>Trash is empty — no items deleted this session.</div>
+                ) : (
+                    <div>
+                        {sessionTrash.map((t) => (
+                            <div key={t.trashId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 8, background: '#fafafa' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{t.label}</div>
+                                    <div style={{ fontSize: 11, color: '#9ca3af' }}>{t.type} &nbsp;·&nbsp; Deleted at {t.deletedAt}</div>
+                                </div>
+                                <button
+                                    onClick={() => handleRestoreTrash(t.trashId)}
+                                    disabled={restoringId === t.trashId}
+                                    style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: restoringId === t.trashId ? 0.6 : 1 }}
+                                >
+                                    {restoringId === t.trashId ? '...' : '↩️ Restore'}
+                                </button>
+                            </div>
+                        ))}
                     </div>
                 )}
             </Modal>

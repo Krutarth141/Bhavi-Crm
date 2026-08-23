@@ -88,6 +88,15 @@ export const deleteSiteItem = async (id: number): Promise<{ success: boolean; er
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
+export const restoreSiteItem = async (data: AutoSiteItem): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { id, ...rest } = data;
+        const { error } = await supabase.from('auto_site_items').insert([rest]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
 export const markItemDelivered = async (id: number, params: { deliveredQty: number; date: string; via: string; by: string; note: string; totalQty: number }): Promise<{ success: boolean; error?: string }> => {
     try {
         const status = params.deliveredQty >= params.totalQty ? 'delivered' : params.deliveredQty > 0 ? 'partial' : 'pending';
@@ -123,6 +132,15 @@ export const addSitePayment = async (siteId: number, form: PaymentForm, createdB
 export const deleteSitePayment = async (id: number): Promise<{ success: boolean; error?: string }> => {
     try {
         const { error } = await supabase.from('auto_site_payments').delete().eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
+export const restoreSitePayment = async (data: AutoSitePayment): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { id, ...rest } = data;
+        const { error } = await supabase.from('auto_site_payments').insert([rest]);
         if (error) throw error;
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }

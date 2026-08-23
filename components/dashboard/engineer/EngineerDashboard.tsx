@@ -106,6 +106,7 @@ export default function EngineerDashboard() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
+    const [pendingTicketId, setPendingTicketId] = useState<string | null>(null);
 
     const handleNavClick = (id: EngineerTab) => {
         setActiveTab(id);
@@ -114,8 +115,12 @@ export default function EngineerDashboard() {
 
     useEffect(() => {
         const onNavigate = (e: Event) => {
-            const tab = (e as CustomEvent<{ tab: EngineerTab }>).detail?.tab;
-            if (tab && allNavItems.some((n) => n.id === tab)) setActiveTab(tab);
+            const detail = (e as CustomEvent<{ tab: EngineerTab; ticketId?: string }>).detail;
+            const tab = detail?.tab;
+            if (tab && allNavItems.some((n) => n.id === tab)) {
+                setActiveTab(tab);
+                if (tab === 'my-calls' && detail?.ticketId) setPendingTicketId(detail.ticketId);
+            }
         };
         window.addEventListener('bhavi:navigate-tab', onNavigate);
         return () => window.removeEventListener('bhavi:navigate-tab', onNavigate);
@@ -125,7 +130,7 @@ export default function EngineerDashboard() {
     const renderContent = () => {
         switch (activeTab) {
             case 'overview': return <DashboardOverview role="engineer" />;
-            case 'my-calls': return <MyCallsScreen />;
+            case 'my-calls': return <MyCallsScreen initialTicketId={pendingTicketId} onConsumedInitialTicket={() => setPendingTicketId(null)} />;
             case 'work-log': return <EngineerWorkLogScreen engId={engId} engName={engName} />;
             case 'tasks': return <TasksScreen />;
             case 'reports': return cspMgr ? <ReportsScreen /> : <MyReportScreen />;

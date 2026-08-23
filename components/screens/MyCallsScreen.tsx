@@ -65,9 +65,12 @@ function getPriorityBadgeStyle(priority: string): React.CSSProperties {
   return { ...styles.badge, ...styles.badgeOpen };
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+interface Props {
+  initialTicketId?: string | null;
+  onConsumedInitialTicket?: () => void;
+}
 
-export default function MyCallsScreen() {
+export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket }: Props = {}) {
   const { data: session } = useSession();
   const engId = (session?.user as any)?.email ?? (session?.user as any)?.id ?? '';
   const engName = (session?.user as any)?.name ?? '';
@@ -389,6 +392,15 @@ export default function MyCallsScreen() {
     setUpdatePhotos(slots);
     setPaymentPrompt(null);
   };
+
+  useEffect(() => {
+    if (!initialTicketId) return;
+    fetchTicketById(initialTicketId).then((t) => {
+      if (t) openTicketUpdate(t);
+      onConsumedInitialTicket?.();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTicketId]);
 
   // Warranty/AMC (and not Out of Coverage) calls never bill the customer for a
   // part — the price shows ₹0 there. EXCEPT a Consumable, which is billed even
@@ -2194,9 +2206,12 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
 
   useEffect(() => {
     setLoading(true);
-    fetchDailyReportAutofill(engId, date).then(({ callSummary, petrolKm: km }) => {
+    fetchDailyReportAutofill(engId, date).then(({ callSummary, petrolKm: km, payments: autoPayments }) => {
       setCs(callSummary);
       setPetrolKm(km ? String(km) : '');
+      // Only replace the 3 blank default rows if there's actual auto-fill
+      // data — otherwise keep the blanks (index.html:14477 `if(pr2&&payTickets.length)`).
+      if (autoPayments.length) setPayments(autoPayments);
       setLoading(false);
     });
     fetchDrAutoOfficeWork(engId, date).then(setAutoOfficeWork).catch(() => setAutoOfficeWork([]));

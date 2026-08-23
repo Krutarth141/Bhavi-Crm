@@ -379,16 +379,25 @@ const emptyCallSummary = (): DrCallSummary => ({
 
 // Mirrors HTML's drAutoFillCalls() call-type bucketing + pending backlog +
 // odometer-based petrol KM auto-fill (the GPS-track fallback is not ported).
-export const fetchDailyReportAutofill = async (engId: string, date: string): Promise<{ callSummary: DrCallSummary; petrolKm: number }> => {
+export const fetchDailyReportAutofill = async (engId: string, date: string): Promise<{ callSummary: DrCallSummary; petrolKm: number; payments: DrPayment[] }> => {
     const cs = emptyCallSummary();
+    // Auto-filled Payment Details — any call the engineer completed today with
+    // a charge actually set becomes a payment row automatically, same tickets
+    // set as the call summary above (index.html:14461-14497). Customer Reject
+    // calls are naturally excluded since their final_charges is forced to 0.
+    const payments: DrPayment[] = [];
     try {
         const { data: tickets } = await supabase.from('tickets')
-            .select('call_type, problem, status, timeline')
+            .select('call_type, problem, status, timeline, cname, payment_mode, spares, labor, service_charges, final_charges, other_charge')
             .eq('assigned_to', engId).gte('updated_at', `${date}T00:00:00`).limit(2000);
         (tickets || []).forEach((t: any) => {
             if (isTicketCancelled(t.status)) return;
             const tl: TlEntry[] = t.timeline || [];
             if (tlEntryDate(engCompletionEntry(tl)) !== date) return;
+            if (payments.length < 5 && pcAmount(t) > 0) {
+                const mode = DR_PAYMENT_MODES.some((m) => m.value === t.payment_mode) ? t.payment_mode : '';
+                payments.push({ customer: t.cname || '', amount: pcAmount(t), mode });
+            }
             const ct = t.call_type || '';
             const prob = (t.problem || '').toLowerCase();
             if (t.status === 'Resolved By Phone') {
@@ -444,7 +453,7 @@ export const fetchDailyReportAutofill = async (engId: string, date: string): Pro
         }
     } catch { /* odometer KM covers the common case — GPS fallback not ported */ }
 
-    return { callSummary: cs, petrolKm };
+    return { callSummary: cs, petrolKm, payments };
 };
 
 export const saveDailyReportSelf = async (params: {

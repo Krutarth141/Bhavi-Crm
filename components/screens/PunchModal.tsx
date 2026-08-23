@@ -24,6 +24,19 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
     const [needsRemark, setNeedsRemark] = useState(false);
     const [remark, setRemark] = useState('');
 
+    // Punch-IN only: face auto-detect + auto-capture + (if GPS is also ready)
+    // a 3s auto-submit countdown, matching HTML's pin-* flow (index.html:4213-
+    // 4275, 4234-4248). Punch-OUT has no such automation in HTML — stays
+    // fully manual there.
+    const [selfieAutoText, setSelfieAutoText] = useState('');
+    const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
+    const photoRef = useRef<string | null>(null);
+    const gpsStatusRef = useRef<'pending' | 'ready' | 'error'>('pending');
+    const allowNoGpsRef = useRef(false);
+    useEffect(() => { photoRef.current = photo; }, [photo]);
+    useEffect(() => { gpsStatusRef.current = gpsStatus; }, [gpsStatus]);
+    useEffect(() => { allowNoGpsRef.current = allowNoGps; }, [allowNoGps]);
+
     const fetchGps = () => {
         setGpsStatus('pending');
         setGpsAttempts((n) => n + 1);
@@ -50,6 +63,83 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Face auto-detect (Chrome only, falls back gracefully — index.html:4213-
+    // 4275). On success: auto-captures, and if GPS is already ready at that
+    // moment, arms the 3s auto-submit countdown. Without FaceDetector support,
+    // just auto-captures once the camera feed is actually ready (no auto-submit).
+    useEffect(() => {
+        if (mode !== 'in') return;
+        let cancelled = false;
+        let faceInterval: ReturnType<typeof setInterval> | null = null;
+        let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+        let fallbackAttempts = 0;
+
+        const doAutoCapture = (faceDetected: boolean) => {
+            const video = videoRef.current;
+            if (!video) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            setPhoto(canvas.toDataURL('image/jpeg', 0.7));
+            if (faceDetected) {
+                setSelfieAutoText('🤖 Face Detected — Auto Captured ✅');
+                if (gpsStatusRef.current === 'ready' || allowNoGpsRef.current) setAutoCountdown(3);
+            } else {
+                setSelfieAutoText('📸 Photo Captured ✅');
+            }
+        };
+
+        if ('FaceDetector' in window) {
+            setSelfieAutoText('🤖 Auto-detecting face...');
+            const fd = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+            faceInterval = setInterval(async () => {
+                if (cancelled || photoRef.current) { if (faceInterval) clearInterval(faceInterval); return; }
+                const video = videoRef.current;
+                if (!video) return;
+                try {
+                    const faces = await fd.detect(video);
+                    if (faces.length > 0) { if (faceInterval) clearInterval(faceInterval); doAutoCapture(true); }
+                } catch { /* detection best-effort */ }
+            }, 1200);
+        } else {
+            setSelfieAutoText('📸 Camera loading...');
+            fallbackInterval = setInterval(() => {
+                fallbackAttempts++;
+                if (cancelled || photoRef.current) { if (fallbackInterval) clearInterval(fallbackInterval); return; }
+                const video = videoRef.current;
+                if (video && video.readyState >= 2 && video.videoWidth > 0) {
+                    if (fallbackInterval) clearInterval(fallbackInterval);
+                    doAutoCapture(false);
+                } else if (fallbackAttempts > 20) {
+                    if (fallbackInterval) clearInterval(fallbackInterval);
+                    setSelfieAutoText('📸 Tap "Take Selfie" button');
+                }
+            }, 500);
+        }
+
+        return () => {
+            cancelled = true;
+            if (faceInterval) clearInterval(faceInterval);
+            if (fallbackInterval) clearInterval(fallbackInterval);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mode]);
+
+    // 3s auto-submit countdown once armed — "Cancel Auto-Punch" sets it back
+    // to null (index.html:4277-4279).
+    useEffect(() => {
+        if (autoCountdown === null) return;
+        if (autoCountdown <= 0) { handleSubmit(); return; }
+        const t = setTimeout(() => setAutoCountdown((c) => (c === null ? null : c - 1)), 1000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [autoCountdown]);
 
     const capture = () => {
         const video = videoRef.current;
@@ -101,7 +191,7 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
                         📍 {allowNoGps ? '⚠️ Punching WITHOUT GPS (location unavailable)' : gpsStatus === 'ready' ? 'GPS Ready' : gpsStatus === 'error' ? 'GPS Not Available' : 'Fetching GPS...'}
                     </span>
                     <span style={{ ...chipStyle, ...(photo ? chipReady : chipPending) }}>
-                        📸 {photo ? 'Selfie Captured' : 'Selfie Pending'}
+                        {mode === 'in' && selfieAutoText ? selfieAutoText : `📸 ${photo ? 'Selfie Captured' : 'Selfie Pending'}`}
                     </span>
                     {/* index.html:4288-4326 — Retry always shown on failure; the
                         no-GPS fallback appears only after 3 failed attempts. */}
@@ -126,6 +216,16 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
                         <button onClick={retake} style={{ ...btnSecondary, flex: 1 }}>🔄 Retake</button>
                     )}
                 </div>
+
+                {/* index.html:4276-4280 — auto-submit countdown after a
+                    face-detected auto-capture, cancellable. */}
+                {autoCountdown !== null && (
+                    <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, textAlign: 'center' }}>
+                        ✅ Face detected! Punching in automatically in <b>{autoCountdown}</b>s...
+                        <br />
+                        <button onClick={() => setAutoCountdown(null)} style={{ marginTop: 6, padding: '4px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel Auto-Punch</button>
+                    </div>
+                )}
 
                 <div style={{ marginBottom: 12 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>

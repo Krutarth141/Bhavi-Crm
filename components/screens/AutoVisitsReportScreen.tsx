@@ -99,50 +99,59 @@ export default function AutoVisitsReportScreen() {
                 ))}
             </div>
 
-            {/* Table */}
-            <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-                {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                    : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No visits found for this period</p>
-                        : (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                    <thead>
-                                        <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['Date', 'Time', 'Site', 'Client', 'Work Done', 'Material Delivered', 'Material ₹', 'By', '📷'].map(h => (
-                                                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filtered.map(v => (
-                                            <tr key={v.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                                <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_date || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_time || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontWeight: 600 }}>{v.site_name || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12 }}>{v.client_name || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200 }}>{v.work_done || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12, color: '#6b7280', maxWidth: 180 }}>{v.material_delivered || '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: '#059669' }}>{v.material_total ? `₹${v.material_total}` : '—'}</td>
-                                                <td style={{ padding: '10px 12px', fontSize: 12 }}>{v.created_by_name || '—'}</td>
-                                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                                                    {visitPhotos(v.photos).length === 0
-                                                        ? <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>
-                                                        : visitPhotos(v.photos).map((src, pi) => (
-                                                            // eslint-disable-next-line @next/next/no-img-element
-                                                            <img
-                                                                key={pi} src={src} alt={`Visit photo ${pi + 1}`}
-                                                                onClick={() => setPhotoPreview(src)} title="Click to enlarge"
-                                                                style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1.5px solid #e5e7eb', cursor: 'pointer', margin: 2 }}
-                                                            />
-                                                        ))}
-                                                </td>
+            {/* Per-site grouped cards — mirrors HTML's bySite grouping
+                (index.html:21651-21683), one card + mini-table per site
+                (ad-hoc visits with no site_id each get their own card). */}
+            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
+                : filtered.length === 0 ? <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 40 }}><p style={{ textAlign: 'center', color: '#6b7280', margin: 0 }}>No visits found for this period</p></div>
+                    : (() => {
+                        const bySite = new Map<string, { site_name: string; client_name: string; visits: AutoSiteVisitReport[] }>();
+                        filtered.forEach(v => {
+                            const k = v.site_id != null ? String(v.site_id) : `adhoc_${v.id}`;
+                            if (!bySite.has(k)) bySite.set(k, { site_name: v.site_name || '—', client_name: v.client_name || '—', visits: [] });
+                            bySite.get(k)!.visits.push(v);
+                        });
+                        return Array.from(bySite.entries()).map(([k, sg]) => (
+                            <div key={k} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '14px 16px', marginBottom: 14 }}>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: '#7c3aed', marginBottom: 2 }}>🏗️ {sg.site_name}</div>
+                                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>👤 {sg.client_name} &nbsp;|&nbsp; {sg.visits.length} visits</div>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                        <thead>
+                                            <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                                {['Date', 'Time', 'Logged By', 'Work Done', 'Material Delivered', '📷'].map(h => (
+                                                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
+                                                ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {sg.visits.map(v => (
+                                                <tr key={v.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{v.visit_date || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_time || '—'}</td>
+                                                    <td style={{ padding: '10px 12px' }}><span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{v.created_by_name || '—'}</span></td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200, whiteSpace: 'pre-wrap' }}>{v.work_done || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200, whiteSpace: 'pre-wrap' }}>{v.material_delivered || '—'}</td>
+                                                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                                        {visitPhotos(v.photos).length === 0
+                                                            ? <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>
+                                                            : visitPhotos(v.photos).map((src, pi) => (
+                                                                // eslint-disable-next-line @next/next/no-img-element
+                                                                <img
+                                                                    key={pi} src={src} alt={`Visit photo ${pi + 1}`}
+                                                                    onClick={() => setPhotoPreview(src)} title="Click to enlarge"
+                                                                    style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1.5px solid #e5e7eb', cursor: 'pointer', margin: 2 }}
+                                                                />
+                                                            ))}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        )}
-            </div>
+                        ));
+                    })()}
 
             {photoPreview && (
                 <div
