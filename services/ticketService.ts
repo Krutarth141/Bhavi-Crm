@@ -27,6 +27,30 @@ export const fetchAllTickets = async (): Promise<Ticket[]> => {
     }
 };
 
+export const fetchCspTickets = async (): Promise<Ticket[]> => {
+    try {
+        let all: Ticket[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            const { data, error } = await supabase
+                .from('tickets')
+                .select('*')
+                .eq('wc_type', 'CSP')
+                .order('created_at', { ascending: false })
+                .range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(data || []);
+            if (!data || data.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
+    } catch (err) {
+        console.error('Failed to fetch CSP tickets:', err);
+        return [];
+    }
+};
+
 export const fetchAutocompleteTicketData = async (
     setAutocompleteBrands: (brands: string[]) => void,
     setAutocompleteModels: (models: string[]) => void,

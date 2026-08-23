@@ -14,11 +14,25 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
     const [photo, setPhoto] = useState<string | null>(null);
     const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
     const [gpsStatus, setGpsStatus] = useState<'pending' | 'ready' | 'error'>('pending');
+    // GPS retry + "Punch without GPS" fallback so an engineer is never fully
+    // stuck when GPS won't fix (index.html:4288-4326, pinFetchGPS/pinAllowNoGps).
+    const [gpsAttempts, setGpsAttempts] = useState(0);
+    const [allowNoGps, setAllowNoGps] = useState(false);
     const [meter, setMeter] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [needsRemark, setNeedsRemark] = useState(false);
     const [remark, setRemark] = useState('');
+
+    const fetchGps = () => {
+        setGpsStatus('pending');
+        setGpsAttempts((n) => n + 1);
+        navigator.geolocation?.getCurrentPosition(
+            (pos) => { setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsStatus('ready'); },
+            () => setGpsStatus('error'),
+            { enableHighAccuracy: true, timeout: 15000 }
+        );
+    };
 
     useEffect(() => {
         let mounted = true;
@@ -28,16 +42,13 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
             if (videoRef.current) videoRef.current.srcObject = stream;
         }).catch(() => setError('Could not access camera. Please allow camera permission.'));
 
-        navigator.geolocation?.getCurrentPosition(
-            (pos) => { setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsStatus('ready'); },
-            () => setGpsStatus('error'),
-            { enableHighAccuracy: true, timeout: 15000 }
-        );
+        fetchGps();
 
         return () => {
             mounted = false;
             streamRef.current?.getTracks().forEach((t) => t.stop());
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const capture = () => {
@@ -58,12 +69,14 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
 
     const handleSubmit = async () => {
         if (!photo) { setError('Please take a selfie first.'); return; }
-        if (!loc) { setError('GPS location is required. Please allow location access.'); return; }
+        // GPS is required UNLESS the engineer used the "Punch without GPS"
+        // fallback after repeated failures (index.html:4332).
+        if (!loc && !allowNoGps) { setError('GPS location is required. Please allow location access, then Retry. (After 3 failed attempts, a "Punch without GPS" option appears.)'); return; }
         if (needsRemark && !remark.trim()) { setError('A reason is required.'); return; }
         setSubmitting(true);
         setError('');
         try {
-            const result = await onSubmit({ photo, lat: loc.lat, lng: loc.lng, meter, remark: needsRemark ? remark : undefined });
+            const result = await onSubmit({ photo, lat: loc?.lat ?? null, lng: loc?.lng ?? null, meter, remark: needsRemark ? remark : undefined });
             if (!result.success) {
                 if (result.needsRemark) { setNeedsRemark(true); setError(result.error || 'A reason is required.'); return; }
                 setError(result.error || 'Failed.');
@@ -83,13 +96,21 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                    <span style={{ ...chipStyle, ...(gpsStatus === 'ready' ? chipReady : gpsStatus === 'error' ? chipError : chipPending) }}>
-                        📍 {gpsStatus === 'ready' ? 'GPS Ready' : gpsStatus === 'error' ? 'GPS Not Available' : 'Fetching GPS...'}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ ...chipStyle, ...(allowNoGps ? chipError : gpsStatus === 'ready' ? chipReady : gpsStatus === 'error' ? chipError : chipPending) }}>
+                        📍 {allowNoGps ? '⚠️ Punching WITHOUT GPS (location unavailable)' : gpsStatus === 'ready' ? 'GPS Ready' : gpsStatus === 'error' ? 'GPS Not Available' : 'Fetching GPS...'}
                     </span>
                     <span style={{ ...chipStyle, ...(photo ? chipReady : chipPending) }}>
                         📸 {photo ? 'Selfie Captured' : 'Selfie Pending'}
                     </span>
+                    {/* index.html:4288-4326 — Retry always shown on failure; the
+                        no-GPS fallback appears only after 3 failed attempts. */}
+                    {gpsStatus === 'error' && !allowNoGps && (
+                        <button onClick={fetchGps} style={{ fontSize: 12, background: '#f1f5f9', color: '#374151', border: 'none', padding: '4px 12px', borderRadius: 20, fontWeight: 700, cursor: 'pointer' }}>🔄 Retry</button>
+                    )}
+                    {gpsStatus === 'error' && !allowNoGps && gpsAttempts >= 3 && (
+                        <button onClick={() => setAllowNoGps(true)} style={{ fontSize: 12, background: '#dc2626', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: 20, fontWeight: 700, cursor: 'pointer' }}>⚠️ Punch without GPS</button>
+                    )}
                 </div>
 
                 {!photo ? (
@@ -126,7 +147,7 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
 
                 <div style={{ display: 'flex', gap: 10 }}>
                     <button onClick={onClose} style={{ ...btnSecondary, flex: 1 }}>Cancel</button>
-                    <button onClick={handleSubmit} disabled={submitting || !photo || !loc} style={{ ...btnPrimary, flex: 2, opacity: (submitting || !photo || !loc) ? 0.5 : 1 }}>
+                    <button onClick={handleSubmit} disabled={submitting || !photo || (!loc && !allowNoGps)} style={{ ...btnPrimary, flex: 2, opacity: (submitting || !photo || (!loc && !allowNoGps)) ? 0.5 : 1 }}>
                         {submitting ? 'Submitting...' : mode === 'in' ? '✅ Punch In' : '⏹ Punch Out'}
                     </button>
                 </div>

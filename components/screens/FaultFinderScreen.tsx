@@ -1,12 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useFaultFinder } from '@/hooks/useFaultFinder';
 import FaultKnowledgeTab from '@/components/screens/fault-finder/FaultKnowledgeTab';
 import ErrorCodesTab from '@/components/screens/fault-finder/ErrorCodesTab';
 import { FaultFinderTab } from '@/types/faultFinder';
 
 export default function FaultFinderScreen() {
+    const { data: session } = useSession();
+    // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
+    // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
+    const isAdmin = (session?.user as any)?.roleType === 'admin';
     const { faults, errors, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [activeTab, setActiveTab] = useState<FaultFinderTab>('fault-knowledge');
     const [search, setSearch] = useState('');
@@ -166,7 +171,7 @@ export default function FaultFinderScreen() {
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
                 ) : activeTab === 'fault-knowledge' ? (
-                    <FaultKnowledgeTab faults={filteredFaults} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
+                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
                 ) : (
                     <ErrorCodesTab errors={filteredErrors} />
                 )}

@@ -35,8 +35,9 @@ export default function TicketsScreen() {
   const isAcct = isAccountant(session);
 
   const { tickets, loading, fetchTickets } = useTickets({
-    userRole: cspMgr ? undefined : currentUserRole,
+    userRole: currentUserRole,
     userId: currentUserId,
+    cspOnly: cspMgr,
   });
   const { engineers, loading: engineersLoading, error: engineersError, loadEngineers: refetchEngineers } = useEngineers()
   const { formData, handleFormChange, setFormValues, resetForm } = useTicketForm();

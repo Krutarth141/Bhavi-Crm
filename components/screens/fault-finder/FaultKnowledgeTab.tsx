@@ -7,6 +7,7 @@ import { bulkImportFaultKnowledge } from '@/services/faultFinderService';
 
 interface Props {
     faults: FaultKnowledge[];
+    isAdmin: boolean;
     onAdd: (form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
     onEdit: (id: string, form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
     onDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
@@ -24,7 +25,7 @@ const SeverityBadge = ({ s }: { s?: string }) => {
 
 const fieldStyle = { width: '100%', padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 
-export default function FaultKnowledgeTab({ faults, onAdd, onEdit, onDelete, onRefetch }: Props) {
+export default function FaultKnowledgeTab({ faults, isAdmin, onAdd, onEdit, onDelete, onRefetch }: Props) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState<FaultKnowledgeForm>(emptyFaultForm);
@@ -108,8 +109,14 @@ export default function FaultKnowledgeTab({ faults, onAdd, onEdit, onDelete, onR
         <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={downloadTemplate} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Template</button>
-                <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ fontSize: 12, maxWidth: 160 }} />
-                <button onClick={handleImport} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📥 Import Excel</button>
+                {/* index.html:28314 — Import Excel is admin-only; Add Fault/Template
+                    stay open to every engineer (canManage = isAdmin||isEng there). */}
+                {isAdmin && (
+                    <>
+                        <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ fontSize: 12, maxWidth: 160 }} />
+                        <button onClick={handleImport} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📥 Import Excel</button>
+                    </>
+                )}
                 <button onClick={showForm ? cancelForm : startAdd} style={{ padding: '7px 14px', background: showForm ? '#f3f4f6' : '#185FA5', color: showForm ? '#374151' : '#fff', border: showForm ? '1px solid #e5e7eb' : 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     {showForm ? '✕ Cancel' : '➕ Add Fault'}
                 </button>
@@ -139,7 +146,10 @@ export default function FaultKnowledgeTab({ faults, onAdd, onEdit, onDelete, onR
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                            {['#', 'Model', 'Fault Type', 'Description', 'Solution', 'Part Required', 'Severity', 'Actions'].map(h => (
+                            {(isAdmin
+                                ? ['#', 'Model', 'Fault Type', 'Description', 'Solution', 'Part Required', 'Severity', 'Actions']
+                                : ['#', 'Model', 'Fault Type', 'Description', 'Solution', 'Part Required', 'Severity']
+                            ).map(h => (
                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151' }}>{h}</th>
                             ))}
                         </tr>
@@ -154,10 +164,13 @@ export default function FaultKnowledgeTab({ faults, onAdd, onEdit, onDelete, onR
                                 <td style={{ padding: '10px 12px', fontSize: 12, color: '#059669', maxWidth: 180 }}>{f.solution || '—'}</td>
                                 <td style={{ padding: '10px 12px', fontSize: 12 }}>{f.part_required || '—'}</td>
                                 <td style={{ padding: '10px 12px' }}><SeverityBadge s={f.severity} /></td>
-                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                                    <button onClick={() => startEdit(f)} style={{ padding: '3px 8px', border: '1px solid #7c3aed', color: '#7c3aed', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer', marginRight: 4 }}>✏️</button>
-                                    <button onClick={() => handleDelete(f.id)} style={{ padding: '3px 8px', border: '1px solid #ef4444', color: '#ef4444', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
-                                </td>
+                                {/* index.html:28478 — Edit/Delete are strictly admin-only. */}
+                                {isAdmin && (
+                                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                        <button onClick={() => startEdit(f)} style={{ padding: '3px 8px', border: '1px solid #7c3aed', color: '#7c3aed', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer', marginRight: 4 }}>✏️</button>
+                                        <button onClick={() => handleDelete(f.id)} style={{ padding: '3px 8px', border: '1px solid #ef4444', color: '#ef4444', background: '#fff', borderRadius: 5, fontSize: 11, cursor: 'pointer' }}>🗑️</button>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>
