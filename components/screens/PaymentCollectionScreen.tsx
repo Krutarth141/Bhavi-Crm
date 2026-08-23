@@ -16,6 +16,12 @@ export default function PaymentCollectionScreen() {
     const cspMgr = isCspManager(session);
     const isAcct = isAccountant(session);
     const canManage = isAdm || cspMgr || isAcct;
+    // Adding an invoice number on a still-pending call is narrower than
+    // `canManage`: HTML's canMark is work_controller || accountant only
+    // (index.html:6255). A CSP manager sees the pending state read-only, and
+    // never gets the "🧾 Add Invoice" action. Editing a number that already
+    // exists stays under canManage, matching HTML's canInv.
+    const canMarkInvoice = isAcct || roleType === 'work_controller';
     const myId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';
 
@@ -193,7 +199,7 @@ export default function PaymentCollectionScreen() {
                                                                     <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ #{t.invoice_no || ''}</div>
                                                                     {canManage && <button onClick={() => openInvoice(t)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>✏️ Edit</button>}
                                                                 </>
-                                                            ) : canManage ? (
+                                                            ) : canMarkInvoice ? (
                                                                 <button onClick={() => openInvoice(t)} style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>🧾 Add Invoice</button>
                                                             ) : (
                                                                 <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>☐ Pending</span>

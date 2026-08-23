@@ -8,6 +8,10 @@ export interface WorkLog {
   to_time: string;
   task_description: string;
   log_type?: string;
+  /** Set only by the ticket auto-logging paths (Visit/Work/Hold/Close). */
+  ticket_id?: string | null;
+  /** Set only by the automation site-visit auto-logging paths. */
+  site_visit_id?: number | null;
   created_at: string;
 }
 

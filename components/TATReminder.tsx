@@ -27,9 +27,16 @@ export default function TATReminder() {
                     .from('tickets')
                     .select('id,cname,model,status,tat_date,assigned_to')
                     .not('tat_date', 'is', null)
-                    .not('status', 'in', '(Closed,Delivered,Call Cancel,Customer Reject)')
+                    // Exclude EVERY done status (incl. Resolved By Phone, Repaired,
+                    // Pending for Delivery) plus cancelled — a closed call must never
+                    // appear in TAT reminders (index.html:5831).
+                    .not('status', 'in', '("Closed","Delivered","Repaired","Pending for Delivery","Resolved By Phone","Call Cancel","Customer Reject")')
                     .order('tat_date', { ascending: true })
-                    .limit(20);
+                    // HTML queries every matching row (sbAll). A hard cap of 20 could
+                    // crowd urgent items out behind a wall of old overdue ones; the
+                    // urgent/overdue split plus the 2-day window below does the real
+                    // narrowing, so this is only a sanity ceiling.
+                    .limit(100);
                 // HTML (index.html:5829) filters assigned_to by currentUser.eng_id||user_id —
                 // the login code, which here is session.user.email. user.id is the DB PK and
                 // never matches tickets.assigned_to, so this always returned zero rows.
@@ -39,7 +46,18 @@ export default function TATReminder() {
 
                 const now = new Date();
                 const soon = new Date(now.getTime() + 4 * 3600000);
-                const ov = data.filter((t: any) => tatDeadline(t.tat_date) < now);
+                // Overdue by more than 2 days is a lost cause for THIS reminder (the
+                // TAT is long gone, there is nothing to catch up on) — those still
+                // show in the full Pending List, just not here. Within the 2-day
+                // window, reversing the tat_date-ascending rows puts barely-overdue
+                // (still catchable) first (index.html:5842).
+                const TWO_DAYS = 2 * 24 * 3600000;
+                const ov = data
+                    .filter((t: any) => {
+                        const dl = tatDeadline(t.tat_date);
+                        return dl < now && (now.getTime() - dl.getTime()) <= TWO_DAYS;
+                    })
+                    .reverse();
                 const ur = data.filter((t: any) => { const dl = tatDeadline(t.tat_date); return dl >= now && dl <= soon; });
                 if (!ov.length && !ur.length) return;
                 setOverdue(ov);

@@ -91,6 +91,17 @@ export interface UpdateExtra {
     engId?: string;
     /** 'WC' | 'Engineer' — member_role on the auto work-log row. */
     memberRole?: string;
+    // ── Product Condition (index.html:7302-7316) ────────────────────────────
+    /** condition_type — Normal / Physical Damage / Liquid-Leakage / Burnt / Missing Parts / Other. */
+    conditionType?: string;
+    /** Up to 3 condition photos → condition_photos (uploaded like the Job Sheet photos). */
+    conditionPhotos?: (PhotoSlot | null)[];
+    /**
+     * Reason the engineer hand-edited Time In / Time Out away from the
+     * auto-filled value. Logged as a 'Manual Time Update' timeline entry
+     * (index.html:7809-7812); the caller enforces that it is non-empty.
+     */
+    manualTimeReason?: string;
 }
 
 const WARRANTY_CALL_TYPES = ['Warranty', 'Warranty Repeat', 'AMC'];
@@ -107,6 +118,26 @@ const isRepeatFoc = (t: EngineerTicket) =>
 // ─── Close guards (index.html:7710-7803) ─────────────────────────────────────
 // Run BEFORE anything is written, so a blocked close leaves the ticket
 // completely untouched. Returns null when the update may proceed.
+//
+// ⚠️ NOT ADMIN-CONFIGURABLE (known gap vs. HTML).
+// In index.html every one of these close-form checks is wrapped in
+// isFieldRequired('call_close', <field>) (index.html:12009-12041), which reads
+// an admin-editable override map stored in the `company_info.field_rules`
+// JSON column (`{ call_close: { action_taken: 'required'|'optional', … } }`,
+// loaded by loadFieldRules(), edited in Settings → renderFieldRulesTab).
+// This port reads company_info.field_rules NOWHERE, so what is hard-coded
+// below is HTML's built-in DEFAULT for each field, not an admin's choice:
+//   action_taken      → required   (default 'required')
+//   jobsheet_photo    → required, CSP calls only (default 'required')
+//   fault_code        → not enforced (default 'optional')
+//   extra_attachments → not enforced (default 'optional')
+//   se_call_id        → not enforced (default 'optional'; the modal marks the
+//                       field with a * for warranty calls the way HTML's UI
+//                       does, but HTML likewise does not block the close
+//                       unless an admin flipped the rule to 'required')
+//   km_arrival_photo  → default 'required', enforced in the KM/arrival flow
+// Porting the override properly needs the company_info.field_rules read plus a
+// real Settings UI to edit it; that is out of scope for this pass.
 export const validateEngineerUpdate = async (
     ticket: EngineerTicket,
     newStatus: string,
@@ -423,6 +454,14 @@ export const updateTicketStatus = async (
             updateData.page_count_skip_reason = extra.pageCountSkip ? (extra.pageCountSkipReason || '') : null;
         }
         if (extra?.otherCharge) updateData.other_charge = Number(extra.otherCharge);
+        // Manual Time In/Out edit — the reason is logged as its own timeline
+        // entry, exactly as HTML does (index.html:7809-7812).
+        if (extra?.manualTimeReason && extra.manualTimeReason.trim()) {
+            updateData.timeline = [...updateData.timeline, {
+                action: 'Manual Time Update', by: updatedBy, at: nowIso,
+                note: `Reason: ${extra.manualTimeReason.trim()}`,
+            }];
+        }
         if (ticket.service_type === 'On Site') {
             if (extra?.visitDate) updateData.visit_date = extra.visitDate;
             if (extra?.visitIn) updateData.visit_in = extra.visitIn;
@@ -475,6 +514,24 @@ export const updateTicketStatus = async (
             updateData.attachments = extras;
         }
 
+        // ── Product Condition (index.html:7302-7316, 7326-7332) ─────────────
+        // condition_type + up to 3 condition photos, uploaded the same way the
+        // Job Sheet photos above are.
+        if (extra?.conditionType !== undefined) updateData.condition_type = extra.conditionType || null;
+        if (extra?.conditionPhotos) {
+            const safeId = String(ticket.id).replace(/[^A-Za-z0-9_-]/g, '');
+            const condUrls: string[] = [];
+            for (let i = 0; i < 3; i++) {
+                const p = extra.conditionPhotos[i];
+                if (!p || !p.url) continue;
+                if (!p.isNew) { condUrls.push(p.url); continue; }
+                try {
+                    condUrls.push(await uploadCrmPhoto(p.url, `cond_${safeId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`));
+                } catch { condUrls.push(p.url); }
+            }
+            updateData.condition_photos = condUrls;
+        }
+
         // ── Payment Confirmation result (index.html:7943-7958) ──────────────
         if (extra?.payment) {
             const p = extra.payment;
@@ -491,12 +548,19 @@ export const updateTicketStatus = async (
         if (error) throw error;
 
         if (isMsc && extra?.mscCenter) {
+            // Column names must match what the WC-side dispatch form/report
+            // read back (mscDispatchService + auto_msc_dispatch): msc_name,
+            // created_at/updated_at — NOT msc_center/dispatched_at, which are
+            // columns that do not exist (index.html:7731). The engineer only
+            // supplies the centre name here; courier/docket/dispatch_date are
+            // added later by WC via MSCDispatchPanel (index.html:7211-7213).
             try {
                 await supabase.from('auto_msc_dispatch').insert([{
                     ticket_id: ticket.id,
-                    msc_center: extra.mscCenter,
+                    msc_name: extra.mscCenter,
                     dispatched_by: updatedBy,
-                    dispatched_at: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
                 }]);
             } catch { /* best-effort — MSC dispatch log is non-critical */ }
         }
@@ -509,13 +573,94 @@ export const updateTicketStatus = async (
         // wait for a separate Delivered step days later.
         let stockWarning: string | undefined;
         if (status === 'Closed' || status === 'Resolved By Phone' || status === 'Pending for Delivery') {
+            let freshAfterDeduct: EngineerTicket | null = null;
             try {
-                const { notFound } = await deductTicketParts(ticket.id, updatedBy);
+                const { ticket: freshT, notFound } = await deductTicketParts(ticket.id, updatedBy);
+                freshAfterDeduct = freshT;
                 if (notFound.length) {
                     stockWarning = `⚠️ Stock warning — ${notFound.length} part(s) on this ticket (${notFound.join(', ')}) don't match any Inventory part code, `
                         + 'so stock could NOT be auto-deducted for them. Please check Inventory / fix the part code, then correct the stock manually if needed.';
                 }
             } catch (e) { console.log('deductTicketParts:', e); }
+
+            // ── AUTO WARRANTY TRACKING (index.html:7996-8072) ───────────────
+            // Every spare used on a Warranty/Warranty Repeat/AMC call gets an
+            // eng_movements row keyed by the SE Call ID's tracking number (the
+            // digits after the LAST '/', e.g. CSP/20260618/123456 → 123456) so
+            // Eng Parts → Warranty Pending can chase the Canon return against
+            // the SE call. Falls back to the ticket id when no SE Call ID was
+            // entered. This is deliberately separate from the plain USE row
+            // deductTicketParts() writes (which is keyed by ticket id and has
+            // no warranty_status) — HTML writes both.
+            try {
+                const freshT = freshAfterDeduct;
+                const isWarranty = WARRANTY_CALL_TYPES.includes(freshT?.call_type || ticket.call_type || '');
+                const seCallIdRaw = (extra?.seCallId || freshT?.se_call_id || ticket.se_call_id || '').trim().toUpperCase();
+                if (seCallIdRaw && seCallIdRaw !== (freshT?.se_call_id || '').trim().toUpperCase()) {
+                    await supabase.from('tickets').update({ se_call_id: seCallIdRaw }).eq('id', ticket.id)
+                        .then(() => undefined, () => undefined);
+                }
+                const seTrackKey = seCallIdRaw ? (seCallIdRaw.split('/').pop() || '').trim() : '';
+                // Warranty calls track ALL spares — including ones already
+                // stock_deducted by an earlier close — since the Canon return
+                // is owed regardless of when the stock moved.
+                const warrantySpares = isWarranty ? ((freshT?.spares || spares || []) as TicketSpare[]).filter((s) => s.code) : [];
+                if (isWarranty && warrantySpares.length) {
+                    if (!seTrackKey) {
+                        console.warn(`Warranty part used but SE Call ID missing on ticket ${ticket.id} — warranty return cannot be auto-tracked`);
+                    }
+                    const trackId = seTrackKey || ticket.id;
+                    for (const s of warrantySpares) {
+                        try {
+                            const { data: invRows } = await supabase.from('inventory').select('id').ilike('part_code', s.code!.trim());
+                            const partId = invRows && invRows[0] ? invRows[0].id : null;
+                            if (!partId) continue;
+                            const { data: existing } = await supabase.from('eng_movements').select('id, qty')
+                                .eq('type', 'USE').eq('warranty', true).eq('job_sheet', trackId).eq('part_id', partId);
+                            const ex0 = existing && existing[0];
+                            if (!ex0) {
+                                await supabase.from('eng_movements').insert([{
+                                    type: 'USE', part_id: partId, qty: s.qty || 1,
+                                    from_owner: updatedBy || extra?.engId || null, to_owner: null,
+                                    job_sheet: trackId, warranty: true, warranty_status: 'PENDING',
+                                    notes: `Auto — ${freshT?.call_type || ticket.call_type || 'Warranty'} | Ticket: ${ticket.id}${seCallIdRaw ? ' | SE: ' + seCallIdRaw : ''}`,
+                                    created_by: updatedBy || 'System',
+                                }]).then(() => undefined, () => undefined);
+                            } else if ((ex0.qty || 1) < (s.qty || 1)) {
+                                // More parts used than logged before — top up.
+                                await supabase.from('eng_movements')
+                                    .update({ qty: s.qty || 1, updated_at: new Date().toISOString() })
+                                    .eq('id', ex0.id).then(() => undefined, () => undefined);
+                            }
+                        } catch (ex) { console.log('Warranty movement log err:', ex); }
+                    }
+                }
+
+                // Direct warranty issues that were sitting WITH_ENGINEER against
+                // this SE call are now consumed → RECEIVED (index.html:8047-8072).
+                if (isWarranty && seTrackKey) {
+                    const { data: withEng } = await supabase.from('eng_movements').select('id, qty, part_id, notes')
+                        .eq('type', 'WARRANTY_DIRECT_IN').eq('warranty', true)
+                        .eq('warranty_status', 'WITH_ENGINEER').eq('job_sheet', seTrackKey);
+                    for (const we of (withEng || [])) {
+                        await supabase.from('eng_movements').update({
+                            warranty_status: 'RECEIVED',
+                            warranty_received_at: new Date().toISOString(),
+                            warranty_received_qty: we.qty,
+                            notes: `${we.notes || ''} | Call closed: ${ticket.id}`,
+                        }).eq('id', we.id).then(() => undefined, () => undefined);
+                        try {
+                            const { data: invRow } = await supabase.from('inventory').select('id, warranty_qty').eq('id', we.part_id).maybeSingle();
+                            if (invRow) {
+                                await supabase.from('inventory').update({
+                                    warranty_qty: Math.max(0, (invRow.warranty_qty || 0) - (we.qty || 1)),
+                                    updated_at: new Date().toISOString(),
+                                }).eq('id', we.part_id).then(() => undefined, () => undefined);
+                            }
+                        } catch (ex2) { console.log('warranty_qty reduce err:', ex2); }
+                    }
+                }
+            } catch (e) { console.log('Warranty tracking err:', e); }
 
             // ── Auto work log on close (index.html:8071-8098) ───────────────
             try {

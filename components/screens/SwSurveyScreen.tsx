@@ -7,7 +7,7 @@ import {
     SW_ITEM_DEFS, SwSurvey, SwSurveyData, SwRoom, SwBoard,
     swNewRoom, swNewBoard, swBoardTotal, swRoomTotal, swSurveyTotal,
 } from '@/types/swSurvey';
-import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey } from '@/services/swSurveyService';
+import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey, fetchSwSurveysBySite } from '@/services/swSurveyService';
 import { fetchSites } from '@/services/autoSitesService';
 import { AutoSite } from '@/types/autoSites';
 
@@ -29,6 +29,7 @@ export default function SwSurveyScreen() {
     const [surveyDate, setSurveyDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [rooms, setRooms] = useState<SwRoom[]>([]);
     const [saving, setSaving] = useState(false);
+    const [siteSurveyNote, setSiteSurveyNote] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -43,19 +44,42 @@ export default function SwSurveyScreen() {
         setEditId(null);
         setClientName(''); setSiteName(''); setSiteId(null); setSurveyDate(new Date().toLocaleDateString('en-CA'));
         setRooms([swNewRoom('Room 1')]);
+        setSiteSurveyNote('');
         setEditing(true);
     };
 
     const openEdit = (s: SwSurvey) => {
+        setSiteSurveyNote('');
         setEditId(s.id);
         setClientName(s.client_name || ''); setSiteName(s.site_name || ''); setSiteId(s.site_id ?? null); setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
         setRooms((s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]));
         setEditing(true);
     };
 
-    const handleSiteSelect = (id: string) => {
-        setSiteId(id ? Number(id) : null);
-        const site = sites.find((x) => x.id === Number(id));
+    // Mirrors HTML's swOpenSiteSurvey() (index.html:20255-20262): picking a site
+    // opens that site's EXISTING survey if one is already on file, instead of
+    // silently creating a duplicate blank one. Only when there is none does the
+    // form stay on "new", pre-filled from the site.
+    const handleSiteSelect = async (id: string) => {
+        setSiteSurveyNote('');
+        if (!id) {
+            setSiteId(null);
+            return;
+        }
+        const numId = Number(id);
+        setSiteId(numId);
+        const site = sites.find((x) => x.id === numId);
+        const existing = await fetchSwSurveysBySite(numId);
+        if (existing.length) {
+            const s = existing[0];
+            setEditId(s.id);
+            setClientName(s.client_name || site?.client_name || '');
+            setSiteName(s.site_name || site?.site_name || '');
+            setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
+            setRooms(s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]);
+            setSiteSurveyNote('📂 Aa site nu survey pehlethi chhe — ae j kholyu. Save karso to aej update thashe.');
+            return;
+        }
         if (site) { setClientName(site.client_name || ''); setSiteName(site.site_name || ''); }
     };
 
@@ -132,10 +156,27 @@ export default function SwSurveyScreen() {
                             <option value="">— Not linked —</option>
                             {sites.map(s => <option key={s.id} value={s.id}>{s.client_name} — {s.site_name}</option>)}
                         </select>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                            Site pasand karo to teni sathe survey link thashe (already survey hoy to aej khulshe).
+                        </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Client Name *</label><input type="text" value={clientName} onChange={e => setClientName(e.target.value)} style={fieldStyle} /></div>
+                    {/* Client name locks once a site is chosen — the site's own
+                        client is authoritative (index.html:20200). */}
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700 }}>Client Name *</label>
+                        <input
+                            type="text" value={clientName} onChange={e => setClientName(e.target.value)}
+                            disabled={siteId != null}
+                            style={{ ...fieldStyle, background: siteId != null ? '#f1f5f9' : undefined }}
+                        />
+                    </div>
                     <div style={{ flex: 1, minWidth: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Site Name</label><input type="text" value={siteName} onChange={e => setSiteName(e.target.value)} style={fieldStyle} /></div>
                     <div style={{ width: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Survey Date</label><input type="date" value={surveyDate} onChange={e => setSurveyDate(e.target.value)} style={fieldStyle} /></div>
+                    {siteSurveyNote && (
+                        <div style={{ flexBasis: '100%', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e40af' }}>
+                            {siteSurveyNote}
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>

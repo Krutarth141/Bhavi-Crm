@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { Ticket } from '@/types/tickets';
+import { isTicketActive } from '@/types/ticketStatus';
 import { notifyNewTicket, notifyStatusChange } from './telegramNotify';
 import { notifyReportEditSubmitted, notifyReportEditResult } from './brightActionService';
 
@@ -48,32 +49,43 @@ export const fetchAutocompleteTicketData = async (
     }
 };
 
+// Mirrors HTML's generateTicketNo() (index.html:5778-5795).
+// Format: BEA-YYYYMMDD-NNNN (e.g. BEA-20260816-0001), same date convention as
+// the Canon SE Call ID (CSP/YYYYMMDD/NNNNN). The trailing NNNN is ONE
+// continuous counter across the WHOLE ticket table, deliberately NOT reset per
+// day/year — a per-period reset is exactly what produced two different tickets
+// on different dates both ending "-0010". So the max scan below covers every
+// BEA-* id ever created, across every id format this table has used
+// (BEA-YYYY-NNN, BEA-YYYYMM-NNNN, BEA-YYYYMMDD-NNNN), and returns max + 1.
+export const generateTicketNo = async (): Promise<string> => {
+    const now = new Date();
+    const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    let max = 0;
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data, error } = await supabase.from('tickets').select('id')
+            .like('id', 'BEA-%').range(from, from + PAGE - 1);
+        if (error) throw error;
+        (data || []).forEach((r: any) => {
+            const n = parseInt(String(r.id).split('-').pop() || '', 10);
+            if (!isNaN(n) && n > max) max = n;
+        });
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+    }
+    return `BEA-${ymd}-${String(max + 1).padStart(4, '0')}`;
+};
+
+const isDuplicateKeyError = (msg: string) =>
+    msg.includes('23505') || msg.toLowerCase().includes('duplicate key') || msg.includes('tickets_pkey');
+
 export const createTicket = async (ticketData: Partial<Ticket>): Promise<{ success: boolean; id?: string; error?: string }> => {
     try {
-        const currentYear = new Date().getFullYear();
-
-        // Fetch all tickets for current year to find highest sequence number
-        const { data: allTickets } = await supabase
-            .from('tickets')
-            .select('id')
-            .ilike('id', `BEA-${currentYear}-%`);
-
-        let nextSequence = 1;
-        if (allTickets && allTickets.length > 0) {
-            const sequences = allTickets
-                .map((t: any) => {
-                    const match = t.id.match(/BEA-\d+-(\d+)/);
-                    return match ? parseInt(match[1], 10) : 0;
-                })
-                .sort((a: number, b: number) => b - a);
-
-            nextSequence = (sequences[0] || 0) + 1;
-        }
-
-        const newId = `BEA-${currentYear}-${String(nextSequence).padStart(3, '0')}`;
+        let newId = await generateTicketNo();
 
         // Auto-set status: if engineer assigned, status is "Assigned", otherwise "Pending Allocation"
-        const dataToInsert = {
+        const dataToInsert: any = {
             ...ticketData,
             id: newId,
             job_sheet: newId,
@@ -82,14 +94,67 @@ export const createTicket = async (ticketData: Partial<Ticket>): Promise<{ succe
             updated_at: new Date().toISOString(),
         };
 
-        const { error } = await supabase.from('tickets').insert([dataToInsert]);
+        // Collision-safe insert: if another device/tab just took the generated
+        // number (duplicate primary key, PG 23505), fetch the next free number
+        // and retry — a same-day call must never be blocked by a numbering
+        // clash (index.html:5738-5754).
+        let posted = false;
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 5 && !posted; attempt++) {
+            const { error } = await supabase.from('tickets').insert([dataToInsert]);
+            if (!error) { posted = true; break; }
+            const msg = String(error.message || error);
+            if (!isDuplicateKeyError(msg)) throw error;
+            lastErr = error;
+            newId = await generateTicketNo();
+            dataToInsert.id = newId;
+            dataToInsert.job_sheet = newId;
+        }
+        if (!posted) throw (lastErr || new Error('Could not create ticket — please retry.'));
 
-        if (error) throw error;
+        // Customer master record, so the next call's customer search finds them
+        // (index.html:5758). Best-effort — the ticket is what matters. `serial`
+        // is this table's key, so an upsert keeps repeat calls on the same
+        // device from erroring out on a duplicate key.
+        if (dataToInsert.serial) {
+            try {
+                await supabase.from('customers').upsert([{
+                    serial: dataToInsert.serial,
+                    model: dataToInsert.model || '',
+                    cname: dataToInsert.cname || '',
+                    mobile: dataToInsert.mobile || '',
+                    alt_mobile: dataToInsert.alt_mobile || '',
+                    address: dataToInsert.address || '',
+                    city: dataToInsert.city || '',
+                    pin: dataToInsert.pin || '',
+                    state: dataToInsert.state || '',
+                    area: dataToInsert.area || '',
+                    updated_at: new Date().toISOString(),
+                }], { onConflict: 'serial' });
+            } catch { /* customer master is additive only */ }
+        }
+
         notifyNewTicket({ ...dataToInsert, id: newId });
         return { success: true, id: newId };
     } catch (err) {
         return { success: false, error: String(err) };
     }
+};
+
+// Blocks a second ACTIVE call on the same device (index.html:5715-5730). Every
+// closed status (Resolved By Phone, Repaired, Pending for Delivery, Customer
+// Reject, …) counts as done via isTicketActive, so only a genuinely open call
+// blocks. Auto-generated "NO-SN-…" placeholders are exempt — they are not real
+// serials and would collide with each other.
+export const findOpenCallsForSerial = async (
+    serial: string
+): Promise<{ id: string; status: string; cname?: string }[]> => {
+    if (!serial || serial.startsWith('NO-SN-')) return [];
+    try {
+        const { data } = await supabase.from('tickets').select('id, status, cname')
+            .eq('serial', serial).order('created_at', { ascending: false }).limit(10);
+        return (data || []).filter((t: any) => isTicketActive(t.status));
+    } catch { return []; }
 };
 
 export const ensureGroupId = async (ticket: Ticket): Promise<{ success: boolean; groupId?: string; error?: string }> => {

@@ -256,7 +256,118 @@ export interface DailyReportRecord {
     petrol_km: number;
     remarks: string;
     total_amount: number;
+    // fetchPastDailyReports() selects *, so these come back too — they are what
+    // the share message needs to cover Office Work / Payments / Reviews.
+    office_work?: DrOfficeWork[] | string | null;
+    payment_details?: DrPayment[] | string | null;
+    google_reviews?: DrGoogleReview[] | string | null;
 }
+
+// ─── WhatsApp share text (index.html:14646 formatDailyReportWA) ──────────────
+// Kept verbatim in structure so a report shared from the port reads identically
+// to one shared from the legacy app. Used both right after a report is
+// submitted and from the Past Reports list.
+export interface DailyReportWAInput {
+    eng_name: string;
+    report_date: string;
+    call_summary?: DrCallSummary | null;
+    office_work?: DrOfficeWork[] | string | null;
+    payments?: DrPayment[] | string | null;
+    total_amount?: number;
+    petrol_km?: number;
+    google_reviews?: DrGoogleReview[] | string | null;
+    remarks?: string;
+}
+
+const waArr = <T,>(v: T[] | string | null | undefined): T[] => {
+    if (!v) return [];
+    if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+    return Array.isArray(v) ? v : [];
+};
+
+export const formatDailyReportWA = (d: DailyReportWAInput): string => {
+    const DIV = '━━━━━━━━━━━━━━━━━━━━━';
+    const RULE = '▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔';
+    const lines: string[] = [];
+    const dateStr = d.report_date
+        ? new Date(d.report_date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : d.report_date;
+    const cs = (d.call_summary || {}) as Partial<DrCallSummary>;
+    const ow = waArr<DrOfficeWork>(d.office_work);
+    const pm = waArr<DrPayment>(d.payments);
+    const gr = waArr<DrGoogleReview>(d.google_reviews);
+
+    lines.push(DIV, '📋 *DAILY REPORT*', DIV, `👷 *${d.eng_name}*`, `📅 ${dateStr}`, '');
+
+    const wTotal = cs.warranty_total || ((cs.w_install || 0) + (cs.w_breakdown || 0) + (cs.w_repeat || 0) + (cs.w_resolved_phone || 0));
+    const nwTotal = cs.nonwarranty_total || ((cs.nw_breakdown || 0) + (cs.nw_repeat || 0) + (cs.nw_other || 0) + (cs.nw_delivery || 0) + (cs.nw_resolved_phone || 0));
+    const grandTotal = cs.grand_total || (wTotal + nwTotal) || 0;
+    if (grandTotal > 0) {
+        lines.push(`📊 *CALL SUMMARY*  (Total: ${grandTotal})`, RULE);
+        lines.push(`  🔵 *WARRANTY*  (${wTotal})`);
+        if ((cs.w_install || 0) > 0) lines.push(`     • Installation: ${cs.w_install}`);
+        if ((cs.w_breakdown || 0) > 0) lines.push(`     • Breakdown: ${cs.w_breakdown}`);
+        if ((cs.w_repeat || 0) > 0) lines.push(`     • Repeat: ${cs.w_repeat}`);
+        if ((cs.w_resolved_phone || 0) > 0) lines.push(`     • 📞 Resolved By Phone: ${cs.w_resolved_phone}`);
+        lines.push('');
+        lines.push(`  🔴 *NON-WARRANTY*  (${nwTotal})`);
+        if ((cs.nw_breakdown || 0) > 0) lines.push(`     • Breakdown: ${cs.nw_breakdown}`);
+        if ((cs.nw_repeat || 0) > 0) lines.push(`     • Repeat: ${cs.nw_repeat}`);
+        if ((cs.nw_other || 0) > 0) lines.push(`     • Other / AMC: ${cs.nw_other}`);
+        if ((cs.nw_delivery || 0) > 0) lines.push(`     • Cart/Ink Delivery: ${cs.nw_delivery}`);
+        if ((cs.nw_resolved_phone || 0) > 0) lines.push(`     • 📞 Resolved By Phone: ${cs.nw_resolved_phone}`);
+        lines.push('', '  ─────────────────────');
+        lines.push(`  🔵 Warranty: *${wTotal}*   🔴 Non-W: *${nwTotal}*   📊 Total: *${grandTotal}*`, '');
+    }
+
+    const pendingTotal = ((cs.pending_parts || 0) + (cs.pending_approval || 0) + (cs.pending_other || 0)) || (cs.pending_calls || 0);
+    if (pendingTotal > 0) {
+        lines.push(`⏳ *PENDING CALLS*  (Total: ${pendingTotal})`, RULE);
+        if ((cs.pending_parts || 0) > 0) lines.push(`     • Parts: ${cs.pending_parts}`);
+        if ((cs.pending_approval || 0) > 0) lines.push(`     • Approval: ${cs.pending_approval}`);
+        if ((cs.pending_other || 0) > 0) lines.push(`     • Other: ${cs.pending_other}`);
+        if (!cs.pending_parts && !cs.pending_approval && !cs.pending_other && cs.pending_calls) lines.push(`     • ${cs.pending_calls}`);
+        lines.push('');
+    }
+
+    // Closed + Pending together, so it is unambiguous how many calls the
+    // engineer actually attended today (index.html:14697-14703).
+    if (grandTotal > 0 || pendingTotal > 0) {
+        lines.push(`📌 *FINAL TOTAL (Closed + Pending): ${grandTotal + pendingTotal}*`, '');
+    }
+    if ((cs.customer_reject || 0) > 0) lines.push(`❌ *CUSTOMER REJECT (Today):* ${cs.customer_reject}`, '');
+    if ((cs.auto_site_visits || 0) > 0) lines.push(`🏗️ *SITE VISITS (Today):* ${cs.auto_site_visits}`, '');
+
+    if (ow.length) {
+        lines.push(`💼 *OFFICE / REMOTE WORK*  (${ow.length})`, RULE);
+        ow.forEach((w, i) => lines.push(`  ${i + 1}. *${w.work_type}*${w.remark ? ' — ' + w.remark : ''}`));
+        lines.push('');
+    }
+
+    const pmFiltered = pm.filter((p) => p.customer || (p.amount || 0) > 0);
+    if (pmFiltered.length) {
+        const total = d.total_amount != null ? d.total_amount : pmFiltered.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+        lines.push('💰 *PAYMENT COLLECTED*', RULE);
+        pmFiltered.forEach((p) => {
+            const modeIcon = p.mode === 'Cash' ? '💵' : p.mode === 'Online' ? '📲' : '🏦';
+            lines.push(`  ▸ ${p.customer} → *₹${p.amount}*  ${modeIcon} ${p.mode}`);
+        });
+        lines.push('  ─────────────────────', `  💵 *Total: ₹${total}*`, '');
+    }
+
+    if ((d.petrol_km || 0) > 0) lines.push('🚗 *TRAVEL*', RULE, `  ${d.petrol_km} KM`, '');
+
+    if (gr.length) {
+        lines.push(`⭐ *GOOGLE REVIEWS*  (${gr.length})`, RULE);
+        gr.forEach((r) => lines.push(`  ▸ ${r.customer}  ${'⭐'.repeat(Math.min(Number(r.stars) || 5, 5))}`));
+        lines.push('');
+    }
+
+    if (d.remarks) lines.push('📝 *REMARKS*', RULE, `  ${d.remarks}`, '');
+
+    lines.push(DIV, '_Bhavi Electronics — CRM_');
+    return lines.join('\n');
+};
 
 const emptyCallSummary = (): DrCallSummary => ({
     w_install: 0, w_breakdown: 0, w_repeat: 0, w_resolved_phone: 0,

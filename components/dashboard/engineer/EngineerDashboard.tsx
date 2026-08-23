@@ -33,9 +33,12 @@ import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
 import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
+import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
+import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
 
 type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'reports' | 'attendance'
     | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'inquiries'
+    | 'parts-catalog' | 'fault-finder'
     | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
     | 'auto-sites' | 'sw-survey' | 'auto-visits-report' | 'auto-inventory';
 
@@ -52,7 +55,10 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'payment-collection', label: '💰 Payment Collection' },
     { id: 'inquiries', label: '🔎 Inquiries' },
     { id: 'field-tasks', label: '🚚 Other Work' },
-    { id: 'site-visits', label: '🏗️ Site Visits' },
+    // HTML setupNav(): `if(isEng){sv('nav-parts-catalog',true);sv('nav-fault-finder',true);}`
+    // — every engineer gets these two, regardless of CSP-manager status.
+    { id: 'parts-catalog', label: '📚 Parts Catalog' },
+    { id: 'fault-finder', label: '🔍 Fault Finder' },
 ];
 
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
@@ -66,6 +72,10 @@ const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'inventory', label: '📦 Inventory' },
     { id: 'work-log-report', label: '📝 Work Log Report' },
     { id: 'amc', label: '🛡️ AMC' },
+    // HTML's engineer branch ends with sv('nav-site-visits',false) — Site Visits is
+    // NOT a base engineer nav item. Kept here for CSP managers only (they run the
+    // WC-style site-visit workflow); plain engineers no longer see it.
+    { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
 
 // "Auto engineer" accounts (ENG002/ENG008) — mirrors HTML's isAutoEng nav
@@ -114,7 +124,9 @@ export default function EngineerDashboard() {
             case 'payment-collection': return <PaymentCollectionScreen />;
             case 'inquiries': return <InquiriesScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
-            case 'site-visits': return <SiteVisitsScreen />;
+            case 'parts-catalog': return <PartsCatalogScreen />;
+            case 'fault-finder': return <FaultFinderScreen />;
+            case 'site-visits': return cspMgr ? <SiteVisitsScreen /> : null;
             case 'tickets': return cspMgr ? <TicketsScreen /> : null;
             case 'eng-parts': return cspMgr ? <EngPartsScreen /> : null;
             case 'pending': return cspMgr ? <PendingListScreen /> : null;

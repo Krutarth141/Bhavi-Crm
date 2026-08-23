@@ -65,23 +65,41 @@ export default function WorkLogScreen() {
 // A separate nav page from My Calls (HTML: nav-work-log vs nav-my-calls),
 // so an engineer can log a day's activity independent of any specific call.
 
-function generateTimeSlots(): string[] {
-    const slots: string[] = [];
-    for (let h = 7; h <= 21; h++) {
-        for (const m of ['00', '30']) {
-            slots.push(`${String(h).padStart(2, '0')}:${m}`);
-        }
-    }
-    return slots;
-}
-const TIME_SLOTS = generateTimeSlots();
-
 function getLogTypeBadgeStyle(logType: string): React.CSSProperties {
     const t = (logType ?? 'work').toLowerCase();
     if (t === 'travel') return { ...styles.badge, backgroundColor: '#e0f2fe', color: '#0369a1' };
     if (t === 'meeting') return { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' };
     if (t === 'training') return { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' };
     return { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' };
+}
+
+// Every prefix an auto-logging code path in this port writes — visitStartService
+// (Traveling / Work Start / Work on Hold / Reached Location), myCallsService
+// (Return to / Reached Office|Home), engineerUpdateService (Call Closed /
+// Resolved By Phone), engDailyReportService + fieldTasksService (Office Work),
+// fieldTasksService (Travel Start / Reached / Task Done) and
+// siteVisitTrackerService (Traveling / Work Start / Work on Hold).
+const AUTO_LOG_PREFIXES = [
+    '🚗', '🔧', '⏸️', '✅', '📞', '🏢', '🏠', '🏡', '📍',
+];
+
+// HTML decides "auto vs manual" purely on the ABSENCE of log_type: its manual
+// saveWorkLog() writes no log_type at all, and logsHtml() treats
+// log_type==='work'||'travel' as auto (index.html:19024, 19198-19222). This
+// port's manual form used to default log_type to 'work', which made every
+// hand-typed entry render as "⚡ Auto" with NO delete button — permanently
+// undeletable. The manual form no longer writes log_type (matching HTML), and
+// the check below additionally requires a real auto marker — a ticket_id /
+// site_visit_id link, a still-running OPEN entry, or one of the auto
+// task_description prefixes — so rows already written by the old buggy form
+// stay deletable too.
+export function isAutoWorkLog(log: WorkLog): boolean {
+    const lt = log.log_type;
+    if (lt !== 'work' && lt !== 'travel') return false;
+    if (log.ticket_id || log.site_visit_id) return true;
+    if (log.to_time === 'OPEN') return true;
+    const d = (log.task_description || '').trim();
+    return AUTO_LOG_PREFIXES.some((p) => d.startsWith(p));
 }
 
 interface EngineerWorkLogScreenProps {
@@ -94,20 +112,33 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(true);
 
-    const loadToday = async () => {
-        setLoadingLogs(true);
-        const r = await fetchWorkLogsByDate(engId, today);
-        setWorkLogs(r.data || []);
-        setLoadingLogs(false);
-    };
-    useEffect(() => { if (engId) loadToday(); }, [engId]);
-
     // Entry form state
     const [wlFrom, setWlFrom] = useState('');
     const [wlTo, setWlTo] = useState('');
     const [wlTask, setWlTask] = useState('');
-    const [wlLogType, setWlLogType] = useState('work');
     const [wlSubmitted, setWlSubmitted] = useState(false);
+
+    // From Time defaults to the END of the day's last log entry (auto or
+    // manual) so a fresh entry chains on exactly; To Time defaults to now.
+    // A forced 30-minute grid caused gaps/overlaps against auto entries
+    // (Visit Start / Work Start), which log at their real minute
+    // (index.html:19015-19018, 19045-19047).
+    const applyTimeDefaults = (logs: WorkLog[]) => {
+        const currExact = new Date().toTimeString().slice(0, 5);
+        const last = logs.length ? logs[logs.length - 1] : null;
+        setWlFrom(last && last.to_time && last.to_time !== 'OPEN' ? last.to_time : currExact);
+        setWlTo(currExact);
+    };
+
+    const loadToday = async () => {
+        setLoadingLogs(true);
+        const r = await fetchWorkLogsByDate(engId, today);
+        const logs = r.data || [];
+        setWorkLogs(logs);
+        applyTimeDefaults(logs);
+        setLoadingLogs(false);
+    };
+    useEffect(() => { if (engId) loadToday(); }, [engId]);
     const [wlSaving, setWlSaving] = useState(false);
     const [shareLogs, setShareLogs] = useState<{ date: string; logs: WorkLog[] } | null>(null);
     const [searchDate, setSearchDate] = useState(today);
@@ -117,7 +148,11 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
     const handleSaveWorkLog = async () => {
         setWlSubmitted(true);
         if (!wlFrom || !wlTo || !wlTask.trim()) return;
+        if (wlFrom >= wlTo) { alert('To time must be greater than From time'); return; }
         setWlSaving(true);
+        // Deliberately NO log_type — HTML's manual saveWorkLog() writes none
+        // (index.html:19205-19216), and that absence is exactly what marks the
+        // entry as hand-typed (and therefore deletable) instead of automatic.
         const result = await saveWorkLog({
             eng_id: engId,
             eng_name: engName,
@@ -126,11 +161,10 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
             from_time: wlFrom,
             to_time: wlTo,
             task_description: wlTask.trim(),
-            log_type: wlLogType,
         });
         setWlSaving(false);
         if (result.success) {
-            setWlFrom(''); setWlTo(''); setWlTask(''); setWlLogType('work'); setWlSubmitted(false);
+            setWlTask(''); setWlSubmitted(false);
             await loadToday();
         } else {
             alert('❌ ' + result.error);
@@ -173,29 +207,20 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
             {/* Add Work Log Entry */}
             <div style={{ ...styles.card, marginBottom: '20px' }}>
                 <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '14px' }}>➕ Add Work Log Entry</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                     <div style={styles.formGroup}>
                         <label style={styles.formLabel}>From Time</label>
-                        <select value={wlFrom} onChange={(e) => setWlFrom(e.target.value)} style={{ ...styles.formInput, borderColor: wlSubmitted && !wlFrom ? colors.danger : colors.border }}>
-                            <option value="">-- Select --</option>
-                            {TIME_SLOTS.map((s) => (<option key={s} value={s}>{s}</option>))}
-                        </select>
+                        <input
+                            type="time" value={wlFrom} onChange={(e) => setWlFrom(e.target.value)}
+                            style={{ ...styles.formInput, borderColor: wlSubmitted && !wlFrom ? colors.danger : colors.border }}
+                        />
                     </div>
                     <div style={styles.formGroup}>
                         <label style={styles.formLabel}>To Time</label>
-                        <select value={wlTo} onChange={(e) => setWlTo(e.target.value)} style={{ ...styles.formInput, borderColor: wlSubmitted && !wlTo ? colors.danger : colors.border }}>
-                            <option value="">-- Select --</option>
-                            {TIME_SLOTS.map((s) => (<option key={s} value={s}>{s}</option>))}
-                        </select>
-                    </div>
-                    <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>Log Type</label>
-                        <select value={wlLogType} onChange={(e) => setWlLogType(e.target.value)} style={styles.formInput}>
-                            <option value="work">Work</option>
-                            <option value="travel">Travel</option>
-                            <option value="meeting">Meeting</option>
-                            <option value="training">Training</option>
-                        </select>
+                        <input
+                            type="time" value={wlTo} onChange={(e) => setWlTo(e.target.value)}
+                            style={{ ...styles.formInput, borderColor: wlSubmitted && !wlTo ? colors.danger : colors.border }}
+                        />
                     </div>
                 </div>
                 <div style={{ ...styles.formGroup, marginBottom: '12px' }}>
@@ -243,9 +268,9 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
                                 <span style={{ ...styles.badge, backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 700, whiteSpace: 'nowrap' as const }}>
                                     {log.from_time} – {log.to_time}
                                 </span>
-                                <span style={getLogTypeBadgeStyle(log.log_type ?? 'work')}>{log.log_type ?? 'work'}</span>
+                                {log.log_type && <span style={getLogTypeBadgeStyle(log.log_type)}>{log.log_type}</span>}
                                 <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>{log.task_description}</span>
-                                {log.log_type === 'work' || log.log_type === 'travel' ? (
+                                {isAutoWorkLog(log) ? (
                                     <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>⚡ Auto</span>
                                 ) : (
                                     <button

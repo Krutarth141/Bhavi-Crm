@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
 import {
@@ -17,13 +17,13 @@ import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
 import {
   updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
-  needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes,
+  needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, uploadCrmPhoto,
 } from '@/services/engineerUpdateService';
 import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import {
   fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports, hasDailyReportToday,
-  fetchDrAutoOfficeWork, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
+  fetchDrAutoOfficeWork, formatDailyReportWA, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
   DrCallSummary, DailyReportRecord, DrOfficeWork, DrAutoOfficeWork, DrPayment, DrGoogleReview,
 } from '@/services/engDailyReportService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
@@ -32,8 +32,10 @@ import WarrantyClaimModal from './tickets/WarrantyClaimModal';
 import EngVoidWarrantyModal from './tickets/EngVoidWarrantyModal';
 import PartIndentModal from './tickets/PartIndentModal';
 import MSCDispatchPanel from './tickets/MSCDispatchPanel';
+import { fetchMSCCenters } from '@/services/mscDispatchService';
+import { supabase } from '@/lib/supabase';
 import { isCspManager } from '@/lib/permissions';
-import { createTicket, ensureGroupId } from '@/services/ticketService';
+import { createTicket, ensureGroupId, findOpenCallsForSerial } from '@/services/ticketService';
 import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
 import { fetchBrands, fetchSubCategories } from '@/services/masterService';
 import { Brand, SubCategory } from '@/types/masters';
@@ -142,8 +144,24 @@ export default function MyCallsScreen() {
     newStatus: '', note: '', labour: '', faultCode: '', workDone: '',
     seCallId: '', pageCount: '', pageCountSkip: false, pageCountSkipReason: '',
     otherCharge: '', visitDate: '', visitIn: '', visitOut: '', meterStart: '', meterEnd: '', mscCenter: '',
+    // Product Condition (index.html:7302-7316) + manual Time In/Out reason
+    // (index.html:7249-7252).
+    conditionType: '', manualTimeReason: '',
   });
   const [updateSaving, setUpdateSaving] = useState(false);
+  // Up to 3 Product Condition photos → tickets.condition_photos.
+  const [conditionPhotos, setConditionPhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
+  // The Time In/Out the modal OPENED with — HTML's data-orig on those inputs
+  // (index.html:7249). Any difference means the engineer hand-edited them and a
+  // reason becomes mandatory (index.html:7757-7766).
+  const [origVisitTimes, setOrigVisitTimes] = useState({ visitIn: '', visitOut: '' });
+  // MSC centre suggestions for the datalist behind the MSC Center input
+  // (index.html:7211 + loadMSCCentersDropdown at 27668).
+  const [mscCenters, setMscCenters] = useState<{ name: string; city?: string }[]>([]);
+  // Serial edit for NO-SN- tickets (index.html:5267 / openSerialEditModal 25307).
+  const [serialEditTicket, setSerialEditTicket] = useState<any | null>(null);
+  const [serialEditValue, setSerialEditValue] = useState('');
+  const [serialEditSaving, setSerialEditSaving] = useState(false);
 
   // Spares list as edited in the Update modal — HTML's `currentSpares`
   // (index.html:7073). Removals live here until the whole form is saved.
@@ -282,7 +300,25 @@ export default function MyCallsScreen() {
     if (!callForm.model || !callForm.serial || !callForm.cname || !callForm.mobile || !callForm.problem) {
       alert('Fill: Model, Serial, Customer, Mobile, Problem'); return;
     }
+    // Sub-Category is mandatory whenever the selected brand actually HAS
+    // sub-categories to pick from — a missing one lands the call under the
+    // wrong Work Controller. Skipped in the "Add Product (Same Customer)" flow,
+    // where the field isn't reachable and wc_type is copied from the anchor
+    // call instead (index.html:5709-5713).
+    if (!groupBanner && callForm.brand_id && subCatsForBrand.length > 0 && !callForm.subcategory_id) {
+      alert('⚠️ Sub-Category select karvu farjiyat chhe — jethi call sahi Work Controller ma dekhaay.'); return;
+    }
     setNewCallSaving(true);
+
+    // Hard block: a second ACTIVE call must never be logged for the same device
+    // (index.html:5715-5730). Auto-generated NO-SN- placeholders are exempt.
+    const openDup = await findOpenCallsForSerial(callForm.serial.trim());
+    if (openDup.length > 0) {
+      const od = openDup[0];
+      setNewCallSaving(false);
+      alert(`🚫 Open Call Already Exists!\n\nSerial: ${callForm.serial}\nTicket: ${od.id} — ${od.status}\nCustomer: ${od.cname || '-'}\n\nPehla ae call close karo pachhi j navi call log kari shako.`);
+      return;
+    }
 
     // brand_id / subcategory_id are form-only master ids (no such ticket
     // columns); address2 and subcategory_name are folded in below.
@@ -332,7 +368,15 @@ export default function MyCallsScreen() {
       seCallId: t.se_call_id || '', pageCount: t.page_count != null ? String(t.page_count) : '', pageCountSkip: false, pageCountSkipReason: '',
       otherCharge: t.other_charge != null ? String(t.other_charge) : '', visitDate: t.visit_date || '', visitIn: t.visit_in || '', visitOut: t.visit_out || '',
       meterStart: t.meter_start || '', meterEnd: t.meter_end || '', mscCenter: '',
+      conditionType: t.condition_type || '', manualTimeReason: '',
     });
+    setOrigVisitTimes({ visitIn: t.visit_in || '', visitOut: t.visit_out || '' });
+    // Preload existing condition photos (index.html:7328-7332).
+    let cp = t.condition_photos;
+    if (typeof cp === 'string') { try { cp = JSON.parse(cp); } catch { cp = []; } }
+    const condSlots: (PhotoSlot | null)[] = [null, null, null];
+    if (Array.isArray(cp)) cp.slice(0, 3).forEach((u: string, i: number) => { if (u) condSlots[i] = { url: u, isNew: false }; });
+    setConditionPhotos(condSlots);
     const spares: TicketSpare[] = t.spares || [];
     setUpdateSpares(spares);
     fetchSpareConsumableCodes(spares).then(setConsumableCodes);
@@ -372,6 +416,28 @@ export default function MyCallsScreen() {
     };
     reader.readAsDataURL(file);
   };
+
+  // Same picker for the Product Condition slots (index.html:onCondPhotoPick).
+  const onPickConditionPhoto = (slot: number, file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setConditionPhotos((prev) => { const next = [...prev]; next[slot] = { url: String(reader.result), isNew: true }; return next; });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // HTML calls loadMSCCentersDropdown() when the status select hits "Sent to
+  // MSC" (index.html:27665); the datalist is sourced from auto_msc_centers.
+  useEffect(() => {
+    if (updateForm.newStatus !== 'Sent to MSC' || mscCenters.length) return;
+    fetchMSCCenters().then(setMscCenters).catch(() => undefined);
+  }, [updateForm.newStatus, mscCenters.length]);
+
+  // Time In/Out hand-edited away from what the modal opened with
+  // (index.html:7757-7761) — the reason box appears and becomes mandatory.
+  const isManualTimeEdit = !!updateTicket && updateTicket.service_type === 'On Site'
+    && (updateForm.visitIn !== origVisitTimes.visitIn || updateForm.visitOut !== origVisitTimes.visitOut);
 
   const allowedForUpdate = updateTicket
     ? getAllowedStatuses(updateTicket.status, 'engineer', updateTicket.service_type, updateTicket.call_type, updateTicket.warranty_coverage)
@@ -478,6 +544,8 @@ export default function MyCallsScreen() {
       meterStart: updateForm.meterStart, meterEnd: updateForm.meterEnd, mscCenter: updateForm.mscCenter,
       workDone: updateForm.workDone, spares: updateSpares, photos: updatePhotos, payment,
       engId, memberRole,
+      conditionType: updateForm.conditionType, conditionPhotos,
+      manualTimeReason: isManualTimeEdit ? updateForm.manualTimeReason : undefined,
     });
     setUpdateSaving(false);
     if (!r.success) { alert('Error: ' + r.error); return; }
@@ -497,6 +565,10 @@ export default function MyCallsScreen() {
     }
     if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && updateForm.pageCountSkip && !updateForm.pageCountSkipReason.trim()) {
       alert('Reason is mandatory when skipping Page Count'); return;
+    }
+    // Manual Time In/Out edit needs a reason (index.html:7757-7766).
+    if (isManualTimeEdit && !updateForm.manualTimeReason.trim()) {
+      alert('⚠️ Please provide a reason for the manual time change.\n(Time In or Time Out was edited manually)'); return;
     }
 
     // All the close guards (Work Start / unapproved parts / missing physical
@@ -609,6 +681,79 @@ export default function MyCallsScreen() {
     await proceedToPunchOutReportGate();
   };
 
+  // 8:30 PM auto punch-out reminder (index.html:5147-5154). One-shot per mount /
+  // punch-state change, same as HTML — it does not nag repeatedly.
+  const punchReminderShown = useRef(false);
+  useEffect(() => {
+    if (punchReminderShown.current) return;
+    if (!punchLog?.punch_in_time || punchLog.punch_out_time) return;
+    const now = new Date();
+    const minsOfDay = now.getHours() * 60 + now.getMinutes();
+    if (!(minsOfDay >= 20 * 60 + 30 || now.getHours() < 6)) return;
+    punchReminderShown.current = true;
+    const timer = setTimeout(() => {
+      if (confirm('⚠️ 8:30 PM passed! Punch Out is mandatory.\nWould you like to punch out now?')) handlePunchOut();
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [punchLog?.punch_in_time, punchLog?.punch_out_time]);
+
+  // ── Serial edit for NO-SN- placeholder tickets (index.html:25307-25411) ────
+  // Photo proof + remark are mandatory so the change stays auditable; the edit
+  // applies immediately and is logged in serial_edit_log + the ticket timeline.
+  const [serialEditPhoto, setSerialEditPhoto] = useState<PhotoSlot | null>(null);
+  const [serialEditRemark, setSerialEditRemark] = useState('');
+  const openSerialEdit = (t: any) => {
+    setSerialEditTicket(t);
+    setSerialEditValue((t.serial || '').startsWith('NO-SN-') ? '' : (t.serial || ''));
+    setSerialEditPhoto(t.serial_photo ? { url: t.serial_photo, isNew: false } : null);
+    setSerialEditRemark('');
+  };
+  const handleSaveSerialEdit = async () => {
+    const t = serialEditTicket;
+    if (!t) return;
+    const newSerial = serialEditValue.trim();
+    if (!newSerial) { alert('⚠️ Please enter the serial number.'); return; }
+    if (!serialEditPhoto) { alert('📷 Serial number photo is required.'); return; }
+    if (!serialEditRemark.trim()) { alert('⚠️ Please add a remark explaining this change.'); return; }
+    setSerialEditSaving(true);
+    try {
+      let photoUrl = serialEditPhoto.url;
+      if (serialEditPhoto.isNew) {
+        photoUrl = await uploadCrmPhoto(photoUrl, `serial_${String(t.id).replace(/[^A-Za-z0-9_-]/g, '')}_${Date.now()}.jpg`);
+      }
+      const oldSerial = t.serial || '-';
+      const nowIso = new Date().toISOString();
+      let existingLog = t.serial_edit_log;
+      if (typeof existingLog === 'string') { try { existingLog = JSON.parse(existingLog); } catch { existingLog = []; } }
+      if (!Array.isArray(existingLog)) existingLog = [];
+      const patch = {
+        serial: newSerial,
+        serial_photo: photoUrl,
+        serial_edit_log: [...existingLog, {
+          old_serial: oldSerial, new_serial: newSerial, by: engName || engId,
+          role: roleType, at: nowIso, remark: serialEditRemark.trim(), photo: photoUrl,
+        }],
+        timeline: [...(t.timeline || []), {
+          action: 'Serial No Updated', by: engName || engId, at: nowIso,
+          note: `${serialEditRemark.trim()} (Old: ${oldSerial} → New: ${newSerial})`,
+        }],
+        updated_at: nowIso,
+      };
+      const { error } = await supabase.from('tickets').update(patch).eq('id', t.id);
+      if (error) throw error;
+      setSerialEditTicket(null);
+      await refetch();
+    } catch (e: any) {
+      const msg = (e && e.message) || String(e);
+      if (msg.includes('serial_edit_log')) {
+        alert('⚠️ Setup needed: add a "serial_edit_log" (jsonb) column to the tickets table, then try again.');
+      } else alert('❌ Error: ' + msg);
+    } finally {
+      setSerialEditSaving(false);
+    }
+  };
+
   const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
     if (punchModalMode === 'in') {
       const today = new Date().toLocaleDateString('en-CA');
@@ -662,6 +807,18 @@ export default function MyCallsScreen() {
     .filter((t) => t.planned_date === todayDateStr && isTicketActive(t.status))
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
 
+  // Today's route sequence badge, rendered inline on each call's own card —
+  // engineer-initial + sequence number, e.g. "Y1" (index.html:5139-5144). Keyed
+  // off today's planned_date, so it clears itself the next day.
+  const routeSeqMap: Record<string, string> = {};
+  const routeOrderMap: Record<string, number> = {};
+  todayRoute.forEach((t, i) => {
+    const seqN = t.sequence_no || (i + 1);
+    const pfx = ((t.assigned_name || engName || '').trim().charAt(0) || '#').toUpperCase();
+    routeSeqMap[t.id] = pfx + seqN;
+    routeOrderMap[t.id] = seqN;
+  });
+
   // My Daily Calls chart — mirrors HTML's last7 bar chart in renderMyCalls().
   const dailyCounts: Record<string, number> = {};
   myTickets.forEach((t) => {
@@ -696,8 +853,14 @@ export default function MyCallsScreen() {
       || (t.model || '').toLowerCase().includes(ticketSearchQ)
       || (t.serial || '').toLowerCase().includes(ticketSearchQ);
   }).sort((a, b) => {
-    // Active calls bubble to the top even in "All Status", then newest first
-    // within each group — matches HTML's sort in renderMyCalls().
+    // Today's route calls come first, in their planned sequence order — once the
+    // route sequence no longer applies (badge gone next day), this falls back to
+    // the normal active-first / newest-id sort (index.html:5237-5249).
+    const aSeq = routeOrderMap[a.id];
+    const bSeq = routeOrderMap[b.id];
+    if (aSeq != null && bSeq != null) return aSeq - bSeq;
+    if (aSeq != null) return -1;
+    if (bSeq != null) return 1;
     const aOpen = isTicketActive(a.status);
     const bOpen = isTicketActive(b.status);
     if (aOpen !== bOpen) return aOpen ? -1 : 1;
@@ -1001,89 +1164,178 @@ export default function MyCallsScreen() {
             {visibleTickets.map((t) => {
               const tat = tatLabel(t.tat_date);
               const addr = [t.address, t.area, t.city, t.state, t.pin].filter(Boolean).join(', ');
+              const routeBadge = routeSeqMap[t.id];
               return (
-                <div key={t.id} style={{ border: `1.5px solid ${colors.border}`, borderRadius: '12px', padding: '14px 16px', background: '#f0f7ff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '14px', color: colors.primary }}>
-                        {t.id}{' '}
-                        {t.priority && <span style={getPriorityBadgeStyle(t.priority)}>{t.priority}</span>}
-                        {t.se_call_id && (
-                          <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e', marginLeft: '4px' }}>
-                            SE: {t.se_call_id}
-                          </span>
+                <div key={t.id} style={{ border: `1.5px solid ${routeBadge ? '#1d4ed8' : colors.border}`, borderRadius: '12px', padding: '14px 16px', background: '#f0f7ff', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  {routeBadge && (
+                    <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 19, background: '#1d4ed8', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800 }}>
+                      {routeBadge}
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '14px', color: colors.primary }}>
+                          {t.id}{' '}
+                          {t.priority && <span style={getPriorityBadgeStyle(t.priority)}>{t.priority}</span>}
+                          {t.se_call_id && (
+                            <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e', marginLeft: '4px' }}>
+                              SE: {t.se_call_id}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px' }}>{t.cname || '—'}</div>
+                        {t.problem && (
+                          <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', marginTop: '2px' }}>🔧 {t.problem}</div>
                         )}
                       </div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '2px' }}>{t.cname || '—'}</div>
-                      {t.problem && (
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', marginTop: '2px' }}>🔧 {t.problem}</div>
+                      <span style={getStatusBadgeStyle(t.status)}>{t.status}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '12px', color: colors.textMuted, marginBottom: '10px' }}>
+                      <div>📱 <b style={{ color: colors.text }}>{t.model || '—'}</b></div>
+                      <div>
+                        🔢 <b style={{ color: colors.text }}>{t.serial || '—'}</b>
+                        {/* Auto-generated "NO-SN-…" placeholder — let whoever is
+                          on site fill in the real serial (index.html:5267). */}
+                        {(t.serial || '').startsWith('NO-SN-') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openSerialEdit(t); }}
+                            style={{ marginLeft: 4, padding: '0px 6px', fontSize: 10, border: `1px solid ${colors.border}`, background: '#fff', borderRadius: 5, cursor: 'pointer' }}
+                            title="Edit serial number"
+                          >✏️</button>
+                        )}
+                      </div>
+                      <div>
+                        📞 <a href={`tel:${t.mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.mobile || '—'}</a>
+                        {t.mobile && (
+                          <a href={`https://wa.me/91${(t.mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: 700, color: tat.overdue ? '#dc2626' : '#166534' }}>⏱ TAT: {tat.text}</div>
+                      {t.alt_mobile && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          📞 Alt: <a href={`tel:${t.alt_mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.alt_mobile}</a>
+                          <a href={`https://wa.me/91${(t.alt_mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
+                        </div>
                       )}
                     </div>
-                    <span style={getStatusBadgeStyle(t.status)}>{t.status}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: '12px', color: colors.textMuted, marginBottom: '10px' }}>
-                    <div>📱 <b style={{ color: colors.text }}>{t.model || '—'}</b></div>
-                    <div>🔢 <b style={{ color: colors.text }}>{t.serial || '—'}</b></div>
-                    <div>
-                      📞 <a href={`tel:${t.mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.mobile || '—'}</a>
-                      {t.mobile && (
-                        <a href={`https://wa.me/91${(t.mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
-                      )}
-                    </div>
-                    <div style={{ fontWeight: 700, color: tat.overdue ? '#dc2626' : '#166534' }}>⏱ TAT: {tat.text}</div>
-                    {t.alt_mobile && (
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        📞 Alt: <a href={`tel:${t.alt_mobile}`} style={{ color: colors.primary, fontWeight: 600 }}>{t.alt_mobile}</a>
-                        <a href={`https://wa.me/91${(t.alt_mobile || '').replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ color: '#25D366', marginLeft: '4px' }}>💬</a>
+                    {addr && (
+                      <div
+                        onClick={() => setExpandedAddr(expandedAddr === t.id ? null : t.id)}
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}
+                      >
+                        📍 Address <span style={{ fontSize: '9px' }}>▼</span>
                       </div>
                     )}
-                  </div>
-                  {addr && (
-                    <div
-                      onClick={() => setExpandedAddr(expandedAddr === t.id ? null : t.id)}
-                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '8px' }}
-                    >
-                      📍 Address <span style={{ fontSize: '9px' }}>▼</span>
-                    </div>
-                  )}
-                  {addr && expandedAddr === t.id && (
-                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', fontSize: '12px', color: '#166534' }}>
-                      <div>{addr}</div>
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([t.address, t.area, t.city, t.state].filter(Boolean).join(', '))}`}
-                        target="_blank" rel="noreferrer"
-                        style={{ display: 'inline-block', marginTop: '4px', color: colors.primary, fontWeight: 600, fontSize: '11px' }}
+                    {addr && expandedAddr === t.id && (
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', fontSize: '12px', color: '#166534' }}>
+                        <div>{addr}</div>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([t.address, t.area, t.city, t.state].filter(Boolean).join(', '))}`}
+                          target="_blank" rel="noreferrer"
+                          style={{ display: 'inline-block', marginTop: '4px', color: colors.primary, fontWeight: 600, fontSize: '11px' }}
+                        >
+                          🗺️ Open in Maps
+                        </a>
+                      </div>
+                    )}
+                    {hasPrevLoc(t) && (
+                      <div
+                        onClick={() => handleConfirmPrevLocation(t)}
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: colors.primary, marginBottom: '8px', marginLeft: addr ? '6px' : 0 }}
                       >
-                        🗺️ Open in Maps
-                      </a>
-                    </div>
-                  )}
-                  {hasPrevLoc(t) && (
+                        📍 Previous Location
+                      </div>
+                    )}
                     <div
-                      onClick={() => handleConfirmPrevLocation(t)}
-                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: colors.primary, marginBottom: '8px', marginLeft: addr ? '6px' : 0 }}
+                      onClick={() => handleAddProductSameCustomer(t)}
+                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#065f46', marginBottom: '8px', marginLeft: (addr || hasPrevLoc(t)) ? '6px' : 0 }}
                     >
-                      📍 Previous Location
+                      ➕ Add Product (Same Customer)
                     </div>
-                  )}
-                  <div
-                    onClick={() => handleAddProductSameCustomer(t)}
-                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', fontWeight: 700, color: '#065f46', marginBottom: '8px', marginLeft: (addr || hasPrevLoc(t)) ? '6px' : 0 }}
-                  >
-                    ➕ Add Product (Same Customer)
+                    <button
+                      onClick={() => openTicketUpdate(t)}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: isTicketActive(t.status) ? colors.primary : '#f1f5f9', color: isTicketActive(t.status) ? '#fff' : colors.text }}
+                    >
+                      {isTicketActive(t.status) ? '✏️ Update' : '👁️ View'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => openTicketUpdate(t)}
-                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, border: 'none', cursor: 'pointer', background: isTicketActive(t.status) ? colors.primary : '#f1f5f9', color: isTicketActive(t.status) ? '#fff' : colors.text }}
-                  >
-                    {isTicketActive(t.status) ? '✏️ Update' : '👁️ View'}
-                  </button>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {serialEditTicket && (
+        <Modal
+          isOpen
+          onClose={() => setSerialEditTicket(null)}
+          title={`🔢 Edit Serial No — ${serialEditTicket.id}`}
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setSerialEditTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button
+                onClick={handleSaveSerialEdit}
+                disabled={serialEditSaving}
+                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: serialEditSaving ? 0.6 : 1 }}
+              >
+                {serialEditSaving ? 'Saving...' : '💾 Update Serial'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 12, color: colors.textMuted }}>
+              Current Serial: <b>{serialEditTicket.serial || '-'}</b>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>New Serial No <span style={{ color: '#ef4444' }}>*</span></label>
+              <input
+                type="text" value={serialEditValue}
+                onChange={(e) => setSerialEditValue(e.target.value)}
+                placeholder="Actual serial number from device" style={styles.formInput}
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Serial No Photo <span style={{ color: '#ef4444' }}>*</span></label>
+              {serialEditPhoto ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 4 }}>
+                  <a href={serialEditPhoto.url} target="_blank" rel="noreferrer" style={{ color: colors.primary, fontWeight: 600 }}>
+                    {serialEditPhoto.isNew ? 'New photo ready' : 'View attached'}
+                  </a>
+                  <button onClick={() => setSerialEditPhoto(null)} style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <label style={{ flex: 1, textAlign: 'center', background: '#0369a1', color: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                    📷 Camera
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      const r = new FileReader(); r.onload = () => setSerialEditPhoto({ url: String(r.result), isNew: true }); r.readAsDataURL(f);
+                    }} />
+                  </label>
+                  <label style={{ flex: 1, textAlign: 'center', background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                    🖼️ Gallery
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      const r = new FileReader(); r.onload = () => setSerialEditPhoto({ url: String(r.result), isNew: true }); r.readAsDataURL(f);
+                    }} />
+                  </label>
+                </div>
+              )}
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Remark — why is this being changed? <span style={{ color: '#ef4444' }}>*</span></label>
+              <textarea
+                value={serialEditRemark} onChange={(e) => setSerialEditRemark(e.target.value)} rows={3}
+                placeholder="e.g. Actual serial no. checked on-site, previous was auto-generated placeholder"
+                style={{ ...styles.formInput, resize: 'vertical' }}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {dailyReportOpen && (
         <DailyReportModal engId={engId} engName={engName} memberRole={memberRole} onClose={() => setDailyReportOpen(false)} />
@@ -1134,7 +1386,10 @@ export default function MyCallsScreen() {
             {updateTicket.warranty_claim_pending && (
               <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
             )}
-            {updateTicket.warranty_coverage !== 'Out of Coverage' && (
+            {/* index.html:7259 — `isW && !isOOC`: only a Warranty/Warranty
+                Repeat/AMC call that is not already Out of Coverage can be
+                voided. On a Non-Warranty call the concept does not apply. */}
+            {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && updateTicket.warranty_coverage !== 'Out of Coverage' && (
               <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>
             )}
             {updateTicket.status === 'Sent to MSC' && (
@@ -1175,10 +1430,22 @@ export default function MyCallsScreen() {
                     style={{ ...styles.formInput, resize: 'vertical' }}
                   />
                 </div>
+                {/* 📦 Send to MSC — engineer side only names the centre; WC adds
+                    courier + docket + dispatch date afterwards through the
+                    MSC Dispatch panel (index.html:7207-7214). The suggestions
+                    come from auto_msc_centers, same as loadMSCCentersDropdown. */}
                 {updateForm.newStatus === 'Sent to MSC' && (
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>MSC Center</label>
-                    <input type="text" value={updateForm.mscCenter} onChange={(e) => setUpdateForm((f) => ({ ...f, mscCenter: e.target.value }))} style={styles.formInput} placeholder="MSC center name" />
+                  <div style={{ ...styles.formGroup, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
+                    <label style={styles.formLabel}>MSC Center (optional)</label>
+                    <input
+                      type="text" list="msc-centers-datalist" value={updateForm.mscCenter}
+                      onChange={(e) => setUpdateForm((f) => ({ ...f, mscCenter: e.target.value }))}
+                      style={styles.formInput} placeholder="Which MSC center?"
+                    />
+                    <datalist id="msc-centers-datalist">
+                      {mscCenters.map((m) => <option key={m.name} value={m.city ? `${m.name} — ${m.city}` : m.name} />)}
+                    </datalist>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>WC will add courier &amp; docket details after dispatch.</div>
                   </div>
                 )}
                 {updateTicket.service_type === 'On Site' && (
@@ -1203,6 +1470,23 @@ export default function MyCallsScreen() {
                       <label style={styles.formLabel}>Meter End</label>
                       <input type="text" value={updateForm.meterEnd} onChange={(e) => setUpdateForm((f) => ({ ...f, meterEnd: e.target.value }))} style={styles.formInput} />
                     </div>
+                  </div>
+                )}
+                {/* Reason for manual time change — shown only once Time In or
+                    Time Out is actually edited away from its auto-filled value,
+                    and required to save (index.html:7249-7252, 7757-7766). */}
+                {isManualTimeEdit && (
+                  <div style={{ background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '10px 14px' }}>
+                    <label style={{ fontWeight: 700, color: '#b45309', fontSize: 12 }}>
+                      ⚠️ Reason for manual time change <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <textarea
+                      value={updateForm.manualTimeReason}
+                      onChange={(e) => setUpdateForm((f) => ({ ...f, manualTimeReason: e.target.value }))}
+                      rows={2}
+                      placeholder="e.g. Network issue — forgot to tap Work Start button"
+                      style={{ ...styles.formInput, marginTop: 6, borderColor: '#f59e0b', resize: 'vertical' }}
+                    />
                   </div>
                 )}
                 {/* Spares / Part Request list — index.html:7281-7286 + spareRow()
@@ -1294,14 +1578,81 @@ export default function MyCallsScreen() {
                     </div>
                   ))}
                 </div>
+
+                {/* 📦 Product Condition — optional condition type + up to 3
+                    photo proofs, saved to condition_type / condition_photos
+                    (index.html:7302-7316). */}
+                <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: 12 }}>
+                  <label style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>
+                    📦 Product Condition
+                    <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
+                      {' '}— Optional. Note the condition and attach photo proof if leakage / physical / liquid damage is found.
+                    </span>
+                  </label>
+                  <select
+                    value={updateForm.conditionType}
+                    onChange={(e) => setUpdateForm((f) => ({ ...f, conditionType: e.target.value }))}
+                    style={{ ...styles.formInput, marginTop: 8 }}
+                  >
+                    <option value="">-- Select (optional) --</option>
+                    <option value="Normal">Normal — no issue</option>
+                    <option value="Physical Damage">Physical Damage</option>
+                    <option value="Liquid/Leakage Damage">Liquid / Leakage Damage</option>
+                    <option value="Burnt/Electrical Damage">Burnt / Electrical Damage</option>
+                    <option value="Missing Parts">Missing Parts</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  {[0, 1, 2].map((slot) => (
+                    <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
+                      <span style={{ width: 92, fontWeight: 700, color: '#991b1b' }}>📷 Photo {slot + 1}</span>
+                      {conditionPhotos[slot] ? (
+                        <>
+                          <a href={conditionPhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#991b1b', fontWeight: 600 }}>
+                            {conditionPhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
+                          </a>
+                          <button
+                            onClick={() => setConditionPhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
+                            style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
+                          >✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <label style={{ background: '#b91c1c', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                            📷 Camera
+                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
+                          </label>
+                          <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                            📁 Gallery
+                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>Fault Code</label>
                   <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
                 </div>
+                {/* index.html:7265-7269. The * is HTML's own label; the close is
+                    NOT blocked without it — HTML gates that on
+                    isFieldRequired('call_close','se_call_id'), whose built-in
+                    default is 'optional'. The digits after the last '/' become
+                    the warranty tracking key (index.html:8003). */}
                 {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && (
-                  <div style={styles.formGroup}>
-                    <label style={styles.formLabel}>Canon SE Call ID</label>
-                    <input type="text" value={updateForm.seCallId} onChange={(e) => setUpdateForm((f) => ({ ...f, seCallId: e.target.value }))} style={styles.formInput} />
+                  <div style={{ ...styles.formGroup, background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: 10 }}>
+                    <label style={{ ...styles.formLabel, color: '#b45309' }}>
+                      🔖 Canon SE Call ID <span style={{ color: '#ef4444' }}>*</span>
+                      <span style={{ fontSize: 11, fontWeight: 400, color: '#92400e' }}> (required for warranty part tracking)</span>
+                    </label>
+                    <input
+                      type="text" value={updateForm.seCallId}
+                      onChange={(e) => setUpdateForm((f) => ({ ...f, seCallId: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. CSP/20260618/123456"
+                      style={{ ...styles.formInput, borderColor: '#f59e0b', fontWeight: 600 }}
+                    />
+                    <div style={{ fontSize: 11, color: '#78716c', marginTop: 3 }}>Only the digits after the last / will be used for tracking (e.g. 123456)</div>
                   </div>
                 )}
                 {updateTicket.wc_type === 'CSP' && (
@@ -1655,7 +2006,7 @@ export default function MyCallsScreen() {
                 </select>
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Sub-Category</label>
+                <label style={styles.formLabel}>Sub-Category {!groupBanner && !!callForm.brand_id && subCatsForBrand.length > 0 && <span style={{ color: '#dc2626' }}>*</span>}</label>
                 <select
                   value={callForm.subcategory_id}
                   onChange={(e) => {
@@ -1814,7 +2165,7 @@ const PENDING_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
   { key: 'customer_reject', label: 'Customer Reject (today)' },
 ];
 
-function DailyReportModal({ engId, engName, memberRole, onClose, forcedHint }: { engId: string; engName: string; memberRole: string; onClose: () => void; forcedHint?: boolean }) {
+export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHint }: { engId: string; engName: string; memberRole: string; onClose: () => void; forcedHint?: boolean }) {
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [cs, setCs] = useState<DrCallSummary | null>(null);
   const [petrolKm, setPetrolKm] = useState('');
@@ -1866,8 +2217,27 @@ function DailyReportModal({ engId, engName, memberRole, onClose, forcedHint }: {
       officeWork, payments, googleReviews: reviews, memberRole,
     });
     setSaving(false);
-    if (r.success) { alert('✅ Daily Report submitted!'); onClose(); }
-    else alert('❌ ' + r.error);
+    if (!r.success) { alert('❌ ' + r.error); return; }
+    // Auto-share the just-submitted report — HTML calls autoSendDailyReport()
+    // right after the insert (index.html:14629). HTML's own transport is
+    // Telegram; here the same formatDailyReportWA() text is handed to the
+    // WhatsApp share sheet, which is the channel this port already uses for
+    // report sharing (Past Reports list). Filtering matches the insert's:
+    // only rows with a work type / a name-or-amount / a name-and-stars count.
+    try {
+      const text = formatDailyReportWA({
+        eng_name: engName, report_date: date, call_summary: cs,
+        office_work: officeWork.filter((o) => o.work_type.trim()),
+        payments: payments.filter((p) => p.customer.trim() || p.amount > 0),
+        total_amount: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        petrol_km: parseFloat(petrolKm) || 0,
+        google_reviews: reviews.filter((g) => g.customer.trim() && g.stars),
+        remarks,
+      });
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    } catch { /* share is best-effort — the report is already saved */ }
+    alert('✅ Daily Report submitted!');
+    onClose();
   };
 
   return (
@@ -2050,19 +2420,15 @@ function PastReportsPanel({ engId, onClose }: { engId: string; onClose: () => vo
 
   useEffect(() => { fetchPastDailyReports(engId).then(setReports); }, [engId]);
 
+  // Same formatter the submit-time auto-share uses, so a re-shared past report
+  // carries office work / payments / reviews too (index.html:14646).
   const shareReport = (r: DailyReportRecord) => {
-    const dateStr = new Date(r.report_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-    const cs = r.call_summary || ({} as DrCallSummary);
-    const lines = [
-      `📋 Daily Report — ${dateStr}`,
-      r.eng_name,
-      '',
-      `Warranty: ${cs.warranty_total ?? 0} | Non-Warranty: ${cs.nonwarranty_total ?? 0} | Total: ${r.total_calls ?? 0}`,
-      `Pending: ${r.pending_calls ?? 0}`,
-      r.petrol_km ? `🛣️ Petrol KM: ${r.petrol_km}` : '',
-      r.remarks ? `\n📝 ${r.remarks}` : '',
-    ].filter(Boolean);
-    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
+    const text = formatDailyReportWA({
+      eng_name: r.eng_name, report_date: r.report_date, call_summary: r.call_summary,
+      office_work: r.office_work, payments: r.payment_details, total_amount: r.total_amount,
+      petrol_km: r.petrol_km, google_reviews: r.google_reviews, remarks: r.remarks,
+    });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (

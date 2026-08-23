@@ -18,7 +18,7 @@ import { buildFeedbackWhatsAppLink } from '@/services/feedbackService';
 import { fetchCompanyInfo } from '@/services/settingsService';
 import ReportEditRequestModal from '@/components/screens/tickets/ReportEditRequestModal';
 import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
-import { isCspManager } from '@/lib/permissions';
+import { isCspManager, isAccountant } from '@/lib/permissions';
 import BackdateCloseModal from '@/components/screens/tickets/BackdateCloseModal';
 import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
@@ -32,6 +32,7 @@ export default function TicketsScreen() {
   const currentUserRole = (session?.user as any)?.roleType;
   const currentUserId = (session?.user as any)?.email;
   const cspMgr = isCspManager(session);
+  const isAcct = isAccountant(session);
 
   const { tickets, loading, fetchTickets } = useTickets({
     userRole: cspMgr ? undefined : currentUserRole,
@@ -73,7 +74,14 @@ export default function TicketsScreen() {
   };
 
   const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && t.status === 'Closed';
-  const canMarkInvoice = currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr;
+  // index.html:6255 splits these two. `canInv` decides who SEES the invoice
+  // status at all (WC / admin / CSP manager / accountant) and who may edit an
+  // invoice number that already exists. `canMark` — who may actually ADD the
+  // invoice number on a still-pending call — is narrower: work_controller or
+  // the accountant only. A CSP manager gets read-only visibility of the
+  // "⚠️ Invoice Pending" state, never the mark action.
+  const canSeeInvoiceStatus = currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr || isAcct;
+  const canMarkInvoice = currentUserRole === 'work_controller' || isAcct;
 
   const allowedStatusOptions = useMemo(() => {
     if (modalMode !== 'edit' || !selectedTicket) return statusOptions;
@@ -792,10 +800,21 @@ export default function TicketsScreen() {
                       🧾 Invoice
                     </button>
                   )}
-                  {isInvoiceable(selectedTicket!) && canMarkInvoice && (
-                    <button style={{ ...styles.btn, background: selectedTicket!.invoice_done ? '#6b7280' : '#f59e0b', color: 'white' }} onClick={() => setInvoiceModalTicket(selectedTicket)}>
-                      {selectedTicket!.invoice_done ? `✏️ Edit Invoice #${selectedTicket!.invoice_no}` : '🧾 Add Invoice No.'}
-                    </button>
+                  {isInvoiceable(selectedTicket!) && canSeeInvoiceStatus && (
+                    selectedTicket!.invoice_done ? (
+                      // Already invoiced — everyone with visibility may correct the number.
+                      <button style={{ ...styles.btn, background: '#6b7280', color: 'white' }} onClick={() => setInvoiceModalTicket(selectedTicket)}>
+                        ✏️ Edit Invoice #{selectedTicket!.invoice_no}
+                      </button>
+                    ) : canMarkInvoice ? (
+                      <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setInvoiceModalTicket(selectedTicket)}>
+                        🧾 Add Invoice No.
+                      </button>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fef3c7', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+                        ⚠️ Invoice Pending
+                      </span>
+                    )
                   )}
                   {selectedTicket?.status === 'Closed' && (
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => handleSendFeedbackRequest(selectedTicket!)}>

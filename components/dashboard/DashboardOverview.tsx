@@ -15,7 +15,10 @@ import EngineerLiveStatusTable from './EngineerLiveStatusTable';
 import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, startLocationTracking, stopLocationTracking, saveLocationEvent } from '@/services/myCallsService';
 import { hasKmEntryToday } from '@/services/kmTrackingService';
-import { updateTicketStatus } from '@/services/engineerUpdateService';
+import { updateTicketStatus, validateEngineerUpdate } from '@/services/engineerUpdateService';
+import { hasDailyReportToday } from '@/services/engDailyReportService';
+import { DailyReportModal } from '@/components/screens/MyCallsScreen';
+import { isCspManager } from '@/lib/permissions';
 import PunchModal from '@/components/screens/PunchModal';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import Modal from '@/components/Modal';
@@ -56,6 +59,7 @@ export default function DashboardOverview({ role }: Props) {
     const userId = (session?.user as any)?.email;
     const loginId = ((session?.user as any)?.email || '').toUpperCase(); // holds user_id, e.g. 'ENG002'
     const userName = (session?.user as any)?.name ?? '';
+    const cspMgr = isCspManager(session);
 
     const { tickets: allTickets, loading } = useTickets({ userRole: role, userId });
 
@@ -64,16 +68,27 @@ export default function DashboardOverview({ role }: Props) {
     const { punchLog, refetch: refetchPunch } = useMyCalls(canPunch ? (userId ?? '') : '', userName);
     const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
     const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
+    // Mandatory Daily Report gate before the punch-out selfie — mirrors HTML's
+    // startPunchOutDailyReport() (index.html:4402), auto-skipped when today's
+    // report is already submitted. Same flow MyCallsScreen implements.
+    const [forcedDailyReport, setForcedDailyReport] = useState(false);
+    const memberRole = role === 'work_controller' ? 'WC' : 'Engineer';
 
     const handlePunchIn = async () => {
         const hasOpening = await hasKmEntryToday(userId ?? '', 'opening');
         if (!hasOpening) { setKmCaptureType('opening'); return; }
         setPunchModalMode('in');
     };
+    const proceedToPunchOutReportGate = async () => {
+        const today = new Date().toLocaleDateString('en-CA');
+        const already = await hasDailyReportToday(userId ?? '', today);
+        if (already) { setPunchModalMode('out'); return; }
+        setForcedDailyReport(true);
+    };
     const handlePunchOut = async () => {
         const hasClosing = await hasKmEntryToday(userId ?? '', 'closing');
         if (!hasClosing) { setKmCaptureType('closing'); return; }
-        setPunchModalMode('out');
+        await proceedToPunchOutReportGate();
     };
     const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
         if (punchModalMode === 'in') {
@@ -126,10 +141,26 @@ export default function DashboardOverview({ role }: Props) {
         : [];
     const handleTicketUpdateSave = async () => {
         if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
+        // NOTE: this is a deliberately partial parity fix, not a full port of the
+        // My Calls Update modal (no spares editing, photos or payment
+        // confirmation here). What matters is that a close started from the
+        // Dashboard can no longer BYPASS the guards a My-Calls close applies:
+        // Action Taken is required and validateEngineerUpdate() runs first.
+        const note = updateForm.note.trim();
+        if (!note) { alert('❌ Action Taken is required.\nPlease describe what was done.'); return; }
         setUpdateSaving(true);
-        const r = await updateTicketStatus(updateTicket as any, updateForm.newStatus, updateForm.note, updateForm.labour, userName, updateForm.faultCode);
+        const block = await validateEngineerUpdate(
+            updateTicket as any, updateForm.newStatus, note,
+            ((updateTicket as any).spares || []), userName,
+            (updateTicket as any).jobsheet_photo || undefined,
+        );
+        if (block) { setUpdateSaving(false); alert(block); return; }
+        const r = await updateTicketStatus(
+            updateTicket as any, updateForm.newStatus, note, updateForm.labour, userName, updateForm.faultCode,
+            { workDone: note, engId: userId ?? '', memberRole },
+        );
         setUpdateSaving(false);
-        if (r.success) { setUpdateTicket(null); }
+        if (r.success) { if (r.stockWarning) alert(r.stockWarning); setUpdateTicket(null); }
         else alert('Error: ' + r.error);
     };
 
@@ -262,7 +293,17 @@ export default function DashboardOverview({ role }: Props) {
                 <KmCaptureModal
                     type={kmCaptureType} engId={userId ?? ''} engName={userName}
                     onClose={() => setKmCaptureType(null)}
-                    onDone={() => { const mode = kmCaptureType === 'opening' ? 'in' : 'out'; setKmCaptureType(null); setPunchModalMode(mode); }}
+                    onDone={() => {
+                        const type = kmCaptureType;
+                        setKmCaptureType(null);
+                        if (type === 'opening') setPunchModalMode('in'); else proceedToPunchOutReportGate();
+                    }}
+                />
+            )}
+            {forcedDailyReport && (
+                <DailyReportModal
+                    engId={userId ?? ''} engName={userName} memberRole={memberRole} forcedHint
+                    onClose={() => { setForcedDailyReport(false); setPunchModalMode('out'); }}
                 />
             )}
             {punchModalMode && (
@@ -369,7 +410,8 @@ export default function DashboardOverview({ role }: Props) {
                 </>
             )}
 
-            {isAdminOrWC && <EngineerLiveStatusTable />}
+            {/* HTML:3849 — admin || work_controller || window._isCspMgr */}
+            {(isAdminOrWC || cspMgr) && <EngineerLiveStatusTable />}
 
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 16 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Recent Tickets</h2>
@@ -449,7 +491,7 @@ export default function DashboardOverview({ role }: Props) {
                                     <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
                                 </div>
                                 <div style={styles.formGroup}>
-                                    <label style={styles.formLabel}>Update Note</label>
+                                    <label style={styles.formLabel}>Action Taken *</label>
                                     <textarea value={updateForm.note} onChange={(e) => setUpdateForm((f) => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...styles.formInput, resize: 'vertical' }} />
                                 </div>
                             </>

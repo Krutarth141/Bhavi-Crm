@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAutoVisitsReport } from '@/services/autoVisitsReportService';
+import { fetchAutoVisitsReport, visitPhotos } from '@/services/autoVisitsReportService';
 import { AutoSiteVisitReport } from '@/types/autoVisitsReport';
+import { fetchSites } from '@/services/autoSitesService';
+import { AutoSite } from '@/types/autoSites';
 import * as XLSX from 'xlsx';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
@@ -14,13 +16,20 @@ export default function AutoVisitsReportScreen() {
     const [visits, setVisits] = useState<AutoSiteVisitReport[]>([]);
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState('');
+    // Site filter dropdown, populated from auto_sites (index.html:21606).
+    const [sites, setSites] = useState<AutoSite[]>([]);
+    const [siteFilter, setSiteFilter] = useState('');
+    // Lightbox for a clicked visit photo (index.html's _showVisitPhoto).
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+    useEffect(() => { fetchSites().then(setSites).catch(() => setSites([])); }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
-        const data = await fetchAutoVisitsReport(from, to);
+        const data = await fetchAutoVisitsReport(from, to, siteFilter ? Number(siteFilter) : null);
         setVisits(data);
         setLoading(false);
-    }, [from, to]);
+    }, [from, to, siteFilter]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -67,6 +76,13 @@ export default function AutoVisitsReportScreen() {
                     <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>To</label>
                     <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }} />
                 </div>
+                <div>
+                    <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 3 }}>Site</label>
+                    <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, minWidth: 180 }}>
+                        <option value="">All Sites</option>
+                        {sites.map(s => (<option key={s.id} value={s.id}>{s.site_name}</option>))}
+                    </select>
+                </div>
                 <input type="text" placeholder="Search site, client, engineer..." value={search} onChange={e => setSearch(e.target.value)} style={{ padding: '7px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, minWidth: 220, fontFamily: 'inherit' }} />
             </div>
 
@@ -93,7 +109,7 @@ export default function AutoVisitsReportScreen() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                     <thead>
                                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['Date', 'Site', 'Client', 'Work Done', 'Material Delivered', 'Material ₹', 'By'].map(h => (
+                                            {['Date', 'Site', 'Client', 'Work Done', 'Material Delivered', 'Material ₹', 'By', '📷'].map(h => (
                                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>
@@ -108,6 +124,18 @@ export default function AutoVisitsReportScreen() {
                                                 <td style={{ padding: '10px 12px', fontSize: 12, color: '#6b7280', maxWidth: 180 }}>{v.material_delivered || '—'}</td>
                                                 <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: '#059669' }}>{v.material_total ? `₹${v.material_total}` : '—'}</td>
                                                 <td style={{ padding: '10px 12px', fontSize: 12 }}>{v.created_by_name || '—'}</td>
+                                                <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                                                    {visitPhotos(v.photos).length === 0
+                                                        ? <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>
+                                                        : visitPhotos(v.photos).map((src, pi) => (
+                                                            // eslint-disable-next-line @next/next/no-img-element
+                                                            <img
+                                                                key={pi} src={src} alt={`Visit photo ${pi + 1}`}
+                                                                onClick={() => setPhotoPreview(src)} title="Click to enlarge"
+                                                                style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1.5px solid #e5e7eb', cursor: 'pointer', margin: 2 }}
+                                                            />
+                                                        ))}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -115,6 +143,16 @@ export default function AutoVisitsReportScreen() {
                             </div>
                         )}
             </div>
+
+            {photoPreview && (
+                <div
+                    onClick={() => setPhotoPreview(null)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, cursor: 'zoom-out' }}
+                >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photoPreview} alt="Visit photo" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+                </div>
+            )}
         </div>
     );
 }
