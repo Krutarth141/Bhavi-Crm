@@ -25,6 +25,8 @@ export const createSite = async (form: SiteFormData, createdBy: string): Promise
 
 export const deleteSite = async (id: number): Promise<{ success: boolean; error?: string }> => {
     try {
+        const { error: itemsErr } = await supabase.from('auto_site_items').delete().eq('site_id', id);
+        if (itemsErr) throw itemsErr;
         const { error } = await supabase.from('auto_sites').delete().eq('id', id);
         if (error) throw error;
         return { success: true };

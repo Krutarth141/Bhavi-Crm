@@ -8,6 +8,11 @@ import { AutoSite } from '@/types/autoSites';
 import * as XLSX from 'xlsx';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
+const fmtDate = (d?: string) => {
+    if (!d) return '';
+    const parts = d.split('-');
+    return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : d;
+};
 
 export default function AutoVisitsReportScreen() {
     const [from, setFrom] = useState('');
@@ -38,20 +43,43 @@ export default function AutoVisitsReportScreen() {
         return v.site_name?.toLowerCase().includes(q) || v.client_name?.toLowerCase().includes(q) || v.created_by_name?.toLowerCase().includes(q);
     });
 
+    // Mirrors HTML's downloadVisitExcel() (index.html:21688-21716): an "All
+    // Visits" summary sheet plus one extra sheet per site.
     const exportExcel = () => {
-        const rows = filtered.map(v => ({
-            'Date': v.visit_date,
+        if (!filtered.length) { alert('Please search first'); return; }
+        const wb = XLSX.utils.book_new();
+        const allRows = filtered.map(v => ({
             'Site': v.site_name,
             'Client': v.client_name,
-            'Work Done': v.work_done,
-            'Material': v.material_delivered,
-            'Material ₹': v.material_total || 0,
-            'By': v.created_by_name,
+            'Visit Date': fmtDate(v.visit_date),
+            'Time': v.visit_time || '',
+            'Logged By': v.created_by_name || '',
+            'Work Done': v.work_done || '',
+            'Material Delivered': v.material_delivered || '',
         }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Site Visits');
-        XLSX.writeFile(wb, `auto_visits_${from}_${to}.xlsx`);
+        const allWs = XLSX.utils.json_to_sheet(allRows);
+        allWs['!cols'] = [{ wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 40 }, { wch: 35 }];
+        XLSX.utils.book_append_sheet(wb, allWs, 'All Visits');
+
+        const bySite = new Map<string, AutoSiteVisitReport[]>();
+        filtered.forEach(v => {
+            const k = v.site_name || '—';
+            if (!bySite.has(k)) bySite.set(k, []);
+            bySite.get(k)!.push(v);
+        });
+        bySite.forEach((svs, siteName) => {
+            const siteRows = svs.map(v => ({
+                'Date': fmtDate(v.visit_date),
+                'Time': v.visit_time || '',
+                'Work Done': v.work_done || '',
+                'Material': v.material_delivered || '',
+            }));
+            const siteWs = XLSX.utils.json_to_sheet(siteRows);
+            siteWs['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 45 }, { wch: 35 }];
+            XLSX.utils.book_append_sheet(wb, siteWs, siteName.replace(/[:\\/?*[\]]/g, '').slice(0, 31));
+        });
+
+        XLSX.writeFile(wb, `site_visits_${todayStr()}.xlsx`);
     };
 
     // Stats

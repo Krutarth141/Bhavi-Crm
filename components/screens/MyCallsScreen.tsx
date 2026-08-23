@@ -455,6 +455,8 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     ? getAllowedStatuses(updateTicket.status, 'engineer', updateTicket.service_type, updateTicket.call_type, updateTicket.warranty_coverage)
     : [];
 
+  const isClosedView = !!updateTicket && !isTicketActive(updateTicket.status);
+
   // Refreshes the open modal's ticket in place after a panel action, without
   // dropping the modal (mirrors EngineerUpdateScreen's reloadSelected()).
   const reloadUpdateTicket = async (id: string) => {
@@ -1369,21 +1371,29 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         <Modal
           isOpen
           onClose={() => setUpdateTicket(null)}
-          title={`Update — ${updateTicket.cname || ''}`}
+          title={`${isClosedView ? '👁️ View' : 'Update'} — ${updateTicket.cname || ''}`}
           footer={
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setUpdateTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-              <button
-                onClick={handleTicketUpdateSave}
-                disabled={updateSaving || !updateForm.newStatus}
-                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: (updateSaving || !updateForm.newStatus) ? 0.6 : 1 }}
-              >
-                {updateSaving ? 'Saving...' : '💾 Save Update'}
-              </button>
-            </div>
+            isClosedView ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={() => setUpdateTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Close</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setUpdateTicket(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                <button
+                  onClick={handleTicketUpdateSave}
+                  disabled={updateSaving || !updateForm.newStatus}
+                  style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: (updateSaving || !updateForm.newStatus) ? 0.6 : 1 }}
+                >
+                  {updateSaving ? 'Saving...' : '💾 Save Update'}
+                </button>
+              </div>
+            )
           }
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* fieldset(disabled) locks every input/select/textarea/button
+              descendant read-only in one place when viewing a closed ticket. */}
+          <fieldset disabled={isClosedView} style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 13 }}>
               <div style={{ fontWeight: 600 }}>{updateTicket.brand_name} {updateTicket.model} | {updateTicket.serial}</div>
               <div style={{ color: '#6b7280', marginTop: 2 }}>{updateTicket.problem}</div>
@@ -1704,7 +1714,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                 ⏳ No status update available for: <strong>{updateTicket.status}</strong>
               </div>
             )}
-          </div>
+          </fieldset>
         </Modal>
       )}
       {warrantyModalOpen && updateTicket && (
