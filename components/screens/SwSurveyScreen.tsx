@@ -227,6 +227,8 @@ export default function SwSurveyScreen() {
                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>🔌 Switchboard Survey ({surveys.length})</h1>
                 <button onClick={openCreate} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>+ New Survey</button>
             </div>
+            {/* index.html:20180 — intro line under the header */}
+            <p style={{ fontSize: 13, color: '#6b7280', marginTop: -8, marginBottom: 14 }}>Create a survey per client / site — fill in room-wise switchboard counts, and export to Excel. Can also be opened from an Auto Site.</p>
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
                 : surveys.length === 0 ? <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#9ca3af' }}>🔌 No surveys yet. Click &quot;New Survey&quot; to add one!</div>

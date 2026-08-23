@@ -23,7 +23,7 @@ import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import {
   fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports, hasDailyReportToday,
-  fetchDrAutoOfficeWork, formatDailyReportWA, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
+  fetchDrAutoOfficeWork, formatDailyReportWA, waArr, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
   DrCallSummary, DailyReportRecord, DrOfficeWork, DrAutoOfficeWork, DrPayment, DrGoogleReview,
 } from '@/services/engDailyReportService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
@@ -1178,6 +1178,12 @@ export default function MyCallsScreen() {
                         <div style={{ fontWeight: 800, fontSize: '14px', color: colors.primary }}>
                           {t.id}{' '}
                           {t.priority && <span style={getPriorityBadgeStyle(t.priority)}>{t.priority}</span>}
+                          {/* Warranty / Non-Warranty badge — mirrors HTML's isW ternary (index.html:5259) */}
+                          {['Warranty', 'Warranty Repeat', 'AMC'].includes(t.call_type || '') ? (
+                            <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#166534', marginLeft: '4px' }}>🛡️ WARRANTY</span>
+                          ) : (
+                            <span style={{ ...styles.badge, backgroundColor: '#fee2e2', color: '#991b1b', marginLeft: '4px' }}>💳 NON-WARRANTY</span>
+                          )}
                           {t.se_call_id && (
                             <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e', marginLeft: '4px' }}>
                               SE: {t.se_call_id}
@@ -2452,6 +2458,14 @@ function PastReportsPanel({ engId, onClose }: { engId: string; onClose: () => vo
                   <span style={{ color: '#1d4ed8' }}>📞 {cs.grand_total ?? r.total_calls ?? 0} Calls</span>
                   {(r.pending_calls ?? 0) > 0 && <span style={{ color: '#b45309' }}>⏳ {r.pending_calls} Pending</span>}
                   {r.petrol_km ? <span style={{ color: '#065f46' }}>🛣️ {r.petrol_km} km</span> : null}
+                  {/* index.html:14889-14891 — office work / amount / reviews stat badges */}
+                  {waArr<DrOfficeWork>(r.office_work).length > 0 && (
+                    <span style={{ color: '#5b21b6' }}>💼 {waArr<DrOfficeWork>(r.office_work).length} Office</span>
+                  )}
+                  {(r.total_amount ?? 0) > 0 && <span style={{ color: '#065f46' }}>💰 ₹{r.total_amount}</span>}
+                  {waArr<DrGoogleReview>(r.google_reviews).length > 0 && (
+                    <span style={{ color: '#92400e' }}>⭐ {waArr<DrGoogleReview>(r.google_reviews).length} Reviews</span>
+                  )}
                 </div>
               </div>
             );

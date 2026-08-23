@@ -223,7 +223,7 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
           {/* ── My Requests ── */}
           {activeTab === 'my-requests' && (
             myRequests.length === 0 ? (
-              <div style={styles.emptyMessage}>No requests yet</div>
+              <div style={styles.emptyMessage}>No requests yet. Use the &quot;Parts Request&quot; button to submit a new request.</div>
             ) : (
               <div style={{ overflowX: 'auto' as const }}>
                 <table style={styles.table}>
@@ -234,6 +234,7 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
                       <th style={styles.tableHeader}>Parts</th>
                       <th style={styles.tableHeader}>Notes</th>
                       <th style={styles.tableHeader}>Status</th>
+                      <th style={styles.tableHeader}>Approved By</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -242,7 +243,8 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
                       return (
                         <tr key={req.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
-                            {req.created_at ? new Date(req.created_at).toLocaleDateString() : '—'}
+                            {/* index.html:11221 — date + time, not date-only */}
+                            {req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </td>
                           <td style={styles.tableCell}>{req.type || '—'}</td>
                           <td style={styles.tableCell}>{partsList || '—'}</td>
@@ -250,6 +252,7 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
                           <td style={styles.tableCell}>
                             <span style={statusBadgeStyle(req.status)}>{req.status}</span>
                           </td>
+                          <td style={styles.tableCell}>{req.approved_by || '—'}</td>
                         </tr>
                       );
                     })}

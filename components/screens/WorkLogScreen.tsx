@@ -192,10 +192,26 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
         window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     };
 
+    // Header banner date string — mirrors HTML's dateStr ("17th August 2026,
+    // Monday") built with an ordinal day suffix (index.html:19003-19007).
+    const now = new Date();
+    const dd = now.getDate();
+    const suffix = dd === 1 || dd === 21 || dd === 31 ? 'st' : dd === 2 || dd === 22 ? 'nd' : dd === 3 || dd === 23 ? 'rd' : 'th';
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const wdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const headerDateStr = `${dd}${suffix} ${months[now.getMonth()]} ${now.getFullYear()}, ${wdays[now.getDay()]}`;
+
     return (
         <div style={{ padding: '20px', backgroundColor: colors.bg, minHeight: '100vh' }}>
-            <div style={{ ...styles.sectionHeader, marginBottom: '20px' }}>
-                <h2 style={{ ...styles.sectionTitle, fontSize: '22px' }}>🗒️ Work Log</h2>
+            {/* Header banner — mirrors HTML's renderWorkLog() banner (index.html:19031-19034) */}
+            <div style={{ background: '#1e2a3a', borderRadius: 12, padding: '16px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' as const, justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
+                    <div>
+                        <div style={{ fontSize: 17, fontWeight: 600, color: '#fff' }}>Work Log — {engName}</div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>{headerDateStr}</div>
+                    </div>
+                </div>
                 <button
                     onClick={handleWhatsAppShare}
                     style={{ ...styles.btn, backgroundColor: '#25d366', color: '#fff', padding: '8px 16px' }}

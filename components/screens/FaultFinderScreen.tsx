@@ -62,7 +62,11 @@ export default function FaultFinderScreen() {
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🔍 Fault Finder</h1>
+                <div>
+                    <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🔍 Fault Finder</h1>
+                    {/* index.html:28306 — subtitle under the header */}
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Model select karo + fault type → known solutions</div>
+                </div>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}

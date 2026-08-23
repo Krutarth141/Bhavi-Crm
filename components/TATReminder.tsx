@@ -112,16 +112,21 @@ export default function TATReminder() {
                     <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>✕</button>
                 </div>
                 <div style={{ padding: 16 }}>
-                    {overdue.length > 0 && (
-                        <div style={{ marginBottom: 12 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>⚠️ OVERDUE ({overdue.length})</div>
-                            {overdue.map((t) => row(t, 'overdue'))}
-                        </div>
-                    )}
+                    {/* Due-soon (not yet breached) goes first — those are still fully
+                      avoidable if acted on now, which makes them the highest-value
+                      thing to see at the top of the popup. Already-overdue calls
+                      follow below since the deadline's already gone (index.html:5847,
+                      "Due-soon...goes first" / "Already-overdue calls follow below"). */}
                     {urgent.length > 0 && (
-                        <div>
+                        <div style={{ marginBottom: 12 }}>
                             <div style={{ fontSize: 12, fontWeight: 700, color: '#d97706', marginBottom: 6 }}>⏰ DUE WITHIN 4 HOURS ({urgent.length})</div>
                             {urgent.map((t) => row(t, 'urgent'))}
+                        </div>
+                    )}
+                    {overdue.length > 0 && (
+                        <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#dc2626', marginBottom: 6 }}>⚠️ OVERDUE ({overdue.length})</div>
+                            {overdue.map((t) => row(t, 'overdue'))}
                         </div>
                     )}
                 </div>

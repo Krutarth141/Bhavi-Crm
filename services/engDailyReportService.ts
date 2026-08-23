@@ -279,7 +279,7 @@ export interface DailyReportWAInput {
     remarks?: string;
 }
 
-const waArr = <T,>(v: T[] | string | null | undefined): T[] => {
+export const waArr = <T,>(v: T[] | string | null | undefined): T[] => {
     if (!v) return [];
     if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
     return Array.isArray(v) ? v : [];
