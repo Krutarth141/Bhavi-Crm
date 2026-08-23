@@ -70,6 +70,11 @@ export default function TATReminder() {
 
     if (dismissed || (!overdue.length && !urgent.length)) return null;
 
+    const goToPending = () => {
+        setDismissed(true);
+        try { window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'pending' } })); } catch { /* noop */ }
+    };
+
     const row = (t: TatTicket, kind: 'overdue' | 'urgent') => {
         const dl = tatDeadline(t.tat_date);
         const isDayOnly = /T00:00:00/.test(t.tat_date);
@@ -79,7 +84,7 @@ export default function TATReminder() {
             const label = overdueHrs < 1 ? 'Just now' : overdueHrs < 24 ? `${overdueHrs}h overdue` : `${Math.floor(overdueHrs / 24)}d overdue`;
             const deadlineStr = isDayOnly ? 'End of Day' : dl.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
             return (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 5 }}>
+                <div key={t.id} onClick={(e) => { e.stopPropagation(); goToPending(); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, marginBottom: 5 }}>
                     <div>
                         <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 13 }}>{t.id}</div>
                         <div style={{ fontSize: 11, color: '#6b7280' }}>{t.cname || ''}{t.model ? ` · ${t.model}` : ''}</div>
@@ -93,7 +98,7 @@ export default function TATReminder() {
         const label = minsLeft < 60 ? `${minsLeft}m left` : `${Math.floor(minsLeft / 60)}h ${minsLeft % 60 ? `${minsLeft % 60}m ` : ''}left`;
         const deadlineStr = isDayOnly ? 'End of Day' : dl.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
         return (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 5 }}>
+            <div key={t.id} onClick={(e) => { e.stopPropagation(); goToPending(); }} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 5 }}>
                 <div>
                     <div style={{ fontWeight: 700, color: '#d97706', fontSize: 13 }}>{t.id}</div>
                     <div style={{ fontSize: 11, color: '#6b7280' }}>{t.cname || ''}{t.model ? ` · ${t.model}` : ''}</div>
@@ -129,9 +134,11 @@ export default function TATReminder() {
                             {overdue.map((t) => row(t, 'overdue'))}
                         </div>
                     )}
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, textAlign: 'center' }}>Click any call to open it</div>
                 </div>
-                <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
-                    <button onClick={() => setDismissed(true)} style={{ width: '100%', padding: '8px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Dismiss</button>
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8 }}>
+                    <button onClick={goToPending} style={{ flex: 1, padding: '8px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📋 View Pending List</button>
+                    <button onClick={() => setDismissed(true)} style={{ flex: 1, padding: '8px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Dismiss</button>
                 </div>
             </div>
         </div>

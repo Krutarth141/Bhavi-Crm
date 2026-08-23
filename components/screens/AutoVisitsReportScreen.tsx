@@ -8,10 +8,9 @@ import { AutoSite } from '@/types/autoSites';
 import * as XLSX from 'xlsx';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
-const monthStart = () => new Date().toISOString().slice(0, 7) + '-01';
 
 export default function AutoVisitsReportScreen() {
-    const [from, setFrom] = useState(monthStart());
+    const [from, setFrom] = useState('');
     const [to, setTo] = useState(todayStr());
     const [visits, setVisits] = useState<AutoSiteVisitReport[]>([]);
     const [loading, setLoading] = useState(false);

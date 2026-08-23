@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useNavVisibility } from '@/hooks/useNavVisibility';
 
@@ -111,6 +111,16 @@ export default function EngineerDashboard() {
         setActiveTab(id);
         setSidebarOpen(false);
     };
+
+    useEffect(() => {
+        const onNavigate = (e: Event) => {
+            const tab = (e as CustomEvent<{ tab: EngineerTab }>).detail?.tab;
+            if (tab && allNavItems.some((n) => n.id === tab)) setActiveTab(tab);
+        };
+        window.addEventListener('bhavi:navigate-tab', onNavigate);
+        return () => window.removeEventListener('bhavi:navigate-tab', onNavigate);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cspMgr, autoEng]);
 
     const renderContent = () => {
         switch (activeTab) {
