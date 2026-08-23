@@ -36,6 +36,29 @@ export interface EngineerTicket {
     page_count?: number;
     other_charge?: number;
     wc_type?: string;
+    work_done?: string;
+    eng_remarks?: string;
+    final_charges?: number;
+    charges_note?: string;
+    payment_mode?: string;
+    jobsheet_photo?: string | null;
+    attachments?: string[] | string | null;
+    out_of_coverage?: boolean;
+}
+
+// One Attachments slot in the update modal: slot 0 = Job Sheet, slots 1-2 =
+// extra photos. isNew separates a freshly-picked data: URL (still to be
+// uploaded) from an already-stored public URL (index.html:7319-7322).
+export interface PhotoSlot { url: string; isNew: boolean }
+
+// Payment Confirmation popup result (index.html:16289 showPaymentConfirmation
+// → confirmPayment).
+export interface PaymentConfirmData {
+    cname: string;
+    payment_mode: string;
+    service_charges: number;
+    parts_cost: number;
+    payment_notes: string;
 }
 
 export interface UpdateForm {
@@ -43,6 +66,7 @@ export interface UpdateForm {
     note: string;
     labour: string;
     faultCode: string;
+    workDone?: string;
     seCallId?: string;
     pageCount?: string;
     pageCountSkip?: boolean;
