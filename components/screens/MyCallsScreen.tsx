@@ -1386,7 +1386,9 @@ export default function MyCallsScreen() {
               />
             )}
 
-            {(updateTicket.call_type === 'Non-Warranty' || updateTicket.call_type === 'Non-Warranty Repeat') && !updateTicket.warranty_claim_pending && (
+            {/* index.html:7264 — !isW && !warranty_claim_pending, where isW is
+                Warranty/Warranty Repeat/AMC. Broader than just Non-Warranty. */}
+            {!['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && !updateTicket.warranty_claim_pending && (
               <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
             )}
             {updateTicket.warranty_claim_pending && (

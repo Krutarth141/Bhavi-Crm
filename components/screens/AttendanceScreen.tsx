@@ -242,7 +242,7 @@ export default function AttendanceScreen() {
                 </div>
             )}
 
-            <LeaveSection myId={myId} myName={adminName} myRole={role} canApprove={isAdmin} isAdminPure={role === 'admin'} reviewerName={adminName} />
+            <LeaveSection myId={myId} myName={adminName} myRole={dbRole} canApprove={isAdmin} isAdminPure={role === 'admin'} reviewerName={adminName} />
 
             {/* Table */}
             <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>

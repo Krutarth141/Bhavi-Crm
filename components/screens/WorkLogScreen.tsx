@@ -61,24 +61,6 @@ export default function WorkLogScreen() {
     );
 }
 
-// ─── Engineer's own Work Log — mirrors HTML's renderWorkLog() ──────────────
-// A separate nav page from My Calls (HTML: nav-work-log vs nav-my-calls),
-// so an engineer can log a day's activity independent of any specific call.
-
-function getLogTypeBadgeStyle(logType: string): React.CSSProperties {
-    const t = (logType ?? 'work').toLowerCase();
-    if (t === 'travel') return { ...styles.badge, backgroundColor: '#e0f2fe', color: '#0369a1' };
-    if (t === 'meeting') return { ...styles.badge, backgroundColor: '#f3e8ff', color: '#7c3aed' };
-    if (t === 'training') return { ...styles.badge, backgroundColor: '#fef3c7', color: '#d97706' };
-    return { ...styles.badge, backgroundColor: '#d1fae5', color: '#065f46' };
-}
-
-// Every prefix an auto-logging code path in this port writes — visitStartService
-// (Traveling / Work Start / Work on Hold / Reached Location), myCallsService
-// (Return to / Reached Office|Home), engineerUpdateService (Call Closed /
-// Resolved By Phone), engDailyReportService + fieldTasksService (Office Work),
-// fieldTasksService (Travel Start / Reached / Task Done) and
-// siteVisitTrackerService (Traveling / Work Start / Work on Hold).
 const AUTO_LOG_PREFIXES = [
     '🚗', '🔧', '⏸️', '✅', '📞', '🏢', '🏠', '🏡', '📍',
 ];
@@ -185,13 +167,6 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
         setSearching(false);
     };
 
-    const handleWhatsAppShare = () => {
-        const todayLabel = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-        const logLines = workLogs.map((l) => `• ${l.from_time}–${l.to_time}: ${l.task_description}`).join('\n');
-        const text = `📋 Work Log — ${todayLabel}\n${engName}\n\n${logLines}`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-    };
-
     // Header banner date string — mirrors HTML's dateStr ("17th August 2026,
     // Monday") built with an ordinal day suffix (index.html:19003-19007).
     const now = new Date();
@@ -203,21 +178,15 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
 
     return (
         <div style={{ padding: '20px', backgroundColor: colors.bg, minHeight: '100vh' }}>
-            {/* Header banner — mirrors HTML's renderWorkLog() banner (index.html:19031-19034) */}
-            <div style={{ background: '#1e2a3a', borderRadius: 12, padding: '16px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' as const, justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
-                    <div>
-                        <div style={{ fontSize: 17, fontWeight: 600, color: '#fff' }}>Work Log — {engName}</div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>{headerDateStr}</div>
-                    </div>
+            {/* Header banner — mirrors HTML's renderWorkLog() banner (index.html:19031-19034).
+                HTML has no share button here at all — the only Share button is
+                below, in the Today's Logs section, and only when it has entries. */}
+            <div style={{ background: '#1e2a3a', borderRadius: 12, padding: '16px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 44, height: 44, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>📋</div>
+                <div>
+                    <div style={{ fontSize: 17, fontWeight: 600, color: '#fff' }}>Work Log — {engName}</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>{headerDateStr}</div>
                 </div>
-                <button
-                    onClick={handleWhatsAppShare}
-                    style={{ ...styles.btn, backgroundColor: '#25d366', color: '#fff', padding: '8px 16px' }}
-                >
-                    📤 WhatsApp Share
-                </button>
             </div>
 
             {/* Add Work Log Entry */}
@@ -284,7 +253,6 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
                                 <span style={{ ...styles.badge, backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 700, whiteSpace: 'nowrap' as const }}>
                                     {log.from_time} – {log.to_time}
                                 </span>
-                                {log.log_type && <span style={getLogTypeBadgeStyle(log.log_type)}>{log.log_type}</span>}
                                 <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>{log.task_description}</span>
                                 {isAutoWorkLog(log) ? (
                                     <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>⚡ Auto</span>

@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { isCspManager } from '@/lib/permissions';
-import { hasKmEntryToday } from '@/services/kmTrackingService';
+import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import {
     FieldTask, FieldTaskFormData, emptyFieldTaskForm, FT_TYPES, FT_TYPE_META, FT_STATUS_META, FT_OFFICE_WORK_TYPES,
@@ -112,7 +112,17 @@ export default function FieldTasksScreen() {
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
     const handleReached = async (t: FieldTask) => {
-        if (isEng) { setKmTaskId(t.id); setKmStep('arrival'); return; }
+        if (isEng) {
+            // index.html:23670-23674 — skip the modal entirely if today's
+            // arrival KM for this task is already recorded.
+            const already = await hasArrivalKmForTicket(myId, `FT${t.id}`);
+            if (already) {
+                const r = await ftReached(t.id, myId, myName, memberRole, t);
+                if (!r.success) alert('Error: ' + r.error); else await load();
+                return;
+            }
+            setKmTaskId(t.id); setKmStep('arrival'); return;
+        }
         const r = await ftReached(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };

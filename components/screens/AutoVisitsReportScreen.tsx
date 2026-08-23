@@ -108,7 +108,7 @@ export default function AutoVisitsReportScreen() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                     <thead>
                                         <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                                            {['Date', 'Site', 'Client', 'Work Done', 'Material Delivered', 'Material ₹', 'By', '📷'].map(h => (
+                                            {['Date', 'Time', 'Site', 'Client', 'Work Done', 'Material Delivered', 'Material ₹', 'By', '📷'].map(h => (
                                                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{h}</th>
                                             ))}
                                         </tr>
@@ -117,6 +117,7 @@ export default function AutoVisitsReportScreen() {
                                         {filtered.map(v => (
                                             <tr key={v.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                                                 <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_date || '—'}</td>
+                                                <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_time || '—'}</td>
                                                 <td style={{ padding: '10px 12px', fontWeight: 600 }}>{v.site_name || '—'}</td>
                                                 <td style={{ padding: '10px 12px', fontSize: 12 }}>{v.client_name || '—'}</td>
                                                 <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200 }}>{v.work_done || '—'}</td>
