@@ -12,7 +12,7 @@ export default function FaultFinderScreen() {
     // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
     // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
     const isAdmin = (session?.user as any)?.roleType === 'admin';
-    const { faults, errors, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
+    const { faults, errors, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [activeTab, setActiveTab] = useState<FaultFinderTab>('fault-knowledge');
     const [search, setSearch] = useState('');
 
@@ -24,7 +24,10 @@ export default function FaultFinderScreen() {
     const [showFaultDropdown, setShowFaultDropdown] = useState(false);
     const [guidedSearched, setGuidedSearched] = useState(false);
 
-    const knownModels = useMemo(() => Array.from(new Set(faults.map(f => f.model_name).filter(Boolean) as string[])).sort(), [faults]);
+    const knownModels = useMemo(() => Array.from(new Set([
+        ...(faults.map(f => f.model_name).filter(Boolean) as string[]),
+        ...ticketModels,
+    ])).sort(), [faults, ticketModels]);
     const knownFaultTypes = useMemo(() => Array.from(new Set(faults.map(f => f.fault_type).filter(Boolean) as string[])).sort(), [faults]);
     const modelSuggestions = useMemo(() => {
         const q = modelQuery.toLowerCase();

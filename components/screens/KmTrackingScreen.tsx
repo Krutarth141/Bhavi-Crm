@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
@@ -40,6 +40,8 @@ export default function KmTrackingScreen() {
         }
         setLoading(false);
     };
+
+    useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const quick = (kind: 'today' | 'week' | 'month') => {
         const today = new Date();

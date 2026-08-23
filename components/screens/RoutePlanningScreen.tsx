@@ -17,6 +17,32 @@ const priorityBadge = (p?: string) => {
 
 const moveBtnStyle: React.CSSProperties = { background: '#f1f5f9', border: '1px solid #e5e7eb', borderRadius: 4, width: 26, height: 26, cursor: 'pointer', fontSize: 12, marginRight: 4 };
 
+// Mirrors HTML's statusBadge() color map (index.html:3098-3101).
+const STATUS_COLORS: Record<string, [string, string]> = {
+    'Pending Customer Arrival': ['#ffe4e6', '#be123c'],
+    'Pending Allocation': ['#ffe4e6', '#be123c'],
+    Assigned: ['#dbeafe', '#1d4ed8'],
+    'In Progress': ['#fef3c7', '#d97706'],
+    Closed: ['#d1fae5', '#065f46'],
+    Delivered: ['#d1fae5', '#065f46'],
+    'Pending Customer Approval': ['#ffe4e6', '#be123c'],
+    'Customer Approved': ['#d1fae5', '#065f46'],
+    'Customer Reject': ['#fef2f2', '#dc2626'],
+    'Call Cancel': ['#f1f5f9', '#475569'],
+    'Pending Parts': ['#ffe4e6', '#be123c'],
+    'Pending Engineer Stock': ['#ffe4e6', '#be123c'],
+    'Pending Repair Carry In': ['#fef3c7', '#d97706'],
+    'Pending Repair On Site': ['#fef3c7', '#d97706'],
+    Repaired: ['#fef3c7', '#d97706'],
+    'Sent to MSC': ['#dbeafe', '#1e40af'],
+    'Pending for Delivery': ['#dcfce7', '#166534'],
+    'Resolved By Phone': ['#d1fae5', '#065f46'],
+};
+const statusBadge = (s?: string) => {
+    const [bg, color] = STATUS_COLORS[s || ''] || ['#dbeafe', '#1d4ed8'];
+    return <span style={badgeStyle(bg, color)}>{s || 'Open'}</span>;
+};
+
 export default function RoutePlanningScreen() {
     const { engineers } = useEngineers();
     const [engId, setEngId] = useState('');
@@ -139,7 +165,7 @@ export default function RoutePlanningScreen() {
                                         const isPlanned = t.planned_date === date;
                                         const isPendingParts = t.status === 'Pending Parts' || t.status === 'Pending Engineer Stock';
                                         const isPartsArrived = t.status === 'Pending Repair On Site';
-                                        const rowBg = isPendingParts ? '#f3f4f6' : isPartsArrived ? '#dcfce7' : isPlanned ? '#eff6ff' : undefined;
+                                        const rowBg = isPendingParts ? 'repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 6px,#e5e7eb 6px,#e5e7eb 12px)' : isPartsArrived ? '#dcfce7' : isPlanned ? '#eff6ff' : undefined;
                                         return (
                                             <tr key={t.id} style={{ background: rowBg, borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ textAlign: 'center', padding: 8 }}>
@@ -164,7 +190,7 @@ export default function RoutePlanningScreen() {
                                                 <td style={{ padding: 8, textAlign: 'center' }}>{priorityBadge(t.priority)}</td>
                                                 <td style={{ padding: 8, textAlign: 'center' }}>{tatHtml}</td>
                                                 <td style={{ padding: 8, textAlign: 'center' }}>
-                                                    <span style={{ fontSize: 11 }}>{t.status}</span>
+                                                    {statusBadge(t.status)}
                                                     {isPendingParts && <span style={{ ...badgeStyle('#fee2e2', '#b91c1c'), marginLeft: 4, fontSize: 9 }} title="Parts not ready — do not schedule">⛔ HOLD</span>}
                                                     {isPartsArrived && <span style={{ ...badgeStyle('#bbf7d0', '#15803d'), marginLeft: 4, fontSize: 9 }}>✅ READY</span>}
                                                 </td>

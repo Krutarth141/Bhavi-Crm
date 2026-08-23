@@ -849,14 +849,17 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const targetColor = targetPct >= 80 ? '#0e9f6e' : targetPct >= 50 ? '#f59e0b' : '#f05252';
   const targetEmoji = targetPct >= 100 ? '🏆' : targetPct >= 80 ? '🔥' : targetPct >= 50 ? '💪' : '🎯';
 
-  // CSP managers can browse closed calls too (matches HTML's window._isCspMgr
-  // gate); regular engineers only ever see their open calls.
-  const statusFilteredTickets = !cspMgr ? activeTickets
-    : ticketStatusFilter === 'closed' ? closedTickets
-      : ticketStatusFilter === '' ? myTickets
-        : activeTickets;
-
   const ticketSearchQ = ticketSearch.trim().toLowerCase();
+  // CSP managers can browse closed calls too (matches HTML's window._isCspMgr
+  // gate); regular engineers only ever see their open calls. A non-empty
+  // search bypasses the status filter entirely (matchS = q||!statusF||...,
+  // index.html:5298) — searching finds a match regardless of the dropdown.
+  const statusFilteredTickets = !cspMgr ? activeTickets
+    : ticketSearchQ ? myTickets
+      : ticketStatusFilter === 'closed' ? closedTickets
+        : ticketStatusFilter === '' ? myTickets
+          : activeTickets;
+
   const visibleTickets = statusFilteredTickets.filter((t) => {
     if (!ticketSearchQ) return true;
     return (t.id || '').toLowerCase().includes(ticketSearchQ)

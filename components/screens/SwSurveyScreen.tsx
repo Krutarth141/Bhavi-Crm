@@ -10,6 +10,7 @@ import {
 import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey, fetchSwSurveysBySite } from '@/services/swSurveyService';
 import { fetchSites } from '@/services/autoSitesService';
 import { AutoSite } from '@/types/autoSites';
+import { fetchCompanyInfo } from '@/services/settingsService';
 
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13, boxSizing: 'border-box' as const };
 
@@ -138,6 +139,61 @@ export default function SwSurveyScreen() {
         XLSX.writeFile(wb, `SW_Survey_${(s.client_name || 'survey').replace(/[^A-Za-z0-9]/g, '_')}.xlsx`);
     };
 
+    const downloadSurveyPDF = async (s: SwSurvey) => {
+        const win = window.open('', '_blank', 'width=900,height=1000');
+        if (!win) { alert('Popup blocked — please allow popups in your browser'); return; }
+        const ci = await fetchCompanyInfo();
+        const coName = ci?.company_name || 'Bhavi Electronics & Automation';
+        const logo = ci?.logo_url || '';
+        const esc = (x?: string) => (x || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const rooms = s.data?.rooms || [];
+        const itemTotals: Record<string, number> = Object.fromEntries(SW_ITEM_DEFS.map(d => [d.key, 0]));
+        let boards = 0;
+        rooms.forEach(r => (r.boards || []).forEach(b => {
+            boards++;
+            SW_ITEM_DEFS.forEach(d => { itemTotals[d.key] += b.items?.[d.key] || 0; });
+        }));
+        const grand = swSurveyTotal(s.data);
+        const itemHead = SW_ITEM_DEFS.map(d => `<th class="c">${esc(d.label)}</th>`).join('');
+        const trs = rooms.flatMap(r => (r.boards || []).map(b => {
+            const cells = `<td>${esc(r.name)}</td><td>${esc(b.name)}</td><td>${esc(b.location)}</td>`
+                + SW_ITEM_DEFS.map(d => `<td class="c">${b.items?.[d.key] || ''}</td>`).join('')
+                + `<td class="c b">${swBoardTotal(b)}</td>`;
+            return `<tr>${cells}</tr>`;
+        })).join('');
+        const totCells = `<td class="b">TOTAL</td><td></td><td></td>`
+            + SW_ITEM_DEFS.map(d => `<td class="c b">${itemTotals[d.key] || ''}</td>`).join('')
+            + `<td class="c b">${grand}</td>`;
+        const dstr = s.survey_date ? new Date(s.survey_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SW Survey - ${esc(s.client_name)}</title>
+<style>*{box-sizing:border-box;} body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:0;padding:18px 22px;font-size:12px;}
+.hd{display:flex;align-items:center;gap:14px;border-bottom:2px solid #0891b2;padding-bottom:10px;margin-bottom:12px;}
+.hd img{max-height:56px;max-width:180px;object-fit:contain;}
+.co{font-size:19px;font-weight:800;color:#0f172a;} .sub{font-size:12px;color:#0891b2;font-weight:700;margin-top:3px;}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.chip{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 14px;text-align:center;}
+.cv{font-size:16px;font-weight:800;color:#0891b2;} .cl{font-size:10px;color:#64748b;margin-top:2px;}
+table{width:100%;border-collapse:collapse;font-size:11px;}
+th,td{border:1px solid #e2e8f0;padding:5px 6px;text-align:left;}
+th{background:#f0f9ff;font-weight:700;} .c{text-align:center;} .b{font-weight:700;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>
+<div class="hd">${logo ? `<img src="${logo}">` : ''}<div><div class="co">${esc(coName)}</div><div class="sub">🔌 Switchboard Survey Report</div></div></div>
+<div class="chips">
+<div class="chip"><div class="cv">${esc(s.client_name)}</div><div class="cl">Client</div></div>
+${s.site_name ? `<div class="chip"><div class="cv">${esc(s.site_name)}</div><div class="cl">Site</div></div>` : ''}
+${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey Date</div></div>` : ''}
+<div class="chip"><div class="cv">${rooms.length}</div><div class="cl">Rooms</div></div>
+<div class="chip"><div class="cv">${boards}</div><div class="cl">Switchboards</div></div>
+<div class="chip"><div class="cv">${grand}</div><div class="cl">Total Items</div></div>
+</div>
+<table><thead><tr><th>Room</th><th>Switchboard</th><th>Location</th>${itemHead}<th>Total</th></tr></thead>
+<tbody>${trs}<tr>${totCells}</tr></tbody></table>
+<script>window.onload=function(){window.print();};</script>
+</body></html>`;
+        win.document.write(html);
+        win.document.close();
+    };
+
     if (editing) {
         return (
             <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
@@ -243,6 +299,7 @@ export default function SwSurveyScreen() {
                                     <div style={{ display: 'flex', gap: 6 }}>
                                         <button onClick={() => openEdit(s)} style={{ padding: '6px 12px', border: '1px solid #185FA5', color: '#185FA5', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>✏️ Edit</button>
                                         <button onClick={() => downloadSurveyExcel(s)} style={{ padding: '6px 12px', border: '1px solid #059669', color: '#059669', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⬇️ Excel</button>
+                                        <button onClick={() => downloadSurveyPDF(s)} style={{ padding: '6px 12px', border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🧾 PDF</button>
                                         <button onClick={() => handleDelete(s)} style={{ padding: '6px 12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑️</button>
                                     </div>
                                 </div>

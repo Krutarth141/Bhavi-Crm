@@ -49,6 +49,20 @@ export const fetchModelErrors = async (): Promise<ModelError[]> => {
     }
 };
 
+export const fetchTicketModels = async (): Promise<string[]> => {
+    try {
+        const { data, error } = await supabase.from('tickets').select('model').limit(2000);
+        if (error) throw error;
+        const set = new Set<string>();
+        (data || []).forEach((t: any) => { if (t.model && t.model.trim()) set.add(t.model.trim()); });
+        return Array.from(set);
+    } catch (err) {
+        console.error('Failed to fetch ticket models:', err);
+        return [];
+    }
+};
+
+
 export const updateFaultKnowledge = async (
     id: string, form: FaultKnowledgeForm
 ): Promise<{ success: boolean; error?: string }> => {
