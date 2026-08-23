@@ -30,11 +30,12 @@ import KmTrackingScreen from '@/components/screens/KmTrackingScreen';
 import PaymentCollectionScreen from '@/components/screens/PaymentCollectionScreen';
 import FieldTasksScreen from '@/components/screens/FieldTasksScreen';
 import SiteVisitsScreen from '@/components/screens/SiteVisitsScreen';
+import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
 type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'reports' | 'attendance'
-    | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits'
+    | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'inquiries'
     | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
     | 'auto-sites' | 'sw-survey' | 'auto-visits-report' | 'auto-inventory';
 
@@ -49,6 +50,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
+    { id: 'inquiries', label: '🔎 Inquiries' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
@@ -110,6 +112,7 @@ export default function EngineerDashboard() {
             case 'attendance': return <AttendanceScreen />;
             case 'km-report': return <KmTrackingScreen />;
             case 'payment-collection': return <PaymentCollectionScreen />;
+            case 'inquiries': return <InquiriesScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             case 'tickets': return cspMgr ? <TicketsScreen /> : null;

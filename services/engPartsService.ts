@@ -227,3 +227,66 @@ export const markWarrantyReceived = async (ids: string[]): Promise<void> => {
         await supabase.from('eng_movements').update({ warranty_status: 'RECEIVED', warranty_received_at: new Date().toISOString() }).eq('id', id);
     }
 };
+
+// ─── Shared physical-stock checks (index.html:11474-11501) ────────────────────
+// Used by the engineer close-guard (My Calls Update), the Approve-Estimate
+// routing, and the Part Indent routing so all three agree on where a part is.
+
+// On Site: a part must physically be in the assigned engineer's own bag
+// (eng_stock). Returns the list of still-missing "CODE Name" strings
+// (empty = fully stocked). Mirrors HTML's _missingBagParts().
+export const missingBagParts = async (
+    engineerName: string, spares: TicketSpareLike[]
+): Promise<string[]> => {
+    const needed = (spares || []).filter((s) => s.code);
+    if (!needed.length) return [];
+    let stock: { part_id: string; qty: number }[] = [];
+    try {
+        const { data } = await supabase.from('eng_stock').select('part_id, qty').eq('owner', engineerName);
+        stock = (data as any) || [];
+    } catch { stock = []; }
+    const missing: string[] = [];
+    for (const s of needed) {
+        let pid: string | null = null;
+        try {
+            const { data } = await supabase.from('inventory').select('id').eq('part_code', s.code!).limit(1).maybeSingle();
+            pid = data?.id ?? null;
+        } catch { pid = null; }
+        const have = pid ? (stock.find((x) => x.part_id === pid)?.qty || 0) : 0;
+        if (have < (s.qty || 1)) missing.push(`${s.code} ${s.name || ''}`.trim());
+    }
+    return missing;
+};
+
+// Carry In has no personal engineer-bag concept — the device is repaired at
+// the office, so the part just needs to be in COMPANY inventory.
+// Mirrors HTML's _missingCompanyStockParts().
+export const missingCompanyStockParts = async (spares: TicketSpareLike[]): Promise<string[]> => {
+    const needed = (spares || []).filter((s) => s.code);
+    if (!needed.length) return [];
+    const missing: string[] = [];
+    for (const s of needed) {
+        let have = 0;
+        try {
+            const { data } = await supabase.from('inventory').select('qty_in_stock').eq('part_code', s.code!).limit(1).maybeSingle();
+            have = data?.qty_in_stock || 0;
+        } catch { have = 0; }
+        if (have < (s.qty || 1)) missing.push(`${s.code} ${s.name || ''}`.trim());
+    }
+    return missing;
+};
+
+export interface TicketSpareLike { code?: string; name?: string; qty?: number }
+
+// Fresh lookup of the master Inventory is_consumable flag for a set of part
+// codes. HTML reads this off the in-memory allInventory cache
+// (isConsumableCode, index.html:6114) — there is no such cache here, so the
+// codes are fetched on demand. Returns UPPERCASED codes flagged consumable.
+export const fetchConsumableCodes = async (codes: string[]): Promise<Set<string>> => {
+    const uniq = Array.from(new Set(codes.filter(Boolean)));
+    if (!uniq.length) return new Set();
+    try {
+        const { data } = await supabase.from('inventory').select('part_code, is_consumable').in('part_code', uniq);
+        return new Set((data || []).filter((r: any) => r.is_consumable).map((r: any) => String(r.part_code).toUpperCase()));
+    } catch { return new Set(); }
+};

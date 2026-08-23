@@ -28,7 +28,10 @@ export interface ApprovalSpare {
     code?: string;
     qty?: number;
     price?: number;
+    gst_pct?: number;
     requested?: boolean;
+    stock_deducted?: boolean;
+    warranty_chargeable?: boolean;
 }
 
 export interface EstimateForm {

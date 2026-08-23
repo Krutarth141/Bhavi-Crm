@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { isTicketCancelled } from '@/types/ticketStatus';
+import { saveWorkLog } from './myCallsService';
 
 const MYRPT_DONE_STATUSES = ['Closed', 'Delivered', 'Pending for Delivery', 'Repaired', 'Resolved By Phone', 'Customer Reject'];
 const MYRPT_PENDING_STATUSES = ['Pending Parts', 'Pending Customer Approval', 'Pending Engineer Stock', 'Pending Spare', 'Hold', 'Pending Repair Carry In', 'Pending Repair On Site', 'Pending Allocation', 'Pending Customer Arrival'];
@@ -169,14 +170,12 @@ export const loadEngDailyReport = async (
 
 // ─── Engineer's own Daily Report (self-submission) ───────────────────────────
 // Mirrors HTML's openDailyReport()/drAutoFillCalls()/saveDailyReport()
-// (index.html:13211-13811) — call-summary counts, pending backlog, petrol KM
-// and remarks. The office-work/payment/review/site-visit sub-forms embedded
-// in HTML's monolithic modal are intentionally not ported here: this app
-// already has dedicated Field Tasks, Payment Collection and Site Visits
-// screens for that data, so re-adding mini versions of them here would just
-// duplicate data entry. office_work/payment_details/google_reviews/
-// site_visits are still saved (as empty arrays) so the daily_reports row
-// shape matches HTML's exactly.
+// (index.html:14032-14098, 14521-14612) — call-summary counts, pending
+// backlog, the ENG002-only automation site-visit count, Office Work rows
+// (manual + today's already-logged Other Work shown read-only), Payment
+// rows, Google Review rows, petrol KM and remarks. `site_visits` (the legacy
+// top-level array, distinct from `auto_site_visits` on DrCallSummary above)
+// is still saved as `[]` — HTML never populates it from this form either.
 
 const PENDING_PARTS_STATUSES = ['Pending Parts', 'Pending Engineer Stock', 'Pending Spare'];
 const PENDING_APPROVAL_STATUSES = ['Pending Customer Approval'];
@@ -188,7 +187,63 @@ export interface DrCallSummary {
     warranty_total: number; nonwarranty_total: number; grand_total: number;
     pending_parts: number; pending_approval: number; pending_other: number; pending_calls: number;
     customer_reject: number;
+    // Automation site visits (ENG002 only). Deliberately NOT named site_visits/
+    // total_site_visits — those are pre-existing top-level report fields used
+    // for something else and kept for backward compat (index.html:14548-14551).
+    auto_site_visits: number;
 }
+
+// One manually-entered Office Work row (index.html:14257 addOfficeWorkRow).
+export interface DrOfficeWork { work_type: string; remark: string; from_time: string; to_time: string }
+
+// One Office Work item already logged live today via the Other Work page —
+// shown read-only and deliberately NOT folded into office_work, because the
+// daily digest already reads field_tasks independently and would double-count
+// it (index.html:14290-14299 + drAutoFillOfficeWork).
+export interface DrAutoOfficeWork { id: string; customer_name: string; notes: string; from_time: string; to_time: string }
+
+export interface DrPayment { customer: string; amount: number; mode: string }
+export interface DrGoogleReview { customer: string; stars: number }
+
+export const DR_OFFICE_WORK_TYPES = [
+    'Remote Support', 'Configuration', 'Estimation', 'Documentation',
+    'Follow-up Call', 'Billing / Invoice', 'Stock / Inventory', 'Training', 'Other',
+];
+
+// Payment modes MUST match tickets.payment_mode exactly (set at call-close in
+// the Payment Confirmation popup) or the Daily Report shows the wrong mode
+// (index.html:14330-14338).
+export const DR_PAYMENT_MODES = [
+    { value: 'Cash', label: '💵 Cash' },
+    { value: 'Online', label: '📱 Online' },
+    { value: 'Check', label: '🏦 Cheque' },
+    { value: 'Card', label: '💳 Card' },
+];
+
+// Today's Office Work already logged live via the Other Work page
+// (index.html:14235 drAutoFillOfficeWork).
+export const fetchDrAutoOfficeWork = async (engId: string, date: string): Promise<DrAutoOfficeWork[]> => {
+    try {
+        const { data } = await supabase.from('field_tasks')
+            .select('id, customer_name, notes, from_time, to_time, done_at')
+            .eq('assigned_to', engId).eq('task_type', 'Office Work').eq('status', 'Done').eq('done_date', date)
+            .order('done_at', { ascending: true });
+        return (data || []).map((t: any) => ({
+            id: String(t.id), customer_name: t.customer_name || 'Work', notes: t.notes || '',
+            from_time: t.from_time || '', to_time: t.to_time || '',
+        }));
+    } catch (err) { console.error('fetchDrAutoOfficeWork:', err); return []; }
+};
+
+// Completed automation site visits for the day — ENG002 only
+// (index.html:14511 drAutoFillSiteVisits).
+export const fetchDrAutoSiteVisitCount = async (engId: string, date: string): Promise<number> => {
+    try {
+        const { data } = await supabase.from('auto_site_visits').select('id')
+            .eq('created_by', engId).eq('visit_date', date).eq('visit_status', 'completed');
+        return (data || []).length;
+    } catch (err) { console.error('fetchDrAutoSiteVisitCount:', err); return 0; }
+};
 
 export interface DailyReportRecord {
     id: number;
@@ -208,6 +263,7 @@ const emptyCallSummary = (): DrCallSummary => ({
     nw_breakdown: 0, nw_repeat: 0, nw_other: 0, nw_delivery: 0, nw_resolved_phone: 0,
     warranty_total: 0, nonwarranty_total: 0, grand_total: 0,
     pending_parts: 0, pending_approval: 0, pending_other: 0, pending_calls: 0, customer_reject: 0,
+    auto_site_visits: 0,
 });
 
 // Mirrors HTML's drAutoFillCalls() call-type bucketing + pending backlog +
@@ -250,6 +306,9 @@ export const fetchDailyReportAutofill = async (engId: string, date: string): Pro
         const { data: rejectTickets } = await supabase.from('tickets').select('status, timeline')
             .eq('assigned_to', engId).eq('status', 'Customer Reject');
         cs.customer_reject = (rejectTickets || []).filter((t: any) => tlEntryDate(engRejectEntry(t.timeline || [])) === date).length;
+
+        // Automation site visits — ENG002 only (index.html:14079-14083).
+        if (engId === 'ENG002') cs.auto_site_visits = await fetchDrAutoSiteVisitCount(engId, date);
     } catch (err) { console.error('fetchDailyReportAutofill:', err); }
 
     cs.warranty_total = cs.w_install + cs.w_breakdown + cs.w_repeat + cs.w_resolved_phone;
@@ -279,9 +338,22 @@ export const fetchDailyReportAutofill = async (engId: string, date: string): Pro
 
 export const saveDailyReportSelf = async (params: {
     engId: string; engName: string; date: string; callSummary: DrCallSummary; petrolKm: number; remarks: string;
+    officeWork?: DrOfficeWork[]; payments?: DrPayment[]; googleReviews?: DrGoogleReview[]; memberRole?: string;
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         const cs = params.callSummary;
+        // Only rows with a work type count (index.html:14559).
+        const officeWork = (params.officeWork || []).filter((o) => o.work_type.trim());
+        // A row counts if it has a name or a nonzero amount (index.html:14574).
+        const payments = (params.payments || []).filter((p) => p.customer.trim() || p.amount > 0);
+        const totalAmt = payments.reduce((s, p) => s + (p.amount || 0), 0);
+        const googleReviews = (params.googleReviews || []).filter((g) => g.customer.trim() && g.stars);
+
+        // Hard validation — a nonzero amount MUST name a mode (index.html:14580).
+        if (payments.some((p) => p.amount > 0 && !p.mode)) {
+            return { success: false, error: '💳 One or more Payment rows has an amount but no Mode (Cash/Online/Cheque/Card) selected — pick the mode, then Save.' };
+        }
+
         const { error } = await supabase.from('daily_reports').insert([{
             eng_id: params.engId, eng_name: params.engName, report_date: params.date,
             site_visits: [], total_site_visits: cs.grand_total,
@@ -292,13 +364,26 @@ export const saveDailyReportSelf = async (params: {
             total_calls: cs.grand_total || 0,
             pending_calls: cs.pending_calls || 0,
             call_summary: cs,
-            office_work: [], total_office_work: 0,
-            payment_details: [], total_amount: 0,
+            office_work: officeWork, total_office_work: officeWork.length,
+            payment_details: payments, total_amount: totalAmt,
             petrol_km: params.petrolKm,
-            google_reviews: [], total_reviews: 0,
+            google_reviews: googleReviews, total_reviews: googleReviews.length,
             remarks: params.remarks,
         }]);
         if (error) throw error;
+
+        // An Office Work entry with a time range also creates a matching Work Log
+        // row, so the day's full picture (travel / ticket work / office work)
+        // shows up in one place (index.html:14614-14628).
+        for (const ow of officeWork) {
+            if (!ow.from_time || !ow.to_time) continue;
+            await saveWorkLog({
+                eng_id: params.engId, eng_name: params.engName, member_role: params.memberRole || 'Engineer',
+                log_date: params.date, from_time: ow.from_time, to_time: ow.to_time,
+                task_description: `🏢 Office Work — ${ow.work_type}${ow.remark ? ' — ' + ow.remark : ''}`,
+                ticket_id: null, log_type: 'work',
+            } as any);
+        }
         return { success: true };
     } catch (err) { return { success: false, error: (err as any).message }; }
 };

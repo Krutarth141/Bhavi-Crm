@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useMyCalls } from '@/hooks/useMyCalls';
-import { punchIn, punchOut, fetchPrevLocationMap, PrevLocation, startReturnTrip, finishReturnTrip, needsClosingKm } from '@/services/myCallsService';
+import {
+  punchIn, punchOut, fetchPrevLocationMap, PrevLocation, startReturnTrip, finishReturnTrip, needsClosingKm,
+  startLocationTracking, stopLocationTracking, saveLocationEvent,
+} from '@/services/myCallsService';
 import { colors, styles } from '@/styles/ticketsStyles';
 import PunchModal from './PunchModal';
 import KmCaptureModal from './tickets/KmCaptureModal';
@@ -12,10 +15,16 @@ import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
 import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
-import { updateTicketStatus, fetchTicketById } from '@/services/engineerUpdateService';
+import {
+  updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
+  needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes,
+} from '@/services/engineerUpdateService';
+import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
+import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import {
   fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports, hasDailyReportToday,
-  DrCallSummary, DailyReportRecord,
+  fetchDrAutoOfficeWork, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
+  DrCallSummary, DailyReportRecord, DrOfficeWork, DrAutoOfficeWork, DrPayment, DrGoogleReview,
 } from '@/services/engDailyReportService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
 import { WorkPanel, VISIT_BLOCKED_STATUSES } from './EngineerUpdateScreen';
@@ -25,7 +34,9 @@ import PartIndentModal from './tickets/PartIndentModal';
 import MSCDispatchPanel from './tickets/MSCDispatchPanel';
 import { isCspManager } from '@/lib/permissions';
 import { createTicket, ensureGroupId } from '@/services/ticketService';
-import { useTicketForm } from '@/hooks/useTicketForm';
+import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
+import { fetchBrands, fetchSubCategories } from '@/services/masterService';
+import { Brand, SubCategory } from '@/types/masters';
 import { fetchTargets } from '@/services/targetsService';
 import { EngineerTarget } from '@/types/targets';
 import { approveTicket, rejectTicket, removeApprovalPart } from '@/services/customerApprovalService';
@@ -88,6 +99,36 @@ export default function MyCallsScreen() {
   const [newCallSaving, setNewCallSaving] = useState(false);
   const [groupBanner, setGroupBanner] = useState<{ groupId: string; anchor: any } | null>(null);
 
+  // Brand + Sub-Category masters — the New Call form needs both because
+  // wc_type is derived from them (index.html:5688, deriveWcType).
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  useEffect(() => {
+    if (!newCallOpen) return;
+    if (brands.length) return;
+    fetchBrands().then(setBrands).catch(() => setBrands([]));
+    fetchSubCategories().then(setSubCategories).catch(() => setSubCategories([]));
+  }, [newCallOpen, brands.length]);
+  const subCatsForBrand = subCategories.filter((s) => !callForm.brand_id || s.brand_id === callForm.brand_id);
+
+  // "Canon received" date + 24h time. HTML injects the same date + hour-select
+  // + minute-number control here (index.html:5319-5321, _tat12Controls) and
+  // derives tat_date from it as received + 24h (autoCalcCallTAT).
+  const [canonRecv, setCanonRecv] = useState({ date: '', hh: '00', mm: '00' });
+  const applyCanonRecv = (next: { date: string; hh: string; mm: string }) => {
+    setCanonRecv(next);
+    if (!next.date) { setCallFormValues({ tat_date: '' }); return; }
+    const [y, m, d] = next.date.split('-').map((n) => parseInt(n, 10));
+    const h = Math.min(23, Math.max(0, parseInt(next.hh, 10) || 0));
+    const mi = Math.min(59, Math.max(0, parseInt(next.mm, 10) || 0));
+    const recv = new Date(y, (m || 1) - 1, d || 1, h, mi, 0, 0);
+    if (isNaN(recv.getTime())) { setCallFormValues({ tat_date: '' }); return; }
+    // NOTE: HTML additionally pushes the deadline past any consecutive holiday
+    // days (isHolidayDate). This port has no holiday master at all, so it is a
+    // plain +24h.
+    setCallFormValues({ tat_date: new Date(recv.getTime() + 24 * 3600000).toISOString() });
+  };
+
   // Daily Report / Past Reports — mirrors HTML's My Calls header buttons.
   const [dailyReportOpen, setDailyReportOpen] = useState(false);
   const [pastReportsOpen, setPastReportsOpen] = useState(false);
@@ -98,11 +139,25 @@ export default function MyCallsScreen() {
   const [expandedAddr, setExpandedAddr] = useState<string | null>(null);
   const [updateTicket, setUpdateTicket] = useState<any | null>(null);
   const [updateForm, setUpdateForm] = useState({
-    newStatus: '', note: '', labour: '', faultCode: '',
+    newStatus: '', note: '', labour: '', faultCode: '', workDone: '',
     seCallId: '', pageCount: '', pageCountSkip: false, pageCountSkipReason: '',
     otherCharge: '', visitDate: '', visitIn: '', visitOut: '', meterStart: '', meterEnd: '', mscCenter: '',
   });
   const [updateSaving, setUpdateSaving] = useState(false);
+
+  // Spares list as edited in the Update modal — HTML's `currentSpares`
+  // (index.html:7073). Removals live here until the whole form is saved.
+  const [updateSpares, setUpdateSpares] = useState<TicketSpare[]>([]);
+  // Which of the spares' part codes are flagged is_consumable in Inventory, so
+  // the CONS badge and the ₹0-under-warranty pricing match HTML's
+  // isChargeableSpare()/_spareHidesPrice() (index.html:6114-6131, 7650-7657).
+  const [consumableCodes, setConsumableCodes] = useState<Set<string>>(new Set());
+  // Attachments: slot 0 = Job Sheet (mandatory for CSP closes), slots 1-2 extra
+  // (index.html:7293-7300, 7319-7322).
+  const [updatePhotos, setUpdatePhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
+  // Payment Confirmation popup (index.html:7936-7961 / 16289).
+  const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
 
   // Visit/Work panel + warranty/parts — mirrors EngineerUpdateScreen's fuller
   // Update modal (matches HTML's single shared openEngUpdate() everywhere).
@@ -217,10 +272,42 @@ export default function MyCallsScreen() {
   };
 
   const handleSaveNewCall = async () => {
-    if (!callForm.cname || !callForm.mobile || !callForm.serial) { alert('❌ Fill required fields'); return; }
+    // index.html:5704-5707 — Call Type, then Service Charges for a chargeable
+    // call type, then the core identifying fields.
+    if (!callForm.call_type) { alert('⚠️ Call Type is required! Please select Warranty / Non-Warranty / AMC etc.'); return; }
+    const chargeableCallType = ['Non-Warranty', 'Non-Warranty Repeat', 'Other'].includes(callForm.call_type);
+    if (chargeableCallType && !callForm.service_charges && callForm.service_charges !== 0) {
+      alert('⚠️ Service Charge is required for Non-Warranty calls!'); return;
+    }
+    if (!callForm.model || !callForm.serial || !callForm.cname || !callForm.mobile || !callForm.problem) {
+      alert('Fill: Model, Serial, Customer, Mobile, Problem'); return;
+    }
     setNewCallSaving(true);
-    const ticketData: any = { ...callForm };
+
+    // brand_id / subcategory_id are form-only master ids (no such ticket
+    // columns); address2 and subcategory_name are folded in below.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { address2, brand_id, subcategory_id, subcategory_name, ...rest } = callForm;
+    const ticketData: any = {
+      ...rest,
+      // Address line 1 + line 2 collapse into the single address column (index.html:5687).
+      address: `${(callForm.address || '').trim()}${address2.trim() ? ', ' + address2.trim() : ''}`,
+      // Warranty coverage follows the call type (index.html:5699).
+      warranty_coverage: (callForm.call_type === 'Warranty' || callForm.call_type === 'Warranty Repeat') ? 'Under Coverage' : 'NA',
+      // Only a chargeable call type carries a service charge (index.html:5677).
+      service_charges: chargeableCallType ? (Number(callForm.service_charges) || 0) : 0,
+      // In "Add Product (Same Customer)" mode the Sub-Category field is not
+      // reachable, so the anchor call's own wc_type is kept (HTML copies it
+      // from the anchor best-effort for the same reason, index.html:5713-5716).
+      wc_type: groupBanner
+        ? (groupBanner.anchor.wc_type || deriveWcType(subcategory_name, callForm.brand_name, roleType, engName))
+        : deriveWcType(subcategory_name, callForm.brand_name, roleType, engName),
+      tat_date: callForm.tat_date || null,
+      timeline: [{ action: 'Call Logged', by: engName, at: new Date().toISOString() }],
+      spares: [],
+    };
     if (groupBanner) ticketData.group_id = groupBanner.groupId;
+
     const result = await createTicket(ticketData);
     setNewCallSaving(false);
     if (!result.success) { alert('❌ Error: ' + result.error); return; }
@@ -228,6 +315,7 @@ export default function MyCallsScreen() {
     setNewCallOpen(false);
     setGroupBanner(null);
     resetCallForm();
+    setCanonRecv({ date: '', hh: '00', mm: '00' });
     await refetch();
   };
 
@@ -240,10 +328,49 @@ export default function MyCallsScreen() {
     const allowed = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage);
     setUpdateForm({
       newStatus: allowed[0] || '', note: '', labour: String(t.labor || t.service_charges || ''), faultCode: t.fault_code || '',
+      workDone: t.work_done || '',
       seCallId: t.se_call_id || '', pageCount: t.page_count != null ? String(t.page_count) : '', pageCountSkip: false, pageCountSkipReason: '',
       otherCharge: t.other_charge != null ? String(t.other_charge) : '', visitDate: t.visit_date || '', visitIn: t.visit_in || '', visitOut: t.visit_out || '',
       meterStart: t.meter_start || '', meterEnd: t.meter_end || '', mscCenter: '',
     });
+    const spares: TicketSpare[] = t.spares || [];
+    setUpdateSpares(spares);
+    fetchSpareConsumableCodes(spares).then(setConsumableCodes);
+    // Preload existing photos: slot 0 = jobsheet, slots 1-2 = extras
+    // (index.html:7319-7322).
+    let ex = t.attachments;
+    if (typeof ex === 'string') { try { ex = JSON.parse(ex); } catch { ex = []; } }
+    const slots: (PhotoSlot | null)[] = [t.jobsheet_photo ? { url: t.jobsheet_photo, isNew: false } : null, null, null];
+    if (Array.isArray(ex)) ex.slice(0, 2).forEach((u: string, i: number) => { if (u) slots[i + 1] = { url: u, isNew: false }; });
+    setUpdatePhotos(slots);
+    setPaymentPrompt(null);
+  };
+
+  // Warranty/AMC (and not Out of Coverage) calls never bill the customer for a
+  // part — the price shows ₹0 there. EXCEPT a Consumable, which is billed even
+  // under warranty since Canon never covers those (index.html:7650-7656).
+  const spareHidesPrice = (s: TicketSpare) => {
+    if (!updateTicket) return false;
+    if (isChargeableSpare(s, consumableCodes)) return false;
+    const isW = ['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '');
+    return isW && updateTicket.warranty_coverage !== 'Out of Coverage';
+  };
+
+  // index.html:7659 refreshEstimateTotal()
+  const sparesPartsTotal = updateSpares.reduce((a, s) => a + (spareHidesPrice(s) ? 0 : (Number(s.qty) || 1) * (Number(s.price) || 0)), 0);
+  const estimateTotal = sparesPartsTotal + (Number(updateForm.labour) || 0) + (Number(updateForm.otherCharge) || 0);
+
+  const removeUpdateSpare = (i: number) => setUpdateSpares((prev) => prev.filter((_, idx) => idx !== i));
+
+  // Reads a picked file as a data: URL, matching HTML's onJsPhotoPick(). Camera
+  // vs gallery is just the `capture` attribute on the input.
+  const onPickPhoto = (slot: number, file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setUpdatePhotos((prev) => { const next = [...prev]; next[slot] = { url: String(reader.result), isNew: true }; return next; });
+    };
+    reader.readAsDataURL(file);
   };
 
   const allowedForUpdate = updateTicket
@@ -340,6 +467,29 @@ export default function MyCallsScreen() {
 
   const workPanel = updateTicket ? computeWorkPanel(updateTicket) : null;
 
+  // Performs the actual save. Called directly, or from the Payment
+  // Confirmation popup's Confirm button (mirrors HTML's _doSaveEngUpdate).
+  const doTicketUpdateSave = async (payment?: PaymentConfirmData) => {
+    if (!updateTicket) return;
+    setUpdateSaving(true);
+    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, engName, updateForm.faultCode, {
+      seCallId: updateForm.seCallId, pageCount: updateForm.pageCount, pageCountSkip: updateForm.pageCountSkip, pageCountSkipReason: updateForm.pageCountSkipReason,
+      otherCharge: updateForm.otherCharge, visitDate: updateForm.visitDate, visitIn: updateForm.visitIn, visitOut: updateForm.visitOut,
+      meterStart: updateForm.meterStart, meterEnd: updateForm.meterEnd, mscCenter: updateForm.mscCenter,
+      workDone: updateForm.workDone, spares: updateSpares, photos: updatePhotos, payment,
+      engId, memberRole,
+    });
+    setUpdateSaving(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    if (r.stockWarning) alert(r.stockWarning);
+    if (r.finalStatus && r.finalStatus !== updateForm.newStatus) {
+      alert(`✅ Saved — status set to "${r.finalStatus}".`);
+    }
+    setPaymentPrompt(null);
+    setUpdateTicket(null);
+    refetch();
+  };
+
   const handleTicketUpdateSave = async () => {
     if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
     if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && !updateForm.pageCount && !updateForm.pageCountSkip) {
@@ -348,15 +498,42 @@ export default function MyCallsScreen() {
     if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && updateForm.pageCountSkip && !updateForm.pageCountSkipReason.trim()) {
       alert('Reason is mandatory when skipping Page Count'); return;
     }
+
+    // All the close guards (Work Start / unapproved parts / missing physical
+    // stock / CSP job sheet) run before anything is written — a blocked close
+    // leaves the ticket completely untouched (index.html:7710-7803, 7890-7893).
     setUpdateSaving(true);
-    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, engName, updateForm.faultCode, {
-      seCallId: updateForm.seCallId, pageCount: updateForm.pageCount, pageCountSkip: updateForm.pageCountSkip, pageCountSkipReason: updateForm.pageCountSkipReason,
-      otherCharge: updateForm.otherCharge, visitDate: updateForm.visitDate, visitIn: updateForm.visitIn, visitOut: updateForm.visitOut,
-      meterStart: updateForm.meterStart, meterEnd: updateForm.meterEnd, mscCenter: updateForm.mscCenter,
-    });
+    const blocked = await validateEngineerUpdate(
+      updateTicket, updateForm.newStatus, updateForm.workDone, updateSpares, engName, updatePhotos[0]?.url
+    );
     setUpdateSaving(false);
-    if (r.success) { setUpdateTicket(null); refetch(); }
-    else alert('Error: ' + r.error);
+    if (blocked) { alert(blocked); return; }
+
+    // Payment Confirmation popup, when this close involves real money
+    // (index.html:7936-7961). The popup pre-fills from the charges that the
+    // save is about to compute, so it opens filled in rather than blank.
+    const charges = computeCloseCharges(updateTicket, updateForm.newStatus, updateSpares, consumableCodes);
+    if (needsPaymentConfirmation(updateTicket, updateForm.newStatus, charges)) {
+      const parts = paymentPartsCost(updateTicket, updateSpares, consumableCodes);
+      setPaymentPrompt({ serviceCharges: charges.serviceCharges, partsCost: parts });
+      setPaymentForm({
+        cname: updateTicket.cname || '', service: charges.serviceCharges.toFixed(0), parts: parts.toFixed(0), mode: '', notes: '',
+      });
+      return;
+    }
+
+    await doTicketUpdateSave();
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!paymentForm.mode) { alert('Please select a payment mode.'); return; }
+    await doTicketUpdateSave({
+      cname: paymentForm.cname.trim(),
+      payment_mode: paymentForm.mode,
+      service_charges: Number(paymentForm.service) || 0,
+      parts_cost: Number(paymentForm.parts) || 0,
+      payment_notes: paymentForm.notes.trim(),
+    });
   };
 
   const openEstimateApproval = () => {
@@ -446,7 +623,11 @@ export default function MyCallsScreen() {
         lat: data.lat,
         lng: data.lng,
       });
-      if (result.success) refetch();
+      if (result.success) {
+        // Start live GPS tracking for the day (index.html:4359-4361).
+        startLocationTracking(engId, engName);
+        refetch();
+      }
       return result;
     } else {
       const currentTime = new Date().toTimeString().slice(0, 5);
@@ -459,7 +640,16 @@ export default function MyCallsScreen() {
         lng: data.lng,
         lateRemark: data.remark,
       });
-      if (result.success) refetch();
+      if (result.success) {
+        // One final GPS point, then stop tracking (index.html:4742).
+        saveLocationEvent(
+          'punch_out', null,
+          data.lat != null && data.lng != null ? { lat: data.lat, lng: data.lng, accuracy: 0 } : null,
+          engId, engName
+        ).catch(() => undefined);
+        stopLocationTracking();
+        refetch();
+      }
       return result;
     }
   };
@@ -530,7 +720,6 @@ export default function MyCallsScreen() {
       </div>
     );
   }
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '20px', backgroundColor: colors.bg, minHeight: '100vh' }}>
@@ -612,7 +801,7 @@ export default function MyCallsScreen() {
         />
       )}
       {forcedDailyReport && (
-        <DailyReportModal engId={engId} engName={engName} forcedHint onClose={() => { setForcedDailyReport(false); setPunchModalMode('out'); }} />
+        <DailyReportModal engId={engId} engName={engName} memberRole={memberRole} forcedHint onClose={() => { setForcedDailyReport(false); setPunchModalMode('out'); }} />
       )}
       {punchModalMode && (
         <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
@@ -897,7 +1086,7 @@ export default function MyCallsScreen() {
       </div>
 
       {dailyReportOpen && (
-        <DailyReportModal engId={engId} engName={engName} onClose={() => setDailyReportOpen(false)} />
+        <DailyReportModal engId={engId} engName={engName} memberRole={memberRole} onClose={() => setDailyReportOpen(false)} />
       )}
       {pastReportsOpen && (
         <PastReportsPanel engId={engId} onClose={() => setPastReportsOpen(false)} />
@@ -967,6 +1156,25 @@ export default function MyCallsScreen() {
                     {allowedForUpdate.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
+                {/* Action Taken — required on any status-changing save, and it
+                    doubles as the mandatory cancellation reason when the new
+                    status is Call Cancel (index.html:7269, 7701, 7808). */}
+                <div style={styles.formGroup}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={styles.formLabel}>
+                      Action Taken <span style={{ color: '#dc2626' }}>*</span>
+                      {updateForm.newStatus === 'Call Cancel' && <span style={{ fontWeight: 400, fontSize: 11, color: '#b45309' }}> — this is the cancellation reason</span>}
+                    </label>
+                    <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, workDone: text }))} />
+                  </div>
+                  <textarea
+                    value={updateForm.workDone}
+                    onChange={(e) => setUpdateForm((f) => ({ ...f, workDone: e.target.value }))}
+                    rows={2}
+                    placeholder="What was done?"
+                    style={{ ...styles.formInput, resize: 'vertical' }}
+                  />
+                </div>
                 {updateForm.newStatus === 'Sent to MSC' && (
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>MSC Center</label>
@@ -997,28 +1205,95 @@ export default function MyCallsScreen() {
                     </div>
                   </div>
                 )}
-                {updateForm.newStatus === 'Closed' && (
-                  <>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>Service / Labour ₹</label>
-                        <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                {/* Spares / Part Request list — index.html:7281-7286 + spareRow()
+                    at 7657. Editable here (✕ removes); removals persist to
+                    tickets.spares when the whole form is saved. */}
+                <div>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔩 Spares / Part Request</h3>
+                  {updateSpares.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>No parts added.</div>
+                  ) : updateSpares.map((s, i) => {
+                    const gp = s.gst_pct != null ? s.gst_pct : 18;
+                    const hidePrice = spareHidesPrice(s);
+                    const isCons = isChargeableSpare(s, consumableCodes);
+                    return (
+                      <div key={`${s.code || 'x'}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13, background: '#f9fafb', borderRadius: 8, padding: '6px 10px' }}>
+                        <span style={{ flex: 1, color: colors.primary, fontWeight: 600 }}>
+                          {s.code || '-'}
+                          {isCons && <span style={{ fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 4px', borderRadius: 4, marginLeft: 4 }}>CONS</span>}
+                        </span>
+                        <span style={{ flex: 2 }}>{s.name}</span>
+                        <span style={{ flex: 0.5 }}>×{s.qty}</span>
+                        <span style={{ flex: 0.7, textAlign: 'center', color: '#7c3aed', fontSize: 11 }}>GST {gp}%</span>
+                        <span style={{ flex: 1, textAlign: 'right', fontWeight: 700 }}>
+                          {hidePrice ? <span style={{ color: '#059669' }}>₹0 (W)</span> : `₹${((Number(s.qty) || 1) * (Number(s.price) || 0)).toFixed(2)}`}
+                        </span>
+                        <button onClick={() => removeUpdateSpare(i)} style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}>✕</button>
                       </div>
-                      <div style={styles.formGroup}>
-                        <label style={styles.formLabel}>Other Charges ₹</label>
-                        <input type="number" value={updateForm.otherCharge} onChange={(e) => setUpdateForm((f) => ({ ...f, otherCharge: e.target.value }))} style={styles.formInput} placeholder="0" />
-                      </div>
+                    );
+                  })}
+                </div>
+                {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && updateTicket.warranty_coverage !== 'Out of Coverage' ? (
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e3a8a' }}>Warranty — no charges</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Service / Labour ₹ (incl. GST)</label>
+                      <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
                     </div>
-                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontWeight: 700, color: '#1e3a8a', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Estimate Total</span>
-                      <span>₹{(
-                        (updateTicket.spares || []).reduce((s: number, sp: any) => s + (Number(sp.price) || 0) * (Number(sp.qty) || 1), 0)
-                        + (Number(updateForm.labour) || 0)
-                        + (Number(updateForm.otherCharge) || 0)
-                      )}</span>
+                    <div style={styles.formGroup}>
+                      <label style={styles.formLabel}>Other ₹</label>
+                      <input type="number" value={updateForm.otherCharge} onChange={(e) => setUpdateForm((f) => ({ ...f, otherCharge: e.target.value }))} style={styles.formInput} placeholder="0" />
                     </div>
-                  </>
+                  </div>
                 )}
+                {estimateTotal > 0 && (
+                  <div style={{ background: '#f0fdf4', border: '1.5px solid #16a34a', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    {sparesPartsTotal > 0 && <span>🔩 Parts: <b>₹{sparesPartsTotal.toFixed(0)}</b></span>}
+                    {Number(updateForm.labour) > 0 && <span>🔧 Service: <b>₹{Number(updateForm.labour).toFixed(0)}</b></span>}
+                    {Number(updateForm.otherCharge) > 0 && <span>📎 Other: <b>₹{Number(updateForm.otherCharge).toFixed(0)}</b></span>}
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#0d9488' }}>= TOTAL: ₹{estimateTotal.toFixed(0)}</span>
+                  </div>
+                )}
+
+                {/* Attachments — Job Sheet (slot 0) + up to 2 extras. Mandatory
+                    to close a CSP call, On Site or Carry In (index.html:7293-7300,
+                    7890-7893). Camera or gallery both work. */}
+                <div style={{ background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 10, padding: 12 }}>
+                  <label style={{ fontWeight: 700, color: '#0369a1', fontSize: 13 }}>
+                    📎 Attachments {updateTicket.wc_type === 'CSP' && <span style={{ color: '#dc2626' }}>*</span>}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
+                      {' '}— Job Sheet photo{updateTicket.wc_type === 'CSP' ? ' is mandatory to Close (CSP call)' : ' (optional, ICP call)'}. Up to 2 extra photos (printer report etc.).
+                    </span>
+                  </label>
+                  {[0, 1, 2].map((slot) => (
+                    <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
+                      <span style={{ width: 92, fontWeight: 700, color: '#0369a1' }}>{slot === 0 ? '📄 Job Sheet' : `📎 Extra ${slot}`}</span>
+                      {updatePhotos[slot] ? (
+                        <>
+                          <a href={updatePhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 600 }}>
+                            {updatePhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
+                          </a>
+                          <button
+                            onClick={() => setUpdatePhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
+                            style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
+                          >✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <label style={{ background: '#0369a1', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                            📷 Camera
+                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
+                          </label>
+                          <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                            📁 Gallery
+                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <div style={styles.formGroup}>
                   <label style={styles.formLabel}>Fault Code</label>
                   <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
@@ -1058,7 +1333,6 @@ export default function MyCallsScreen() {
           </div>
         </Modal>
       )}
-
       {warrantyModalOpen && updateTicket && (
         <WarrantyClaimModal
           ticket={updateTicket}
@@ -1084,6 +1358,64 @@ export default function MyCallsScreen() {
           onDone={async () => { setPartIndentOpen(false); setUpdateTicket(null); await refetch(); }}
         />
       )}
+      {/* Payment Confirmation — index.html:16289 showPaymentConfirmation.
+          Shown on a Non-Warranty/'Other' On-Site close, or a Warranty On-Site
+          close that ended up with a chargeable consumable. */}
+      {paymentPrompt && updateTicket && (
+        <Modal
+          isOpen
+          onClose={() => setPaymentPrompt(null)}
+          title="💳 Payment Confirmation"
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPaymentPrompt(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button
+                onClick={handleConfirmPayment}
+                disabled={updateSaving}
+                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: updateSaving ? 0.6 : 1 }}
+              >
+                {updateSaving ? 'Saving...' : '✅ Confirm & Close'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Customer Name</label>
+              <input type="text" value={paymentForm.cname} onChange={(e) => setPaymentForm((f) => ({ ...f, cname: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Service Charges (₹)</label>
+              <input type="number" value={paymentForm.service} onChange={(e) => setPaymentForm((f) => ({ ...f, service: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Parts Cost (₹)</label>
+              <input type="number" value={paymentForm.parts} onChange={(e) => setPaymentForm((f) => ({ ...f, parts: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, borderLeft: '4px solid #15803d' }}>
+              <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700 }}>Total Amount (₹)</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>
+                {((Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0)).toFixed(0)}
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Payment Mode *</label>
+              <select value={paymentForm.mode} onChange={(e) => setPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
+                <option value="">— Select —</option>
+                <option value="Cash">💵 Cash</option>
+                <option value="Online">💻 Online</option>
+                <option value="Check">📋 Cheque</option>
+                <option value="Card">💳 Card</option>
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Additional Notes</label>
+              <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional notes..." style={{ ...styles.formInput, resize: 'vertical' }} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {approvalOpen && updateTicket && (
         <Modal
           isOpen
@@ -1291,6 +1623,10 @@ export default function MyCallsScreen() {
                 <input type="text" name="pin" value={callForm.pin} onChange={handleCallFormChange} style={styles.formInput} />
               </div>
               <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Email</label>
+                <input type="email" name="email" value={callForm.email} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Area</label>
                 <input type="text" name="area" value={callForm.area} onChange={handleCallFormChange} style={styles.formInput} />
               </div>
@@ -1299,11 +1635,41 @@ export default function MyCallsScreen() {
                 <input type="text" name="address" value={callForm.address} onChange={handleCallFormChange} style={styles.formInput} />
               </div>
               <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Address line 2</label>
+                <input type="text" name="address2" value={callForm.address2} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              {/* Brand + Sub-Category drive wc_type (index.html:5688) — which
+                  Work Controller's reports this call lands under. */}
+              <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Brand</label>
-                <input type="text" name="brand_name" value={callForm.brand_name} onChange={handleCallFormChange} style={styles.formInput} />
+                <select
+                  value={callForm.brand_id}
+                  onChange={(e) => {
+                    const b = brands.find((x) => x.id === e.target.value);
+                    setCallFormValues({ brand_id: e.target.value, brand_name: b?.name || '', subcategory_id: '', subcategory_name: '' });
+                  }}
+                  style={styles.formInput}
+                >
+                  <option value="">-- Select Brand --</option>
+                  {brands.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
+                </select>
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Model</label>
+                <label style={styles.formLabel}>Sub-Category</label>
+                <select
+                  value={callForm.subcategory_id}
+                  onChange={(e) => {
+                    const sc = subCategories.find((x) => x.id === e.target.value);
+                    setCallFormValues({ subcategory_id: e.target.value, subcategory_name: sc?.name || '' });
+                  }}
+                  style={styles.formInput}
+                >
+                  <option value="">-- All / General --</option>
+                  {subCatsForBrand.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Model *</label>
                 <input type="text" name="model" value={callForm.model} onChange={handleCallFormChange} style={styles.formInput} />
               </div>
               <div style={styles.formGroup}>
@@ -1311,14 +1677,92 @@ export default function MyCallsScreen() {
                 <input type="text" name="serial" value={callForm.serial} onChange={handleCallFormChange} style={styles.formInput} />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Call Type</label>
+                <label style={styles.formLabel}>Call Type *</label>
                 <select name="call_type" value={callForm.call_type} onChange={handleCallFormChange} style={styles.formInput}>
-                  {['Warranty', 'Non-Warranty', 'AMC'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                  <option value="">-- Select --</option>
+                  {['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat', 'Other'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                </select>
+              </div>
+              {/* Service Type — On Site vs Carry In decides the whole status
+                  flow and the stock location used at close (index.html:5327). */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Service Type *</label>
+                <select name="service_type" value={callForm.service_type} onChange={handleCallFormChange} style={styles.formInput}>
+                  {['On Site', 'Carry In'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                </select>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Priority</label>
+                <select name="priority" value={callForm.priority} onChange={handleCallFormChange} style={styles.formInput}>
+                  {['Normal', 'High', 'Urgent', 'Low'].map((o) => (<option key={o} value={o}>{o}</option>))}
                 </select>
               </div>
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>SE Call ID</label>
                 <input type="text" name="se_call_id" value={callForm.se_call_id} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Physical Job Sheet No.</label>
+                <input type="text" name="phys_js" value={callForm.phys_js} onChange={handleCallFormChange} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Re-Repair</label>
+                <select
+                  value={callForm.rerepair ? 'Yes' : 'No'}
+                  onChange={(e) => setCallFormValues({ rerepair: e.target.value === 'Yes', rerepair_foc: e.target.value === 'Yes' ? callForm.rerepair_foc : false })}
+                  style={styles.formInput}
+                >
+                  {['No', 'Yes'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                </select>
+              </div>
+              {callForm.rerepair && (
+                <div style={{ ...styles.formGroup, alignSelf: 'end' }}>
+                  <label style={styles.formLabel}>Re-Repair charges</label>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 13, paddingTop: 6 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                      <input type="radio" name="rr-charges" checked={!callForm.rerepair_foc} onChange={() => setCallFormValues({ rerepair_foc: false })} />
+                      Chargeable
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                      <input type="radio" name="rr-charges" checked={callForm.rerepair_foc} onChange={() => setCallFormValues({ rerepair_foc: true })} />
+                      FOC (free)
+                    </label>
+                  </div>
+                </div>
+              )}
+              {/* Mandatory for a chargeable call type (index.html:5705). */}
+              {['Non-Warranty', 'Non-Warranty Repeat', 'Other'].includes(callForm.call_type) && (
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Service Charges ₹ <span style={{ color: '#dc2626' }}>*</span></label>
+                  <input type="number" name="service_charges" value={callForm.service_charges} onChange={handleCallFormChange} style={styles.formInput} />
+                </div>
+              )}
+            </div>
+            {/* Canon received → TAT deadline (index.html:5319-5321 + autoCalcCallTAT). */}
+            <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 10, padding: 12 }}>
+              <label style={{ ...styles.formLabel, color: '#92400e' }}>⏱ Canon received (date + time, 24h) — sets the TAT deadline</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+                <input type="date" value={canonRecv.date} onChange={(e) => applyCanonRecv({ ...canonRecv, date: e.target.value })} style={{ ...styles.formInput, width: 'auto' }} />
+                <select value={canonRecv.hh} onChange={(e) => applyCanonRecv({ ...canonRecv, hh: e.target.value })} style={{ ...styles.formInput, width: 'auto', fontWeight: 700 }}>
+                  {Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')).map((h) => (<option key={h} value={String(Number(h))}>{h}</option>))}
+                </select>
+                <span style={{ fontWeight: 800 }}>:</span>
+                <input type="number" min={0} max={59} value={canonRecv.mm} onChange={(e) => applyCanonRecv({ ...canonRecv, mm: e.target.value })} style={{ ...styles.formInput, width: 62, textAlign: 'center' }} />
+                <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 700 }}>(24h)</span>
+              </div>
+              {callForm.tat_date && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#92400e', fontWeight: 700 }}>
+                  ⏱ TAT Deadline: {new Date(callForm.tat_date).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })} (Canon received + 24h)
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>
+                <label style={styles.formLabel}>…or set the TAT deadline directly</label>
+                <input
+                  type="datetime-local"
+                  value={callForm.tat_date ? new Date(callForm.tat_date).toLocaleString('sv-SE').slice(0, 16).replace(' ', 'T') : ''}
+                  onChange={(e) => setCallFormValues({ tat_date: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                  style={styles.formInput}
+                />
               </div>
             </div>
             <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
@@ -1326,8 +1770,16 @@ export default function MyCallsScreen() {
               <textarea name="problem" value={callForm.problem} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
             </div>
             <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
-              <label style={styles.formLabel}>Description</label>
+              <label style={styles.formLabel}>Description / Detailed notes</label>
               <textarea name="description" value={callForm.description} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+            </div>
+            <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+              <label style={styles.formLabel}>Product Condition (as received)</label>
+              <textarea name="condition" value={callForm.condition} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
+            </div>
+            <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
+              <label style={styles.formLabel}>Accessories received</label>
+              <textarea name="accessories" value={callForm.accessories} onChange={handleCallFormChange} rows={2} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%' }} />
             </div>
           </div>
         </Modal>
@@ -1337,11 +1789,11 @@ export default function MyCallsScreen() {
 }
 
 // ─── Daily Report ────────────────────────────────────────────────────────────
-// Mirrors HTML's openDailyReport()/saveDailyReport() — call-summary counts
-// (auto-filled, editable), pending backlog, petrol KM and remarks. The
-// office-work/payment/review/site-visit sub-forms from HTML's monolithic
-// modal are intentionally left out — this app already has dedicated Field
-// Tasks, Payment Collection and Site Visits screens for that data.
+// Mirrors HTML's openDailyReport() (index.html:14032) / saveDailyReport()
+// (index.html:14521) — call-summary counts (auto-filled, editable), pending
+// backlog, the ENG002-only automation site-visit count, Office Work rows
+// (manual, plus today's already-logged Other Work shown read-only), Payment
+// rows, Google Review rows, petrol KM and remarks.
 
 const CALL_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
   { key: 'w_install', label: 'Warranty — Installation' },
@@ -1362,13 +1814,24 @@ const PENDING_SUMMARY_FIELDS: { key: keyof DrCallSummary; label: string }[] = [
   { key: 'customer_reject', label: 'Customer Reject (today)' },
 ];
 
-function DailyReportModal({ engId, engName, onClose, forcedHint }: { engId: string; engName: string; onClose: () => void; forcedHint?: boolean }) {
+function DailyReportModal({ engId, engName, memberRole, onClose, forcedHint }: { engId: string; engName: string; memberRole: string; onClose: () => void; forcedHint?: boolean }) {
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [cs, setCs] = useState<DrCallSummary | null>(null);
   const [petrolKm, setPetrolKm] = useState('');
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Office Work: manually-added rows + today's already-logged Other Work items
+  // shown read-only (index.html:14257 + 14235).
+  const [officeWork, setOfficeWork] = useState<DrOfficeWork[]>([]);
+  const [autoOfficeWork, setAutoOfficeWork] = useState<DrAutoOfficeWork[]>([]);
+  // Payment rows — HTML seeds three blank ones and caps at 5 (index.html:14098, 14319).
+  const [payments, setPayments] = useState<DrPayment[]>([
+    { customer: '', amount: 0, mode: '' }, { customer: '', amount: 0, mode: '' }, { customer: '', amount: 0, mode: '' },
+  ]);
+  // Google reviews — up to 10 rows (index.html:14100-14125).
+  const [reviews, setReviews] = useState<DrGoogleReview[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -1377,6 +1840,7 @@ function DailyReportModal({ engId, engName, onClose, forcedHint }: { engId: stri
       setPetrolKm(km ? String(km) : '');
       setLoading(false);
     });
+    fetchDrAutoOfficeWork(engId, date).then(setAutoOfficeWork).catch(() => setAutoOfficeWork([]));
   }, [engId, date]);
 
   const setField = (key: keyof DrCallSummary, v: string) => {
@@ -1385,11 +1849,22 @@ function DailyReportModal({ engId, engName, onClose, forcedHint }: { engId: stri
 
   const wTotal = cs ? cs.w_install + cs.w_breakdown + cs.w_repeat + cs.w_resolved_phone : 0;
   const nwTotal = cs ? cs.nw_breakdown + cs.nw_repeat + cs.nw_other + cs.nw_delivery + cs.nw_resolved_phone : 0;
+  const paymentTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+  const setOw = (i: number, patch: Partial<DrOfficeWork>) =>
+    setOfficeWork((prev) => prev.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
+  const setPay = (i: number, patch: Partial<DrPayment>) =>
+    setPayments((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  const setRev = (i: number, patch: Partial<DrGoogleReview>) =>
+    setReviews((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const handleSave = async () => {
     if (!cs) return;
     setSaving(true);
-    const r = await saveDailyReportSelf({ engId, engName, date, callSummary: cs, petrolKm: parseFloat(petrolKm) || 0, remarks });
+    const r = await saveDailyReportSelf({
+      engId, engName, date, callSummary: cs, petrolKm: parseFloat(petrolKm) || 0, remarks,
+      officeWork, payments, googleReviews: reviews, memberRole,
+    });
     setSaving(false);
     if (r.success) { alert('✅ Daily Report submitted!'); onClose(); }
     else alert('❌ ' + r.error);
@@ -1454,6 +1929,99 @@ function DailyReportModal({ engId, engName, onClose, forcedHint }: { engId: stri
                 </div>
               ))}
             </div>
+
+            {/* Automation site visits — ENG002 only (index.html:14079-14083). */}
+            {engId === 'ENG002' && (
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>🏗️ Automation Site Visits completed today (auto-filled)</label>
+                <input type="number" min={0} value={cs.auto_site_visits} onChange={(e) => setField('auto_site_visits', e.target.value)} style={styles.formInput} />
+              </div>
+            )}
+
+            {/* ── Office Work (index.html:14257 addOfficeWorkRow) ────────── */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>🏢 Office Work ({officeWork.length + autoOfficeWork.length})</span>
+              <button
+                onClick={() => setOfficeWork((prev) => [...prev, { work_type: '', remark: '', from_time: '', to_time: '' }])}
+                style={{ padding: '5px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+              >+ Add Row</button>
+            </div>
+            {/* Already logged live via Other Work — read-only, and deliberately
+                NOT resubmitted here (the digest reads field_tasks directly, so
+                folding these into office_work would double-count them). */}
+            {autoOfficeWork.map((t) => (
+              <div key={t.id} style={{ background: '#f5f3ff', borderRadius: 8, padding: 10, border: '1px solid #ddd6fe', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <div>
+                  <b style={{ color: '#5b21b6' }}>{t.customer_name}</b>
+                  {t.notes && ` — ${t.notes}`}
+                  {t.from_time && t.to_time && <span style={{ color: '#7c3aed' }}> ({t.from_time} – {t.to_time})</span>}
+                </div>
+                <span style={{ fontSize: 10, background: '#ede9fe', color: '#5b21b6', padding: '2px 8px', borderRadius: 99, fontWeight: 700, whiteSpace: 'nowrap' }}>🔄 Other Work</span>
+              </div>
+            ))}
+            <datalist id="dr-ow-types">
+              {DR_OFFICE_WORK_TYPES.map((t) => (<option key={t} value={t} />))}
+            </datalist>
+            {officeWork.map((o, i) => (
+              <div key={i} style={{ background: '#fff', borderRadius: 8, padding: 10, border: '1px solid #ddd6fe' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2fr auto', gap: 8, alignItems: 'center' }}>
+                  <input list="dr-ow-types" placeholder="Work Type *" value={o.work_type} onChange={(e) => setOw(i, { work_type: e.target.value })} style={styles.formInput} />
+                  <input type="text" placeholder="Party Name / Remark" value={o.remark} onChange={(e) => setOw(i, { remark: e.target.value })} style={styles.formInput} />
+                  <button onClick={() => setOfficeWork((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: colors.danger, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>From (optional)</label>
+                    <input type="time" value={o.from_time} onChange={(e) => setOw(i, { from_time: e.target.value })} style={styles.formInput} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>To (optional)</label>
+                    <input type="time" value={o.to_time} onChange={(e) => setOw(i, { to_time: e.target.value })} style={styles.formInput} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>Fill in the times and this entry also lands in the Work Log automatically.</div>
+              </div>
+            ))}
+
+            {/* ── Payments collected (index.html:14317 addPaymentRow) ────── */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>💰 Payments collected — Total ₹{paymentTotal.toFixed(0)}</span>
+              <button
+                onClick={() => setPayments((prev) => (prev.length >= 5 ? prev : [...prev, { customer: '', amount: 0, mode: '' }]))}
+                disabled={payments.length >= 5}
+                style={{ padding: '5px 12px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: payments.length >= 5 ? 0.5 : 1 }}
+              >+ Add Row</button>
+            </div>
+            {payments.map((p, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+                <input type="text" placeholder="Customer Name" value={p.customer} onChange={(e) => setPay(i, { customer: e.target.value })} style={styles.formInput} />
+                <input type="number" min={0} placeholder="₹ Amount" value={p.amount || ''} onChange={(e) => setPay(i, { amount: parseFloat(e.target.value) || 0 })} style={styles.formInput} />
+                <select value={p.mode} onChange={(e) => setPay(i, { mode: e.target.value })} style={styles.formInput}>
+                  <option value="">— Select —</option>
+                  {DR_PAYMENT_MODES.map((m) => (<option key={m.value} value={m.value}>{m.label}</option>))}
+                </select>
+                <button onClick={() => setPayments((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: colors.danger, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 13 }}>✕</button>
+              </div>
+            ))}
+
+            {/* ── Google Reviews (index.html:14100-14125) ────────────────── */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.text, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>⭐ Google Reviews ({reviews.length})</span>
+              <button
+                onClick={() => setReviews((prev) => (prev.length >= 10 ? prev : [...prev, { customer: '', stars: 5 }]))}
+                disabled={reviews.length >= 10}
+                style={{ padding: '5px 12px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: reviews.length >= 10 ? 0.5 : 1 }}
+              >+ Add Row</button>
+            </div>
+            {reviews.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="text" placeholder="Customer Name" value={r.customer} onChange={(e) => setRev(i, { customer: e.target.value })} style={{ ...styles.formInput, flex: 1 }} />
+                <select value={r.stars} onChange={(e) => setRev(i, { stars: parseInt(e.target.value, 10) })} style={{ ...styles.formInput, width: 'auto' }}>
+                  {[5, 4, 3, 2, 1].map((n) => (<option key={n} value={n}>{'⭐'.repeat(n)} {n} Star</option>))}
+                </select>
+                <button onClick={() => setReviews((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: colors.danger, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 13 }}>✕</button>
+              </div>
+            ))}
 
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Petrol KM</label>

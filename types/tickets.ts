@@ -6,7 +6,16 @@ export interface TicketSpare {
     gst_pct?: number;
     requested?: boolean;
     stock_deducted?: boolean;
+    warranty_chargeable?: boolean;
 }
+
+export const isChargeableSpare = (s: TicketSpare | undefined, consumableCodes?: Set<string>): boolean => {
+    if (!s) return false;
+    if (s.warranty_chargeable === true) return true;
+    if (s.warranty_chargeable === false) return false;
+    return !!(s.code && consumableCodes?.has(String(s.code).toUpperCase()));
+};
+
 export interface PendingEdit {
     requested_by: string;
     wc_id: string;

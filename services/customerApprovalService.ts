@@ -33,41 +33,84 @@ export const approveTicket = async (
     approvedBy: string
 ): Promise<{ success: boolean; newStatus?: string; error?: string }> => {
     try {
-        // Auto-check stock to determine next status
+        // Auto-check stock to determine the next status. Same 3-way rule the
+        // mid-repair Request Part flow uses, so it behaves identically whether
+        // Admin/WC or the engineer clicks Approve (index.html:6987-7021):
+        //  - On Site: check the ASSIGNED ENGINEER's own bag (eng_stock). Already
+        //    in their bag → Pending Repair On Site. In company inventory but not
+        //    their bag → Pending Engineer Stock (admin must hand it over first).
+        //    Nowhere → Pending Parts.
+        //  - Carry In: only company inventory matters (no personal-bag concept,
+        //    the device is at the office) → Pending Repair Carry In or Pending Parts.
         const spares = (ticket.spares || []).filter(s => s.requested && s.code);
-        let allInStock = true;
-        if (spares.length > 0) {
-            for (const s of spares) {
-                const { data: inv } = await supabase
+        let anyPendingEngStock = false;
+        let anyPendingNoParts = false;
+        for (const s of spares) {
+            try {
+                const { data: invItem } = await supabase
                     .from('inventory')
-                    .select('qty_in_stock')
-                    .eq('part_code', s.code)
-                    .single();
-                if (!inv || (inv.qty_in_stock || 0) < (s.qty || 1)) {
-                    allInStock = false;
-                    break;
+                    .select('id, qty_in_stock')
+                    .eq('part_code', s.code!)
+                    .limit(1)
+                    .maybeSingle();
+                const companyQty = invItem?.qty_in_stock || 0;
+                if (ticket.service_type === 'On Site') {
+                    let bagQty = 0;
+                    if (ticket.assigned_name && invItem) {
+                        const { data: esRow } = await supabase
+                            .from('eng_stock').select('qty')
+                            .eq('owner', ticket.assigned_name).eq('part_id', invItem.id)
+                            .limit(1).maybeSingle();
+                        bagQty = esRow?.qty || 0;
+                    }
+                    if (bagQty < (s.qty || 1)) {
+                        if (companyQty >= (s.qty || 1)) anyPendingEngStock = true; else anyPendingNoParts = true;
+                    }
+                } else if (companyQty < (s.qty || 1)) {
+                    anyPendingNoParts = true;
                 }
-            }
+            } catch { anyPendingNoParts = true; }
         }
 
-        const newStatus = (!spares.length || allInStock)
-            ? (ticket.service_type === 'Carry In' ? 'Pending Repair Carry In' : 'Pending Repair On Site')
-            : 'Pending Parts';
+        let newStatus: string;
+        let statusNote: string;
+        if (!spares.length) {
+            newStatus = ticket.service_type === 'Carry In' ? 'Pending Repair Carry In' : 'Pending Repair On Site';
+            statusNote = 'No parts needed';
+        } else if (anyPendingNoParts) {
+            newStatus = 'Pending Parts';
+            statusNote = 'Part(s) not in stock anywhere — waiting for order';
+        } else if (anyPendingEngStock) {
+            newStatus = 'Pending Engineer Stock';
+            statusNote = 'Part(s) in company stock — waiting to be issued to engineer';
+        } else {
+            newStatus = ticket.service_type === 'Carry In' ? 'Pending Repair Carry In' : 'Pending Repair On Site';
+            statusNote = 'All parts available';
+        }
 
+        // Clear "requested" on every spare the customer just approved. The
+        // convention used EVERYWHERE else in the app (ticket-view total, every
+        // Reports revenue calc, invoice generation) treats requested:true as
+        // "still just an estimate, not billed yet" and filters it out of totals.
+        // Approval is exactly the moment a requested part becomes a real,
+        // billable, fitted part — without this flip, approved parts silently
+        // vanish from every one of those totals forever, since nothing else in
+        // the app ever clears the flag (index.html:7032-7033).
+        const approvedSpares = (ticket.spares || []).map(s => (s.requested ? { ...s, requested: false } : s));
+
+        const now = new Date().toISOString();
         const existing = ticket.timeline || [];
         const { error } = await supabase.from('tickets').update({
             status: newStatus,
+            spares: approvedSpares,
             final_charges: finalAmount,
             labor: labour,
-            updated_at: new Date().toISOString(),
+            updated_at: now,
             last_status_by: approvedBy,
-            timeline: [...existing, {
-                action: 'Customer Approved',
-                by: approvedBy,
-                at: new Date().toISOString(),
-                note: remark,
-                estimate: finalAmount,
-            }],
+            timeline: [...existing,
+            { action: 'Customer Approved Estimate', by: approvedBy, at: now, note: remark, estimate: finalAmount },
+            { action: `Auto → ${newStatus}`, by: 'System', at: now, note: statusNote },
+            ],
         }).eq('id', ticket.id);
 
         if (error) throw error;

@@ -92,9 +92,14 @@ export function getAllowedStatuses(
                 return [];
 
             case 'Pending Customer Approval':
-                // Engineer handles their own call's approval/rejection directly —
-                // no need to wait on admin/WC.
-                return ['Customer Approved', 'Customer Reject'];
+                // NOT selectable from the plain status dropdown (index.html:3177-3184).
+                // Approving/rejecting must go through the dedicated "✅ Approve Estimate" /
+                // "❌ Reject Estimate" buttons (HTML openApproval → processApproval), which
+                // re-check parts stock and auto-move the call to Pending Repair Carry In /
+                // Pending Repair On Site / Pending Engineer Stock / Pending Parts. Picking
+                // "Customer Approved" from this generic dropdown skipped all of that and
+                // left the call stuck on Customer Approved with nothing happening next.
+                return [];
 
             default:
                 return [];

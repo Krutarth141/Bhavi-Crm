@@ -30,7 +30,10 @@ export default function TATReminder() {
                     .not('status', 'in', '(Closed,Delivered,Call Cancel,Customer Reject)')
                     .order('tat_date', { ascending: true })
                     .limit(20);
-                if (isEng) query = query.eq('assigned_to', user.id);
+                // HTML (index.html:5829) filters assigned_to by currentUser.eng_id||user_id —
+                // the login code, which here is session.user.email. user.id is the DB PK and
+                // never matches tickets.assigned_to, so this always returned zero rows.
+                if (isEng) query = query.eq('assigned_to', user.email);
                 const { data } = await query;
                 if (!data || !data.length) return;
 

@@ -13,7 +13,7 @@ import DonutChart from './charts/DonutChart';
 import KpiDetailModal from './KpiDetailModal';
 import EngineerLiveStatusTable from './EngineerLiveStatusTable';
 import { useMyCalls } from '@/hooks/useMyCalls';
-import { punchIn, punchOut } from '@/services/myCallsService';
+import { punchIn, punchOut, startLocationTracking, stopLocationTracking, saveLocationEvent } from '@/services/myCallsService';
 import { hasKmEntryToday } from '@/services/kmTrackingService';
 import { updateTicketStatus } from '@/services/engineerUpdateService';
 import PunchModal from '@/components/screens/PunchModal';
@@ -83,7 +83,8 @@ export default function DashboardOverview({ role }: Props) {
                 eng_id: userId ?? '', eng_name: userName, punch_in_date: today, punch_in_time: currentTime,
                 start_meter: data.meter ? Number(data.meter) : undefined, photo: data.photo, lat: data.lat, lng: data.lng,
             });
-            if (result.success) refetchPunch();
+            // Start live GPS tracking for the day (index.html:4359-4361).
+            if (result.success) { startLocationTracking(userId ?? '', userName); refetchPunch(); }
             return result;
         }
         const currentTime = new Date().toTimeString().slice(0, 5);
@@ -91,7 +92,16 @@ export default function DashboardOverview({ role }: Props) {
             eng_id: userId ?? '', punch_out_time: currentTime, end_meter: data.meter ? Number(data.meter) : undefined,
             photo: data.photo, lat: data.lat, lng: data.lng, lateRemark: data.remark,
         });
-        if (result.success) refetchPunch();
+        if (result.success) {
+            // One final GPS point, then stop tracking (index.html:4742).
+            saveLocationEvent(
+                'punch_out', null,
+                data.lat != null && data.lng != null ? { lat: data.lat, lng: data.lng, accuracy: 0 } : null,
+                userId ?? '', userName
+            ).catch(() => undefined);
+            stopLocationTracking();
+            refetchPunch();
+        }
         return result;
     };
 
