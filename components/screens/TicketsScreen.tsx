@@ -535,17 +535,15 @@ export default function TicketsScreen() {
                   🔗 Linked to Call Group <b>{groupBanner.groupId}</b> — Customer/Address/Brand same as {groupBanner.anchor.id} used (no need to re-check). Just fill in Model No, Serial No, Call Type, Problem, Description &amp; Engineer — Save creates a new ticket ID under the same group.
                 </div>
               )}
-              {modalMode === 'view' && selectedTicket?.pending_edit && (
+              {modalMode === 'view' && selectedTicket?.pending_edit && (currentUserRole === 'admin' || cspMgr) && (
                 <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
                   ⏳ <b>Edit Pending Approval</b> — Requested by <b>{selectedTicket.pending_edit.requested_by}</b><br />
                   <span style={{ fontSize: 12, color: '#92400e' }}>Reason: {selectedTicket.pending_edit.reason}</span>
-                  {(currentUserRole === 'admin' || cspMgr) && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveReportEdit(selectedTicket)}>✅ Approve</button>
-                      <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectReportEdit(selectedTicket)}>❌ Reject</button>
-                      <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onClick={() => handleViewEditDiff(selectedTicket)}>🔍 View Changes</button>
-                    </div>
-                  )}
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveReportEdit(selectedTicket)}>✅ Approve</button>
+                    <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectReportEdit(selectedTicket)}>❌ Reject</button>
+                    <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onClick={() => handleViewEditDiff(selectedTicket)}>🔍 View Changes</button>
+                  </div>
                 </div>
               )}
 
@@ -553,7 +551,7 @@ export default function TicketsScreen() {
                 <div style={{ background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
                   <div style={{ fontWeight: 700, color: '#b45309', fontSize: 14 }}>🛡️ Warranty Claim — Awaiting Approval</div>
                   <div style={{ fontSize: 12, color: '#78716c', marginTop: 4 }}>{selectedTicket.warranty_claim_note || ''} &nbsp;|&nbsp; Submitted by: <b>{selectedTicket.warranty_claim_by || ''}</b></div>
-                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller') ? (
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) ? (
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveWarrantyClaim(selectedTicket)}>✅ Approve — Convert to Warranty</button>
                       <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectWarrantyClaim(selectedTicket)}>❌ Reject</button>
@@ -828,13 +826,7 @@ export default function TicketsScreen() {
                       ✏️ Edit Report
                     </button>
                   )}
-                  {selectedTicket?.warranty_claim_pending && (currentUserRole === 'admin' || currentUserRole === 'work_controller') && (
-                    <>
-                      <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => handleApproveWarrantyClaim(selectedTicket!)}>✅ Approve Claim</button>
-                      <button style={{ ...styles.btn, background: '#dc2626', color: 'white' }} onClick={() => handleRejectWarrantyClaim(selectedTicket!)}>❌ Reject Claim</button>
-                    </>
-                  )}
-                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller') && selectedTicket?.warranty_coverage !== 'Out of Coverage' && (
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && selectedTicket?.warranty_coverage !== 'Out of Coverage' && (
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>
                   )}
                   <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
