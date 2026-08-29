@@ -22,7 +22,7 @@ export const ENGINEER_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'work-log', label: '🗒️ Work Log' },
     { id: 'tasks', label: '📋 My Tasks' },
-    { id: 'reports', label: '📈 My Reports' },
+    { id: 'my-report', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
@@ -31,6 +31,7 @@ export const ENGINEER_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'parts-catalog', label: '📚 Parts Catalog' },
     { id: 'fault-finder', label: '🔍 Fault Finder' },
     // CSP-manager extras (only reachable when isCspManager(session))
+    { id: 'reports', label: '📈 Reports' },
     { id: 'tickets', label: '🎫 All Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'pending', label: '📋 Pending List' },

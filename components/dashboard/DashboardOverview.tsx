@@ -251,7 +251,9 @@ export default function DashboardOverview({ role }: Props) {
         return allTickets.filter(t => t.created_at && new Date(t.created_at) >= range[0] && new Date(t.created_at) <= range[1]);
     }, [allTickets, range]);
 
-    const periodLabel = period === 'custom' && appliedFrom && appliedTo ? `${appliedFrom} to ${appliedTo}` : PERIOD_LABELS[period as keyof typeof PERIOD_LABELS];
+    const periodLabel = period === 'custom'
+        ? (appliedFrom && appliedTo ? `${appliedFrom} to ${appliedTo}` : 'All Time')
+        : PERIOD_LABELS[period as keyof typeof PERIOD_LABELS];
 
     const applyCustom = () => {
         if (!fromDate || !toDate) { alert('Please select both From and To dates.'); return; }

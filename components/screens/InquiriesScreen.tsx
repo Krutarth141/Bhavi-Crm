@@ -172,7 +172,7 @@ export default function InquiriesScreen() {
             </div>
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                : filtered.length === 0 ? <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#6b7280' }}>🔍 No inquiries found. Click "New Inquiry" to add one!</div>
+                : inquiries.length === 0 ? <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#6b7280' }}>🔍 No inquiries found. Click "New Inquiry" to add one!</div>
                     : (() => {
                         // Split by status so each group is clearly separated
                         // (index.html:24196-24217).

@@ -36,7 +36,7 @@ import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
 import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
 
-type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'reports' | 'attendance'
+type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'my-report' | 'reports' | 'attendance'
     | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'inquiries'
     | 'parts-catalog' | 'fault-finder'
     | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
@@ -49,7 +49,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'work-log', label: '🗒️ Work Log' },
     { id: 'tasks', label: '📋 My Tasks' },
-    { id: 'reports', label: '📈 My Reports' },
+    { id: 'my-report', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
@@ -64,6 +64,7 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
 // also where HTML turns nav-tickets and nav-eng-parts back on.
 const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
+    { id: 'reports', label: '📈 Reports' },
     { id: 'tickets', label: '🎫 All Tickets' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'pending', label: '📋 Pending List' },
@@ -133,7 +134,8 @@ export default function EngineerDashboard() {
             case 'my-calls': return <MyCallsScreen initialTicketId={pendingTicketId} onConsumedInitialTicket={() => setPendingTicketId(null)} />;
             case 'work-log': return <EngineerWorkLogScreen engId={engId} engName={engName} />;
             case 'tasks': return <TasksScreen />;
-            case 'reports': return cspMgr ? <ReportsScreen /> : <MyReportScreen />;
+            case 'my-report': return <MyReportScreen />;
+            case 'reports': return cspMgr ? <ReportsScreen /> : null;
             case 'attendance': return <AttendanceScreen />;
             case 'km-report': return <KmTrackingScreen />;
             case 'payment-collection': return <PaymentCollectionScreen />;

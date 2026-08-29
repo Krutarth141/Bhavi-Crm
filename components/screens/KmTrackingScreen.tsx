@@ -32,11 +32,15 @@ export default function KmTrackingScreen() {
     const [settingOffice, setSettingOffice] = useState(false);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-    const load = async () => {
+    // Accepts explicit from/to so callers that just changed the date range
+    // (quick()) can fetch the new range immediately, rather than scheduling a
+    // load() that would close over the pre-change from/to still in scope at
+    // call time (setFrom/setTo don't land until the next render).
+    const load = async (f: string = from, t: string = to) => {
         setLoading(true);
         try {
             const eng = isEngOnly ? myEngId : engFilter;
-            setResult(await fetchKmReport(from, to, eng || undefined));
+            setResult(await fetchKmReport(f, t, eng || undefined));
         } catch (e: any) {
             alert('Error: ' + e.message);
         }
@@ -52,7 +56,7 @@ export default function KmTrackingScreen() {
         if (kind === 'week') { const d = new Date(today); d.setDate(today.getDate() - today.getDay() + 1); f = d.toLocaleDateString('en-CA'); }
         else if (kind === 'month') { f = t.substring(0, 8) + '01'; }
         setFrom(f); setTo(t);
-        setTimeout(load, 0);
+        load(f, t);
     };
 
     const handleSetOffice = async () => {
@@ -164,7 +168,7 @@ export default function KmTrackingScreen() {
                     <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>To</label>
                     <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13 }} />
                 </div>
-                <button onClick={load} disabled={loading} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔍 {loading ? 'Loading...' : 'Load'}</button>
+                <button onClick={() => load()} disabled={loading} style={{ height: 34, padding: '0 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔍 {loading ? 'Loading...' : 'Load'}</button>
                 <button onClick={() => quick('today')} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Today</button>
                 <button onClick={() => quick('week')} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>This Week</button>
                 <button onClick={() => quick('month')} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>This Month</button>
