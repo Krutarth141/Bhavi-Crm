@@ -169,7 +169,7 @@ export default function KmTrackingScreen() {
                 <button onClick={() => quick('week')} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>This Week</button>
                 <button onClick={() => quick('month')} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>This Month</button>
                 <button onClick={downloadExcel} style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>⬇️ Excel</button>
-                {isAdmin && (
+                {isTrueAdmin && (
                     <button onClick={handleSetOffice} disabled={settingOffice} title="Stand at the office and tap this once — used to mark each day's Opening KM as Office/Away" style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🏢 Set Office Location</button>
                 )}
             </div>
@@ -243,9 +243,7 @@ export default function KmTrackingScreen() {
                                                     <td style={{ padding: 8, textAlign: 'right', fontWeight: 700 }}>
                                                         {l.odometer_km ?? '—'}
                                                         {l.edit_remark && <span title={`Edited: ${l.edit_remark}${l.corrected_by ? ' — ' + l.corrected_by : ''}`} style={{ color: '#d97706', cursor: 'help' }}> ✎</span>}
-                                                        {isTrueAdmin && (
-                                                            <button onClick={handleSetOffice} disabled={settingOffice} title="Stand at the office and tap this once — used to mark each day's Opening KM as Office/Away" style={{ height: 34, padding: '0 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>🏢 Set Office Location</button>
-                                                        )}
+                                                        {isAdmin && <button title="Edit reading (with remark)" onClick={() => handleEdit(l.id, l.odometer_km)} style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>✏️</button>}
                                                     </td>
                                                     <td style={{ padding: 8, textAlign: 'right', fontWeight: 700, color: '#0d9488' }}>{l.segmentKm == null ? '—' : `+${l.segmentKm} km`}</td>
                                                     <td style={{ padding: 8, textAlign: 'center' }}>{l.photo_url ? <button title="View odometer photo" onClick={() => setLightboxSrc(l.photo_url as string)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>👁️</button> : '—'}</td>
