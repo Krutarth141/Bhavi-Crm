@@ -184,7 +184,6 @@ export const fetchTelegramSettings = async (): Promise<TelegramSettings> => {
             owner_chat: map['tg_owner_chat'] || '',
             eng_map: engMap,
             notify_new_ticket: map['tg_notify_new_ticket'] !== undefined ? map['tg_notify_new_ticket'] === 'true' : true,
-            notify_status_change: map['tg_notify_status_change'] !== undefined ? map['tg_notify_status_change'] === 'true' : true,
             notify_punch_in: map['tg_notify_punch_in'] === 'true',
         };
     } catch (err) { console.error('fetchTelegramSettings:', err); return defaultTelegramSettings; }
@@ -201,10 +200,9 @@ export const saveTelegramEngChat = async (engUserId: string, chatId: string, cur
     return next;
 };
 
-export const saveTelegramPreferences = async (prefs: { notify_new_ticket: boolean; notify_status_change: boolean; notify_punch_in: boolean }): Promise<void> => {
+export const saveTelegramPreferences = async (prefs: { notify_new_ticket: boolean; notify_punch_in: boolean }): Promise<void> => {
     await Promise.all([
         tgSet('tg_notify_new_ticket', String(prefs.notify_new_ticket)),
-        tgSet('tg_notify_status_change', String(prefs.notify_status_change)),
         tgSet('tg_notify_punch_in', String(prefs.notify_punch_in)),
     ]);
 };

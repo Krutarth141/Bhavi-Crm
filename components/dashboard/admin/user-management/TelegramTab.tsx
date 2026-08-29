@@ -79,8 +79,8 @@ export default function TelegramTab() {
         setSendingWeeklyEmail(false);
         showMsg(r.success ? `✅ Weekly report emailed! (${weekFrom} → ${weekTo})` : '❌ ' + r.error);
     };
-    const handleSavePrefs = async (patch: Partial<{ notify_new_ticket: boolean; notify_status_change: boolean; notify_punch_in: boolean }>) => {
-        const next = { notify_new_ticket: settings.notify_new_ticket, notify_status_change: settings.notify_status_change, notify_punch_in: settings.notify_punch_in, ...patch };
+    const handleSavePrefs = async (patch: Partial<{ notify_new_ticket: boolean; notify_punch_in: boolean }>) => {
+        const next = { notify_new_ticket: settings.notify_new_ticket, notify_punch_in: settings.notify_punch_in, ...patch };
         setSettings(s => ({ ...s, ...next }));
         try { await savePreferences(next); } catch (e: any) { showMsg('❌ ' + e.message); }
     };
@@ -174,7 +174,6 @@ export default function TelegramTab() {
             <h4 style={{ fontSize: 13, fontWeight: 700, marginTop: 20, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>Notification Preferences</h4>
             {[
                 { label: '🎫 Notify on New Ticket', field: 'notify_new_ticket' as const },
-                { label: '🔄 Notify on Status Change', field: 'notify_status_change' as const },
                 { label: '🕐 Notify on Punch In/Out', field: 'notify_punch_in' as const },
             ].map(row => (
                 <div key={row.field} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', borderRadius: 6, marginBottom: 8 }}>

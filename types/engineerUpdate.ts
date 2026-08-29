@@ -18,6 +18,8 @@ export interface EngineerTicket {
     service_charges?: number;
     labor?: number;
     address?: string;
+    area?: string;
+    city?: string;
     pin?: string;
     timeline?: any[];
     created_at?: string;

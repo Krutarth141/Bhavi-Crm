@@ -1,11 +1,11 @@
 import { supabase } from '@/lib/supabase';
 import { EngineerTicket, PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
-import { notifyStatusChange } from './telegramNotify';
+import { notifyTicketClosed } from './telegramNotify';
 import { missingBagParts, missingCompanyStockParts, fetchConsumableCodes } from './engPartsService';
 import { saveWorkLog, saveLocationEvent } from './myCallsService';
 
-const TICKET_COLUMNS = 'id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, final_charges, charges_note, payment_mode, work_done, jobsheet_photo, attachments, address, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date, visit_out, meter_start, meter_end, se_call_id, page_count, other_charge, wc_type';
+const TICKET_COLUMNS = 'id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, final_charges, charges_note, payment_mode, work_done, jobsheet_photo, attachments, address, area, city, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date, visit_out, meter_start, meter_end, se_call_id, page_count, other_charge, wc_type';
 
 const PHOTO_BUCKET = 'product-images';
 
@@ -702,7 +702,17 @@ export const updateTicketStatus = async (
             saveLocationEvent('ticket_close', ticket.id, null, extra?.engId, updatedBy).catch(() => undefined);
         }
 
-        notifyStatusChange(ticket, status, note ? `📝 ${note}` : undefined);
+        if (newStatus === 'Closed' || newStatus === 'Resolved By Phone' || newStatus === 'Repaired') {
+            const spareLines = spares.filter((s) => s.name).map((s) => {
+                const lineTotal = (Number(s.price) || 0) * (Number(s.qty) || 1);
+                return `  🔩 ${s.name}${(Number(s.qty) || 1) > 1 ? ` ×${s.qty}` : ''}${lineTotal > 0 ? ` — ₹${lineTotal.toFixed(0)}` : ''}`;
+            }).join('\n');
+            const isChargeable = !['Warranty', 'Warranty Repeat', 'AMC'].includes(ticket.call_type || '');
+            notifyTicketClosed(ticket, newStatus, {
+                engName: updatedBy, workDone, remarks: note, spareLines,
+                isChargeable, totalAmt: charges.applies ? charges.finalCharges : 0,
+            });
+        }
 
         return { success: true, finalStatus: status, stockWarning };
     } catch (err) {

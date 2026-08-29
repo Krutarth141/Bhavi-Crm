@@ -91,7 +91,6 @@ export interface TelegramSettings {
     owner_chat: string;
     eng_map: Record<string, string>;
     notify_new_ticket: boolean;
-    notify_status_change: boolean;
     notify_punch_in: boolean;
 }
 
@@ -101,6 +100,5 @@ export const defaultTelegramSettings: TelegramSettings = {
     owner_chat: '',
     eng_map: {},
     notify_new_ticket: true,
-    notify_status_change: true,
     notify_punch_in: false,
 };

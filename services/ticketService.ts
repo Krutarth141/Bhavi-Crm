@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Ticket } from '@/types/tickets';
 import { isTicketActive } from '@/types/ticketStatus';
-import { notifyNewTicket, notifyStatusChange } from './telegramNotify';
+import { notifyNewTicket } from './telegramNotify';
 import { notifyReportEditSubmitted, notifyReportEditResult } from './brightActionService';
 
 export const fetchAllTickets = async (): Promise<Ticket[]> => {
@@ -218,12 +218,6 @@ export const updateTicket = async (ticketId: string, updates: Partial<Ticket>): 
 
         if (error) throw error;
 
-        if (finalUpdates.status) {
-            supabase.from('tickets').select('id,cname,model').eq('id', ticketId).single().then(({ data }) => {
-                if (data) notifyStatusChange(data, finalUpdates.status!);
-            });
-        }
-
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
@@ -283,10 +277,6 @@ export const closeTicket = async (ticketId: string, finalRemarks?: string, byUse
             .eq('id', ticketId);
 
         if (error) throw error;
-
-        supabase.from('tickets').select('id,cname,model').eq('id', ticketId).single().then(({ data }) => {
-            if (data) notifyStatusChange(data, 'Closed');
-        });
 
         return { success: true };
     } catch (err) {

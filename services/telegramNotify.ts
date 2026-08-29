@@ -44,12 +44,30 @@ export const notifyNewTicket = async (t: { id: string; cname?: string; mobile?: 
     } catch { /* best-effort */ }
 };
 
-export const notifyStatusChange = async (t: { id: string; cname?: string; model?: string }, newStatus: string, extra?: string) => {
+export const notifyTicketClosed = async (
+    t: { id: string; cname?: string; mobile?: string; area?: string; city?: string; problem?: string; call_type?: string },
+    status: string,
+    params: { engName: string; workDone?: string; remarks?: string; spareLines?: string; isChargeable: boolean; totalAmt: number }
+) => {
     try {
         const s = await fetchTelegramSettings();
-        if (!s.notify_status_change) return;
-        const text = `🔄 <b>Status Update</b>\n🎫 ${t.id} — ${t.cname || '-'}\n📦 ${t.model || '-'}\n➡️ ${newStatus}${extra ? `\n${extra}` : ''}`;
-        await notifyAll(text);
+        if (!s.bot_token) return;
+        const label = status === 'Repaired' ? 'Repaired ✔' : 'Closed ✔';
+        const text = `✅ <b>Call ${label}</b>\n`
+            + `🎫 <b>${t.id}</b>  |  👷 ${params.engName || 'Engineer'}\n`
+            + `👤 ${t.cname || '—'}${t.mobile ? `  |  📱 ${t.mobile}` : ''}\n`
+            + `📍 ${t.area || t.city || '—'}\n`
+            + `❗ <b>Problem:</b> ${t.problem || '—'}\n`
+            + (params.workDone ? `🔧 <b>Work Done:</b> ${params.workDone}\n` : '')
+            + (params.remarks ? `💬 <b>Remarks:</b> ${params.remarks}\n` : '')
+            + (params.spareLines ? `\n🔩 <b>Parts Changed:</b>\n${params.spareLines}\n` : '')
+            + (params.isChargeable && params.totalAmt > 0
+                ? `\n💰 <b>Total Bill: ₹${params.totalAmt.toLocaleString('en-IN')}</b>`
+                : `\n🛡️ ${t.call_type || 'Warranty'} — No Charge`);
+        const sends: Promise<void>[] = [];
+        if (s.admin_chat) sends.push(sendTelegram(s.bot_token, s.admin_chat, text));
+        if (s.owner_chat && s.owner_chat !== s.admin_chat) sends.push(sendTelegram(s.bot_token, s.owner_chat, text));
+        await Promise.all(sends);
     } catch { /* best-effort */ }
 };
 

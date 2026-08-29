@@ -26,7 +26,7 @@ export const useTelegramSettings = () => {
         const next = await saveTelegramEngChat(engUserId, chatId, settings.eng_map);
         setSettings(s => ({ ...s, eng_map: next }));
     };
-    const savePreferences = async (prefs: { notify_new_ticket: boolean; notify_status_change: boolean; notify_punch_in: boolean }) => {
+    const savePreferences = async (prefs: { notify_new_ticket: boolean; notify_punch_in: boolean }) => {
         await saveTelegramPreferences(prefs);
         setSettings(s => ({ ...s, ...prefs }));
     };
