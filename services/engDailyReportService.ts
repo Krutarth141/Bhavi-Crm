@@ -453,6 +453,29 @@ export const fetchDailyReportAutofill = async (engId: string, date: string): Pro
         }
     } catch { /* odometer KM covers the common case — GPS fallback not ported */ }
 
+    if (petrolKm <= 0) {
+        try {
+            const { data: locs } = await supabase.from('engineer_locations').select('lat, lng')
+                .eq('eng_id', engId).eq('session_date', date).order('recorded_at', { ascending: true }).limit(2000);
+            if (locs && locs.length > 1) {
+                const hkm = (la1: number, ln1: number, la2: number, ln2: number) => {
+                    const R = 6371;
+                    const dL = (la2 - la1) * Math.PI / 180;
+                    const dN = (ln2 - ln1) * Math.PI / 180;
+                    const a = Math.sin(dL / 2) ** 2 + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dN / 2) ** 2;
+                    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                };
+                let km = 0;
+                for (let i = 1; i < locs.length; i++) {
+                    const d = hkm(locs[i - 1].lat, locs[i - 1].lng, locs[i].lat, locs[i].lng);
+                    if (d >= 0.1 && d < 5) km += d;
+                }
+                km = Math.round(km * 10) / 10;
+                if (km > 0) petrolKm = km;
+            }
+        } catch { /* GPS fallback is best-effort */ }
+    }
+
     return { callSummary: cs, petrolKm, payments };
 };
 

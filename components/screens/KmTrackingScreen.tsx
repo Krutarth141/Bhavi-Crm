@@ -83,10 +83,9 @@ export default function KmTrackingScreen() {
     const grandKm = result?.grandKm || 0;
     const petrol = Math.round(grandKm * (parseFloat(rate) || 0) * 100) / 100;
 
-    const downloadExcel = () => {
-        if (!result || !result.groups.length) { alert('No data to download — load the report first.'); return; }
+    const buildKmRows = (groups: KmReportResult['groups']) => {
         const rows: any[] = [];
-        result.groups.forEach((g) => {
+        groups.forEach((g) => {
             g.entries.forEach((l, idx) => {
                 rows.push({
                     Engineer: idx === 0 ? g.eng_name : '',
@@ -103,10 +102,41 @@ export default function KmTrackingScreen() {
                 });
             });
         });
-        rows.push({ Engineer: 'FINAL TOTAL', 'Total KM (day)': grandKm });
-        const ws = XLSX.utils.json_to_sheet(rows);
+        return rows;
+    };
+
+    // Mirrors HTML's downloadKmReport() (index.html:25844-25873): one sheet
+    // per engineer for admin/CSP-manager/WC views (_kmrIsMultiView=!isEng),
+    // a single sheet only when an engineer views their own report.
+    const downloadExcel = () => {
+        if (!result || !result.groups.length) { alert('No data to download — load the report first.'); return; }
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'KM Report');
+        if (!isEngOnly) {
+            const byEng = new Map<string, { name: string; groups: KmReportResult['groups'] }>();
+            const order: string[] = [];
+            result.groups.forEach((g) => {
+                const key = g.eng_id || g.eng_name;
+                if (!byEng.has(key)) { byEng.set(key, { name: g.eng_name, groups: [] }); order.push(key); }
+                byEng.get(key)!.groups.push(g);
+            });
+            const usedNames = new Set<string>();
+            order.forEach((key) => {
+                const eg = byEng.get(key)!;
+                const rows = buildKmRows(eg.groups);
+                rows.push({ Engineer: 'FINAL TOTAL', 'Total KM (day)': eg.groups.reduce((s, g) => s + (g.totalKm || 0), 0) });
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const base = (eg.name || 'Engineer').replace(/[[\]*?/\\:]/g, '').slice(0, 28) || 'Engineer';
+                let sheetName = base, n = 2;
+                while (usedNames.has(sheetName)) { sheetName = `${base} (${n})`; n++; }
+                usedNames.add(sheetName);
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            });
+        } else {
+            const rows = buildKmRows(result.groups);
+            rows.push({ Engineer: 'FINAL TOTAL', 'Total KM (day)': grandKm });
+            const ws = XLSX.utils.json_to_sheet(rows);
+            XLSX.utils.book_append_sheet(wb, ws, 'KM Report');
+        }
         XLSX.writeFile(wb, `KM_Report_${from}_to_${to}.xlsx`);
     };
 

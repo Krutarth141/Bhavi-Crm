@@ -91,7 +91,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const [myTarget, setMyTarget] = useState<EngineerTarget | null>(null);
   useEffect(() => {
     if (!engId) return;
-    fetchTargets(new Date().toISOString().slice(0, 7)).then((rows) => {
+    fetchTargets(new Date().toLocaleDateString('en-CA').slice(0, 7)).then((rows) => {
       setMyTarget(rows.find((r) => r.eng_id === engId) || null);
     });
   }, [engId]);
@@ -845,7 +845,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
   // My Target — mirrors HTML's loadMyTargetWidget() progress bar.
   const targetCalls = myTarget?.target_calls || 0;
-  const targetMonth = new Date().toISOString().slice(0, 7);
+  const targetMonth = new Date().toLocaleDateString('en-CA').slice(0, 7);
   const closedThisMonth = myTickets.filter((t) => t.status === 'Closed' && t.updated_at && t.updated_at.slice(0, 7) === targetMonth).length;
   const targetPct = targetCalls ? Math.min(100, Math.round((closedThisMonth / targetCalls) * 100)) : 0;
   const targetColor = targetPct >= 80 ? '#0e9f6e' : targetPct >= 50 ? '#f59e0b' : '#f05252';

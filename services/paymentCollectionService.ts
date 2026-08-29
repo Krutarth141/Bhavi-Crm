@@ -1,15 +1,21 @@
 import { supabase } from '@/lib/supabase';
 import { PaymentTicket, PcBreakdown } from '@/types/paymentCollection';
 
-// Matches HTML's renderPaymentCollection: when the payment_received columns
-// haven't been added to `tickets` yet, PostgREST's error mentions the column
-// name — surface that as setupNeeded instead of a generic empty state.
+const PC_FULL_SELECT = 'id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, payment_collected_by, payment_collected_by_id, invoice_done, invoice_no';
+const PC_FALLBACK_SELECT = 'id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, invoice_done, invoice_no';
+
+// Matches HTML's renderPaymentCollection() catch block (index.html:9899-9910):
+// - error mentions payment_collected_by(_id) → those columns aren't added
+//   yet, retry without them so the page still works (old assigned_to-only
+//   visibility for non-managers).
+// - error mentions payment_received → setup-needed banner.
+// - anything else → surfaced as a real error, not a silent empty list.
 export const fetchPaymentCollectionTickets = async (
     myId: string, canManage: boolean
-): Promise<{ tickets: PaymentTicket[]; setupNeeded: boolean }> => {
+): Promise<{ tickets: PaymentTicket[]; setupNeeded: boolean; error?: string }> => {
     try {
         let q = supabase.from('tickets')
-            .select('id, cname, mobile, area, model, payment_mode, service_charges, final_charges, labor, other_charge, spares, updated_at, assigned_to, assigned_name, payment_received, payment_received_at, payment_received_by, payment_collected_by, payment_collected_by_id, invoice_done, invoice_no')
+            .select(PC_FULL_SELECT)
             .not('payment_mode', 'is', null)
             .order('updated_at', { ascending: false });
         if (!canManage) q = q.or(`assigned_to.eq.${myId},payment_collected_by_id.eq.${myId}`);
@@ -17,9 +23,27 @@ export const fetchPaymentCollectionTickets = async (
         if (error) throw error;
         return { tickets: data || [], setupNeeded: false };
     } catch (err: any) {
+        const msg = String(err?.message || '');
+        if (msg.indexOf('payment_collected_by') !== -1) {
+            try {
+                let q2 = supabase.from('tickets')
+                    .select(PC_FALLBACK_SELECT)
+                    .not('payment_mode', 'is', null)
+                    .order('updated_at', { ascending: false });
+                if (!canManage) q2 = q2.eq('assigned_to', myId);
+                const { data, error: err2 } = await q2;
+                if (err2) throw err2;
+                return { tickets: data || [], setupNeeded: false };
+            } catch (err2: any) {
+                console.error('fetchPaymentCollectionTickets (fallback):', err2);
+                return { tickets: [], setupNeeded: false, error: String(err2?.message || 'Unknown error') };
+            }
+        }
+        if (msg.indexOf('payment_received') !== -1) {
+            return { tickets: [], setupNeeded: true };
+        }
         console.error('fetchPaymentCollectionTickets:', err);
-        const setupNeeded = String(err?.message || '').indexOf('payment_received') !== -1;
-        return { tickets: [], setupNeeded };
+        return { tickets: [], setupNeeded: false, error: msg || 'Unknown error' };
     }
 };
 

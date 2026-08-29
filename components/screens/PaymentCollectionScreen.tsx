@@ -27,6 +27,7 @@ export default function PaymentCollectionScreen() {
     const [tickets, setTickets] = useState<PaymentTicket[]>([]);
     const [loading, setLoading] = useState(true);
     const [setupNeeded, setSetupNeeded] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [view, setView] = useState<'pending' | 'received'>('pending');
     const [invoiceTicket, setInvoiceTicket] = useState<PaymentTicket | null>(null);
     const [invoiceNo, setInvoiceNo] = useState('');
@@ -36,9 +37,10 @@ export default function PaymentCollectionScreen() {
     const load = useCallback(async () => {
         if (!myId) return;
         setLoading(true);
-        const { tickets: t, setupNeeded: sn } = await fetchPaymentCollectionTickets(myId, canManage);
+        const { tickets: t, setupNeeded: sn, error: err } = await fetchPaymentCollectionTickets(myId, canManage);
         setTickets(t);
         setSetupNeeded(sn);
+        setLoadError(err || null);
         setLoading(false);
     }, [myId, canManage]);
 
@@ -149,87 +151,95 @@ export default function PaymentCollectionScreen() {
                         ⚠️ Setup needed: the payment_received columns don&apos;t exist on the tickets table yet. Run the Payment Collection setup SQL in Supabase, then reload this page.
                     </div>
                 )
-                    : tickets.length === 0 ? <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#9ca3af' }}>No payment-confirmed calls found{canManage ? '.' : ' for you yet.'}</div>
-                        : groups.length === 0 ? (
-                            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 20, textAlign: 'center', color: '#1d4ed8' }}>
-                                {view === 'pending' ? '🎉 Nothing pending — everything collected!' : 'No received payments yet.'}
-                            </div>
-                        ) : groups.map(([engId, g]) => (
-                            <div key={engId} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 14 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-                                    <h2 style={{ margin: 0, fontSize: 15 }}>👷 {g.name}</h2>
-                                    {view === 'pending'
-                                        ? <span style={{ fontSize: 13, fontWeight: 700, color: g.pending > 0 ? '#d97706' : '#0e9f6e' }}>⏳ Pending: ₹{g.pending.toFixed(0)}</span>
-                                        : <span style={{ fontSize: 13, fontWeight: 700, color: '#0e9f6e' }}>✅ Received: ₹{g.received.toFixed(0)}</span>}
+                    : loadError ? (
+                        // Any failure other than a missing-column setup issue is a
+                        // real error — surface it instead of a silent "no data"
+                        // empty state (index.html:9899-9910's final `else throw qe`).
+                        <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 8, padding: 16, color: '#991b1b', fontSize: 14 }}>
+                            Error: {loadError}
+                        </div>
+                    )
+                        : tickets.length === 0 ? <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, textAlign: 'center', padding: 40, color: '#9ca3af' }}>No payment-confirmed calls found{canManage ? '.' : ' for you yet.'}</div>
+                            : groups.length === 0 ? (
+                                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 20, textAlign: 'center', color: '#1d4ed8' }}>
+                                    {view === 'pending' ? '🎉 Nothing pending — everything collected!' : 'No received payments yet.'}
                                 </div>
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                                        <thead>
-                                            <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
-                                                <th style={{ padding: '6px 8px' }}>Date</th>
-                                                <th style={{ padding: '6px 8px' }}>Ticket</th>
-                                                <th style={{ padding: '6px 8px' }}>Customer</th>
-                                                <th style={{ padding: '6px 8px' }}>Mobile</th>
-                                                <th style={{ padding: '6px 8px' }}>Area</th>
-                                                <th style={{ padding: '6px 8px' }}>Model</th>
-                                                <th style={{ padding: '6px 8px' }}>Amount</th>
-                                                <th style={{ padding: '6px 8px' }}>Mode</th>
-                                                <th style={{ padding: '6px 8px' }}>Invoice</th>
-                                                <th style={{ padding: '6px 8px' }}>{view === 'pending' ? 'Received' : 'Received Info'}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {g[groupKey].map(t => {
-                                                const amt = pcAmount(t);
-                                                return (
-                                                    <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                        <td style={{ padding: '6px 8px' }}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('en-IN') : '-'}</td>
-                                                        <td style={{ padding: '6px 8px', fontWeight: 700 }}>
-                                                            {canManage
-                                                                ? <button onClick={() => setViewTicket(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>{t.id}</button>
-                                                                : t.id}
-                                                        </td>
-                                                        <td style={{ padding: '6px 8px' }}>{t.cname || '-'}</td>
-                                                        <td style={{ padding: '6px 8px' }}>{t.mobile || '-'}</td>
-                                                        <td style={{ padding: '6px 8px' }}>{t.area || '-'}</td>
-                                                        <td style={{ padding: '6px 8px' }}>{t.model || '-'}</td>
-                                                        <td style={{ padding: '6px 8px' }}>
-                                                            <button onClick={() => showBreakdown(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, textDecoration: 'underline dotted', cursor: 'pointer', padding: 0, fontSize: 12 }}>₹{amt.toFixed(0)}</button>
-                                                        </td>
-                                                        <td style={{ padding: '6px 8px' }}>{t.payment_mode || '-'}</td>
-                                                        <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                                                            {t.invoice_done ? (
-                                                                <>
-                                                                    <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ #{t.invoice_no || ''}</div>
-                                                                    {canManage && <button onClick={() => openInvoice(t)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>✏️ Edit</button>}
-                                                                </>
-                                                            ) : canManage ? (
-                                                                <button onClick={() => openInvoice(t)} style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>🧾 Add Invoice</button>
-                                                            ) : (
-                                                                <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>☐ Pending</span>
-                                                            )}
-                                                        </td>
-                                                        <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                                                            {view === 'received' ? (
-                                                                <>
-                                                                    <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ {t.payment_received_by || ''}</div>
-                                                                    <div style={{ fontSize: 10, color: '#9ca3af' }}>{t.payment_received_at ? new Date(t.payment_received_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : ''}</div>
-                                                                    {canManage && <button onClick={() => toggleReceived(t, false)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>Undo</button>}
-                                                                </>
-                                                            ) : canManage ? (
-                                                                <button onClick={() => toggleReceived(t, true)} style={{ padding: '4px 10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>☐ Mark Received</button>
-                                                            ) : (
-                                                                <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>☐ Pending</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                            ) : groups.map(([engId, g]) => (
+                                <div key={engId} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 14 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                                        <h2 style={{ margin: 0, fontSize: 15 }}>👷 {g.name}</h2>
+                                        {view === 'pending'
+                                            ? <span style={{ fontSize: 13, fontWeight: 700, color: g.pending > 0 ? '#d97706' : '#0e9f6e' }}>⏳ Pending: ₹{g.pending.toFixed(0)}</span>
+                                            : <span style={{ fontSize: 13, fontWeight: 700, color: '#0e9f6e' }}>✅ Received: ₹{g.received.toFixed(0)}</span>}
+                                    </div>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                            <thead>
+                                                <tr style={{ background: '#f8fafc', textAlign: 'left' }}>
+                                                    <th style={{ padding: '6px 8px' }}>Date</th>
+                                                    <th style={{ padding: '6px 8px' }}>Ticket</th>
+                                                    <th style={{ padding: '6px 8px' }}>Customer</th>
+                                                    <th style={{ padding: '6px 8px' }}>Mobile</th>
+                                                    <th style={{ padding: '6px 8px' }}>Area</th>
+                                                    <th style={{ padding: '6px 8px' }}>Model</th>
+                                                    <th style={{ padding: '6px 8px' }}>Amount</th>
+                                                    <th style={{ padding: '6px 8px' }}>Mode</th>
+                                                    <th style={{ padding: '6px 8px' }}>Invoice</th>
+                                                    <th style={{ padding: '6px 8px' }}>{view === 'pending' ? 'Received' : 'Received Info'}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {g[groupKey].map(t => {
+                                                    const amt = pcAmount(t);
+                                                    return (
+                                                        <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                            <td style={{ padding: '6px 8px' }}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('en-IN') : '-'}</td>
+                                                            <td style={{ padding: '6px 8px', fontWeight: 700 }}>
+                                                                {canManage
+                                                                    ? <button onClick={() => setViewTicket(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>{t.id}</button>
+                                                                    : t.id}
+                                                            </td>
+                                                            <td style={{ padding: '6px 8px' }}>{t.cname || '-'}</td>
+                                                            <td style={{ padding: '6px 8px' }}>{t.mobile || '-'}</td>
+                                                            <td style={{ padding: '6px 8px' }}>{t.area || '-'}</td>
+                                                            <td style={{ padding: '6px 8px' }}>{t.model || '-'}</td>
+                                                            <td style={{ padding: '6px 8px' }}>
+                                                                <button onClick={() => showBreakdown(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, textDecoration: 'underline dotted', cursor: 'pointer', padding: 0, fontSize: 12 }}>₹{amt.toFixed(0)}</button>
+                                                            </td>
+                                                            <td style={{ padding: '6px 8px' }}>{t.payment_mode || '-'}</td>
+                                                            <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                                                                {t.invoice_done ? (
+                                                                    <>
+                                                                        <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ #{t.invoice_no || ''}</div>
+                                                                        {canManage && <button onClick={() => openInvoice(t)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>✏️ Edit</button>}
+                                                                    </>
+                                                                ) : canManage ? (
+                                                                    <button onClick={() => openInvoice(t)} style={{ padding: '4px 10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>🧾 Add Invoice</button>
+                                                                ) : (
+                                                                    <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>☐ Pending</span>
+                                                                )}
+                                                            </td>
+                                                            <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                                                                {view === 'received' ? (
+                                                                    <>
+                                                                        <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ {t.payment_received_by || ''}</div>
+                                                                        <div style={{ fontSize: 10, color: '#9ca3af' }}>{t.payment_received_at ? new Date(t.payment_received_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) : ''}</div>
+                                                                        {canManage && <button onClick={() => toggleReceived(t, false)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>Undo</button>}
+                                                                    </>
+                                                                ) : canManage ? (
+                                                                    <button onClick={() => toggleReceived(t, true)} style={{ padding: '4px 10px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>☐ Mark Received</button>
+                                                                ) : (
+                                                                    <span style={{ color: '#d97706', fontWeight: 700, fontSize: 12 }}>☐ Pending</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
 
             {invoiceTicket && (
                 <div onClick={() => setInvoiceTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
