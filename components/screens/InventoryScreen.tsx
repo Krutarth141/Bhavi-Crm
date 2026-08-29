@@ -20,10 +20,7 @@ type InvTab = 'stock' | 'purchase' | 'sales' | 'tally';
 export default function InventoryScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? 'Admin';
-    const roleType = (session?.user as any)?.roleType;
-    // Stock Tally is admin/Accountant only — mirrors HTML's
-    // currentUser.role==='admin'||window._isAcct gate on the 4th tab.
-    const canTally = roleType === 'admin' || isAccountant(session);
+    const canTally = (session?.user as any)?.role === 'admin' || isAccountant(session);
     const [activeTab, setActiveTab] = useState<InvTab>('stock');
 
     // Data fetching

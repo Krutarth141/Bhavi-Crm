@@ -24,12 +24,8 @@ export default function SiteVisitsScreen() {
     const { data: session } = useSession();
     const roleType = (session?.user as any)?.roleType;
     const cspMgr = isCspManager(session);
-    const isAdm = roleType === 'admin';
+    const isAdm = (session?.user as any)?.role === 'admin';
     const isEng = roleType === 'engineer';
-    // HTML (index.html:23818 + 23825) computes canAdminList = isAdm || isWc where
-    // isWc tests currentUser.role === 'work_coordinator' — a value that does not exist
-    // anywhere else in the app (the real column value is 'work_controller', used 59x).
-    // So HTML's canAdminList is effectively admin-only. Replicated verbatim.
     const canAdminList = isAdm;
     const myId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';

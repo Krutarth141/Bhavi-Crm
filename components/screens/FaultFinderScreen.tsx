@@ -11,7 +11,7 @@ export default function FaultFinderScreen() {
     const { data: session } = useSession();
     // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
     // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
-    const isAdmin = (session?.user as any)?.roleType === 'admin';
+    const isAdmin = (session?.user as any)?.role === 'admin';
     const { faults, errors, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [activeTab, setActiveTab] = useState<FaultFinderTab>('fault-knowledge');
     const [search, setSearch] = useState('');

@@ -21,7 +21,7 @@ export default function FieldTasksScreen() {
     const { data: session } = useSession();
     const roleType = (session?.user as any)?.roleType;
     const cspMgr = isCspManager(session);
-    const isAdm = roleType === 'admin';
+    const isAdm = (session?.user as any)?.role === 'admin';
     const isWC = roleType === 'work_controller';
     const isEng = roleType === 'engineer';
     const canAdminList = isAdm || isWC || cspMgr;

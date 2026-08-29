@@ -11,13 +11,15 @@ const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8
 
 export default function PaymentCollectionScreen() {
     const { data: session } = useSession();
-    const roleType = (session?.user as any)?.roleType;
-    const isAdm = roleType === 'admin';
     const cspMgr = isCspManager(session);
     const isAcct = isAccountant(session);
     // _pcCanManage() gates Add/Edit Invoice AND Mark Received/Undo, all alike
-    // (index.html:9855): admin || isCspMgr || isAcct. A work_controller who is
-    // not ACCT001 and not admin gets none of these — only read-only visibility.
+    // (index.html:9855): currentUser.role==='admin' || isCspMgr || isAcct.
+    // That's the DB `role` column, which is 'admin' for Work Controllers too
+    // (only role_type distinguishes them) — session.user.roleType is
+    // role_type, so isAdm must read session.user.role instead, or WC gets
+    // none of these and only read-only visibility.
+    const isAdm = (session?.user as any)?.role === 'admin';
     const canManage = isAdm || cspMgr || isAcct;
     const myId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';

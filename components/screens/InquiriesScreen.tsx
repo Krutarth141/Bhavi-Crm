@@ -17,7 +17,7 @@ export default function InquiriesScreen() {
     const { data: session } = useSession();
     const myUserId = (session?.user as any)?.email ?? ''; // holds user_id, e.g. 'ENG002'
     const myName = (session?.user as any)?.name ?? 'Admin';
-    const isAdmin = (session?.user as any)?.roleType === 'admin';
+    const isAdmin = (session?.user as any)?.role === 'admin';
 
     const { inquiries, loading, error, add, edit, remove, progress } = useInquiries(myUserId, isAdmin);
     const { engineers } = useEngineers();
