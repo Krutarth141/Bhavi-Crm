@@ -15,7 +15,7 @@ const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e
 const labelStyle = { fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 };
 
 export default function ManualSaleModal({ inventory, addedBy, onClose, onSaved }: Props) {
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [saleType, setSaleType] = useState<'dealer' | 'customer'>('dealer');
     const [customer, setCustomer] = useState('');
     const [mobile, setMobile] = useState('');

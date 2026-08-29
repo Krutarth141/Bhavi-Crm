@@ -40,7 +40,7 @@ export default function SiteVisitTracker() {
     const [adhocAddress, setAdhocAddress] = useState('');
     const [adhocArea, setAdhocArea] = useState('');
     const [adhocLabel, setAdhocLabel] = useState('');
-    const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+    const [visitDate, setVisitDate] = useState(new Date().toLocaleDateString('en-CA'));
 
     const [holdRemark, setHoldRemark] = useState('');
 
@@ -64,7 +64,7 @@ export default function SiteVisitTracker() {
         const active = await fetchActiveVisit(memberId);
         if (active) { await refreshTracker(active.id); return; }
         setIsAdhoc(false); setSiteId(''); setAdhocClient(''); setAdhocAddress(''); setAdhocArea(''); setAdhocLabel('');
-        setVisitDate(new Date().toISOString().slice(0, 10));
+        setVisitDate(new Date().toLocaleDateString('en-CA'));
         setSites(await fetchSitesForPicker());
         setView('picker');
     };

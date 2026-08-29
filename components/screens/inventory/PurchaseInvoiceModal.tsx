@@ -25,7 +25,7 @@ interface Props {
 const inputStyle = { width: '100%', border: '1.5px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', fontSize: 12, outline: 'none', boxSizing: 'border-box' as const };
 
 export default function PurchaseInvoiceModal({ inventory, addedBy, onClose, onSaved }: Props) {
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [supplier, setSupplier] = useState('');
     const [invoiceNo, setInvoiceNo] = useState('');
     const [note, setNote] = useState('');

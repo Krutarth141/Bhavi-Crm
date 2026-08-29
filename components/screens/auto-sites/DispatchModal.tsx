@@ -15,7 +15,7 @@ const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8
 const labelStyle = { fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 3 };
 
 export default function DispatchModal({ siteName, pendingItems, onClose, onSave }: Props) {
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [mode, setMode] = useState(DISPATCH_MODES[0]);
     const [deliveredBy, setDeliveredBy] = useState('');
     const [receiverName, setReceiverName] = useState('');

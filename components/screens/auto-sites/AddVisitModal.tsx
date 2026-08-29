@@ -41,7 +41,7 @@ const readFileAsBase64 = (file: File): Promise<string> => new Promise((resolve, 
 });
 
 export default function AddVisitModal({ siteName, pendingSiteItems, onClose, onSave }: Props) {
-    const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
+    const [visitDate, setVisitDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [visitTime, setVisitTime] = useState('');
     const [workDone, setWorkDone] = useState('');
     const [rows, setRows] = useState<MaterialRow[]>([]);

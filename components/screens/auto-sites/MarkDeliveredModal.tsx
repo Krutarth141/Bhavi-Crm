@@ -16,7 +16,7 @@ const labelStyle = { fontSize: 12, fontWeight: 600, display: 'block', marginBott
 export default function MarkDeliveredModal({ item, onClose, onSave }: Props) {
     const totalQty = item.qty || 0;
     const [qty, setQty] = useState(String(totalQty));
-    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
     const [via, setVia] = useState('By Hand');
     const [by, setBy] = useState('');
     const [note, setNote] = useState('');
