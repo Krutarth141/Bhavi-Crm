@@ -30,17 +30,16 @@ export const ENGINEER_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'parts-catalog', label: '📚 Parts Catalog' },
     { id: 'fault-finder', label: '🔍 Fault Finder' },
+    { id: 'eng-parts', label: '🔩 Eng. Parts' },
     // CSP-manager extras (only reachable when isCspManager(session))
     { id: 'reports', label: '📈 Reports' },
     { id: 'tickets', label: '🎫 All Tickets' },
-    { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'pending', label: '📋 Pending List' },
     { id: 'route-planning', label: '🗺️ Route Planning' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'inventory', label: '📦 Inventory' },
     { id: 'work-log-report', label: '📝 Work Log Report' },
     { id: 'amc', label: '🛡️ AMC' },
-    { id: 'site-visits', label: '🏗️ Site Visits' },
     // Auto-engineer extras (ENG002 / ENG008)
     { id: 'auto-sites', label: '🏢 Auto Sites' },
     { id: 'sw-survey', label: '📝 SW Survey' },

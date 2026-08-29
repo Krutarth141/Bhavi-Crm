@@ -59,24 +59,20 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     // — every engineer gets these two, regardless of CSP-manager status.
     { id: 'parts-catalog', label: '📚 Parts Catalog' },
     { id: 'fault-finder', label: '🔍 Fault Finder' },
+    { id: 'eng-parts', label: '🔩 Eng. Parts' },
 ];
 
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
-// also where HTML turns nav-tickets and nav-eng-parts back on.
+// also where HTML turns nav-tickets back on.
 const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'reports', label: '📈 Reports' },
     { id: 'tickets', label: '🎫 All Tickets' },
-    { id: 'eng-parts', label: '🔩 Eng. Parts' },
     { id: 'pending', label: '📋 Pending List' },
     { id: 'route-planning', label: '🗺️ Route Planning' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'inventory', label: '📦 Inventory' },
     { id: 'work-log-report', label: '📝 Work Log Report' },
     { id: 'amc', label: '🛡️ AMC' },
-    // HTML's engineer branch ends with sv('nav-site-visits',false) — Site Visits is
-    // NOT a base engineer nav item. Kept here for CSP managers only (they run the
-    // WC-style site-visit workflow); plain engineers no longer see it.
-    { id: 'site-visits', label: '🏗️ Site Visits' },
 ];
 
 // "Auto engineer" accounts (ENG002/ENG008) — mirrors HTML's isAutoEng nav
@@ -143,9 +139,9 @@ export default function EngineerDashboard() {
             case 'field-tasks': return <FieldTasksScreen />;
             case 'parts-catalog': return <PartsCatalogScreen />;
             case 'fault-finder': return <FaultFinderScreen />;
-            case 'site-visits': return cspMgr ? <SiteVisitsScreen /> : null;
+            case 'site-visits': return null;
             case 'tickets': return cspMgr ? <TicketsScreen /> : null;
-            case 'eng-parts': return cspMgr ? <EngPartsScreen /> : null;
+            case 'eng-parts': return <EngPartsScreen />;
             case 'pending': return cspMgr ? <PendingListScreen /> : null;
             case 'route-planning': return cspMgr ? <RoutePlanningScreen /> : null;
             case 'customers': return cspMgr ? <CustomersScreen /> : null;
