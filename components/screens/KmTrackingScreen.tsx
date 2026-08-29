@@ -15,7 +15,9 @@ export default function KmTrackingScreen() {
     const roleType = (session?.user as any)?.roleType;
     const cspMgr = isCspManager(session);
     const isEngOnly = roleType === 'engineer' && !cspMgr;
-    const isAdmin = (session?.user as any)?.role === 'admin' || cspMgr;
+    const dbRole = (session?.user as any)?.role;
+    const isAdmin = dbRole === 'admin' || cspMgr;
+    const isTrueAdmin = dbRole === 'admin';
     const myEngId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';
 
