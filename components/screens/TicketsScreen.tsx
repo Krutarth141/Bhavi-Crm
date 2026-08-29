@@ -74,7 +74,7 @@ export default function TicketsScreen() {
     return false;
   };
 
-  const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && t.status === 'Closed';
+  const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && ['Closed', 'Delivered', 'Customer Reject'].includes(t.status);
   // index.html:6255 splits these two. `canInv` decides who SEES the invoice
   // status at all (WC / admin / CSP manager / accountant) and who may edit an
   // invoice number that already exists. `canMark` — who may actually ADD the
@@ -296,8 +296,9 @@ export default function TicketsScreen() {
   };
 
   const filteredTickets = useMemo(() => {
+    const showAll = !!searchTerm || invoiceFilter !== 'all';
     return tickets.filter((ticket) => {
-      const matchesStatus = filterStatus === 'all' ? isTicketActive(ticket.status) : ticket.status === filterStatus;
+      const matchesStatus = filterStatus === 'all' ? (showAll || isTicketActive(ticket.status)) : ticket.status === filterStatus;
       const matchesSearch = ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.mobile.includes(searchTerm) ||
         ticket.serial.includes(searchTerm) ||

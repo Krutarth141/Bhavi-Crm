@@ -1,4 +1,6 @@
 'use client';
+import { useEffect } from 'react';
+
 interface ModalProps {
     isOpen: boolean;
     title: string;
@@ -9,6 +11,18 @@ interface ModalProps {
 }
 
 export default function Modal({ isOpen, title, onClose, children, footer, size }: ModalProps) {
+    // Mirrors HTML's global Escape-to-close (index.html:2069-2080) — it
+    // closes every visible modal-overlay at once (not just the topmost), so
+    // one listener per open Modal instance, each closing only itself, adds
+    // up to the same "close everything open" behavior when several are
+    // stacked.
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isOpen, onClose]);
+
     if (!isOpen) return null;
 
     return (
