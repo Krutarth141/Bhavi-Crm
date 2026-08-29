@@ -415,7 +415,10 @@ export default function InquiriesScreen() {
                             })()}
                         </div>
                         <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 10 }}>
-                            {isAdmin && <button onClick={() => { setDetailId(null); openEdit(detailInq); }} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✏️ Edit</button>}
+                            {/* HTML's card-list Edit IS admin-gated (index.html:24152), but
+                                this detail-modal Edit is not (index.html:24272) — any user
+                                viewing an inquiry's detail can fix a typo from here. */}
+                            <button onClick={() => { setDetailId(null); openEdit(detailInq); }} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✏️ Edit</button>
                             <button onClick={() => { setDetailId(null); openUpdate(detailInq); }} style={{ flex: 1, background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📝 Update</button>
                         </div>
                     </div>

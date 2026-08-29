@@ -29,6 +29,7 @@ export default function PaymentCollectionScreen() {
     const [invoiceTicket, setInvoiceTicket] = useState<PaymentTicket | null>(null);
     const [invoiceNo, setInvoiceNo] = useState('');
     const [savingInvoice, setSavingInvoice] = useState(false);
+    const [viewTicket, setViewTicket] = useState<PaymentTicket | null>(null);
 
     const load = useCallback(async () => {
         if (!myId) return;
@@ -181,7 +182,11 @@ export default function PaymentCollectionScreen() {
                                                 return (
                                                     <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                         <td style={{ padding: '6px 8px' }}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('en-IN') : '-'}</td>
-                                                        <td style={{ padding: '6px 8px', fontWeight: 700 }}>{t.id}</td>
+                                                        <td style={{ padding: '6px 8px', fontWeight: 700 }}>
+                                                            {canManage
+                                                                ? <button onClick={() => setViewTicket(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>{t.id}</button>
+                                                                : t.id}
+                                                        </td>
                                                         <td style={{ padding: '6px 8px' }}>{t.cname || '-'}</td>
                                                         <td style={{ padding: '6px 8px' }}>{t.mobile || '-'}</td>
                                                         <td style={{ padding: '6px 8px' }}>{t.area || '-'}</td>
@@ -248,6 +253,37 @@ export default function PaymentCollectionScreen() {
                             <button onClick={handleSaveInvoice} disabled={savingInvoice} style={{ flex: 1, padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: savingInvoice ? 0.6 : 1 }}>{savingInvoice ? 'Saving...' : '💾 Save & Mark Done'}</button>
                             <button onClick={() => setInvoiceTicket(null)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {viewTicket && (
+                <div onClick={() => setViewTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 20 }}>
+                        <h2 style={{ margin: '0 0 4px', fontSize: 16 }}>🎫 {viewTicket.id}</h2>
+                        <div style={{ fontSize: 13, marginBottom: 12 }}>
+                            <div style={{ fontWeight: 700 }}>{viewTicket.cname || '-'}</div>
+                            <div style={{ color: '#6b7280', marginTop: 2 }}>{viewTicket.mobile || '-'}{viewTicket.area ? ` · ${viewTicket.area}` : ''}</div>
+                            <div style={{ color: '#6b7280', marginTop: 2 }}>{viewTicket.model || '-'}</div>
+                        </div>
+                        {(() => {
+                            const b = pcBreakdown(viewTicket);
+                            return (
+                                <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 14, fontSize: 13 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ color: '#6b7280' }}>Labor/Service</span><b>₹{b.labor.toFixed(0)}</b></div>
+                                    {b.parts > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ color: '#6b7280' }}>Parts</span><b>₹{b.parts.toFixed(0)}</b></div>}
+                                    {b.other > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><span style={{ color: '#6b7280' }}>Other</span><b>₹{b.other.toFixed(0)}</b></div>}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: 6, marginTop: 4 }}><span style={{ fontWeight: 700 }}>Total</span><b style={{ color: '#0d9488', fontSize: 15 }}>₹{b.total.toFixed(0)}</b></div>
+                                </div>
+                            );
+                        })()}
+                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>
+                            <div>Payment Mode: <b style={{ color: '#111827' }}>{viewTicket.payment_mode || '-'}</b></div>
+                            <div style={{ marginTop: 4 }}>Assigned: <b style={{ color: '#111827' }}>{viewTicket.assigned_name || '-'}</b></div>
+                            <div style={{ marginTop: 4 }}>Status: <b style={{ color: viewTicket.payment_received ? '#0e9f6e' : '#d97706' }}>{viewTicket.payment_received ? '✅ Received' : '⏳ Pending'}</b></div>
+                            <div style={{ marginTop: 4 }}>Invoice: <b style={{ color: '#111827' }}>{viewTicket.invoice_done ? `#${viewTicket.invoice_no || ''}` : 'Not raised'}</b></div>
+                        </div>
+                        <button onClick={() => setViewTicket(null)} style={{ width: '100%', padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Close</button>
                     </div>
                 </div>
             )}
