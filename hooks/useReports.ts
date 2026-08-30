@@ -1,16 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     fetchAllTickets,
-    fetchPunchLogs,
     fetchDailyReports,
     fetchWCDailyReports,
-    verifyPunchLog as verifyPunchLogService,
     importTickets,
     ImportResult,
 } from '@/services/reportsService';
 import {
     Ticket,
-    PunchLog,
     DailyReport,
     WCDailyReport,
     ImportRow,
@@ -129,16 +126,11 @@ export function validateImportRows(rows: ImportRow[]): {
 
 export function useReports() {
     // ── Tab ──────────────────────────────────────────────────────────────────
-    const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+    const [activeTab, setActiveTab] = useState<ReportTab>('filter');
 
     // ── Tickets ──────────────────────────────────────────────────────────────
     const [allTickets, setAllTickets] = useState<Ticket[]>([]);
     const [ticketsLoading, setTicketsLoading] = useState(true);
-
-    // ── Punch Logs ───────────────────────────────────────────────────────────
-    const [punchLogs, setPunchLogs] = useState<PunchLog[]>([]);
-    const [punchLoading, setPunchLoading] = useState(false);
-    const [punchLoaded, setPunchLoaded] = useState(false);
 
     // ── Daily Reports ─────────────────────────────────────────────────────────
     const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
@@ -186,13 +178,6 @@ export function useReports() {
 
     // ── Lazy-load tab data ────────────────────────────────────────────────────
     useEffect(() => {
-        if (activeTab === 'punch' && !punchLoaded) {
-            setPunchLoading(true);
-            fetchPunchLogs()
-                .then((d) => { setPunchLogs(d); setPunchLoaded(true); })
-                .catch(console.error)
-                .finally(() => setPunchLoading(false));
-        }
         if (activeTab === 'daily' && !dailyLoaded) {
             setDailyLoading(true);
             fetchDailyReports()
@@ -215,10 +200,8 @@ export function useReports() {
         [allTickets, period, customFrom, customTo, filters]
     );
 
-    const totalCalls = filtered.length;
     const totalClosed = filtered.filter((t) => t.status === 'Closed').length;
     const totalRevenue = filtered.reduce((a, t) => a + getTicketFinancials(t).grand, 0);
-    const closureRate = totalCalls > 0 ? Math.round((totalClosed / totalCalls) * 100) : 0;
 
     const statusChartData: BarChartItem[] = STATUS_OPTIONS.map((s) => ({
         label: s,
@@ -259,39 +242,9 @@ export function useReports() {
         .slice(-6)
         .map(([label, value]) => ({ label, value: Math.round(value), color: '#1a56db' }));
 
-    // Trend chart data (monthly + yearly — matches setTrendView in HTML)
-    function getTrendData(view: 'monthly' | 'yearly') {
-        const grp: Record<string, { w: number; nw: number; closed: number; total: number }> = {};
-        allTickets.forEach((t) => {
-            if (!t.created_at) return;
-            const d = new Date(t.created_at);
-            const k =
-                view === 'monthly'
-                    ? d.toLocaleString('en-IN', { month: 'short', year: '2-digit' })
-                    : d.getFullYear().toString();
-            if (!grp[k]) grp[k] = { w: 0, nw: 0, closed: 0, total: 0 };
-            grp[k].total++;
-            if (['Warranty', 'Warranty Repeat', 'AMC'].includes(t.call_type)) grp[k].w++;
-            else grp[k].nw++;
-            if (t.status === 'Closed') grp[k].closed++;
-        });
-        return Object.entries(grp).slice(view === 'monthly' ? -6 : -20);
-    }
-
     const engineers = [
         ...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean)),
     ] as string[];
-
-    // ── Verify punch log ──────────────────────────────────────────────────────
-    const handleVerifyPunch = useCallback(
-        async (id: string, adminRemark: string, verifiedBy: string) => {
-            await verifyPunchLogService(id, adminRemark, verifiedBy);
-            // Refresh punch logs
-            const updated = await fetchPunchLogs();
-            setPunchLogs(updated);
-        },
-        []
-    );
 
     // ── Import handler ────────────────────────────────────────────────────────
     const handleImport = useCallback(
@@ -446,8 +399,6 @@ export function useReports() {
         activeTab, setActiveTab,
         // tickets
         allTickets, ticketsLoading,
-        // punch logs
-        punchLogs, punchLoading, handleVerifyPunch,
         // daily reports
         dailyReports, dailyLoading,
         // wc reports
@@ -465,15 +416,12 @@ export function useReports() {
         filtered,
         engineers,
         engData,
-        totalCalls,
         totalClosed,
         totalRevenue,
-        closureRate,
         statusChartData,
         callTypeChartData,
         engineerChartData,
         revenueChartData,
-        getTrendData,
         // actions
         handleDownload,
         handlePrint,

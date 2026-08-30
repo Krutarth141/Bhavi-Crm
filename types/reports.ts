@@ -190,11 +190,8 @@ export interface BarChartItem {
 export type ReportType = 'tickets' | 'revenue' | 'engineers' | 'status';
 
 export type ReportTab =
-    | 'overview'
     | 'filter'
     | 'revenue'
-    | 'tasks'
-    | 'punch'
     | 'daily'
     | 'wcdaily'
     | 'import'
@@ -275,11 +272,8 @@ export const CALL_TYPE_COLORS: Record<string, string> = {
 };
 
 export const REPORT_TABS: { key: ReportTab; label: string }[] = [
-    { key: 'overview', label: '📊 Overview' },
     { key: 'filter', label: '🔍 Filter & Download' },
     { key: 'revenue', label: '💰 Revenue' },
-    { key: 'tasks', label: '✅ Tasks' },
-    { key: 'punch', label: '🕐 Punch Logs' },
     { key: 'daily', label: '📋 Engineer Daily' },
     { key: 'wcdaily', label: '🎯 WC Daily' },
     { key: 'import', label: '📥 Import Calls' },

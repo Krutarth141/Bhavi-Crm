@@ -5,11 +5,8 @@ import { useReports } from '@/hooks/useReports';
 import { REPORT_TABS } from '@/types/reports';
 
 // Tab components
-import OverviewTab from '@/components/screens/reports/OverviewTab';
 import FilterDownloadTab from '@/components/screens/reports/FilterDownloadTab';
 import RevenueTab from '@/components/screens/reports/RevenueTab';
-import TasksTab from '@/components/screens/reports/TasksTab';
-import PunchLogsTab from '@/components/screens/reports/PunchLogsTab';
 import DailyReportsTab from '@/components/screens/reports/DailyReportsTab';
 import WCDailyReportsTab from '@/components/screens/reports/WCDailyReportsTab';
 import ImportCallsTab from '@/components/screens/reports/ImportCallsTab';
@@ -24,8 +21,6 @@ export default function ReportsScreen() {
     activeTab, setActiveTab,
     // tickets
     ticketsLoading,
-    // punch logs
-    punchLogs, punchLoading, handleVerifyPunch,
     // daily
     dailyReports, dailyLoading,
     // wc
@@ -42,15 +37,12 @@ export default function ReportsScreen() {
     filtered,
     engineers,
     engData,
-    totalCalls,
     totalClosed,
     totalRevenue,
-    closureRate,
     statusChartData,
     callTypeChartData,
     engineerChartData,
     revenueChartData,
-    getTrendData,
     // actions
     handleDownload,
     handlePrint,
@@ -93,22 +85,10 @@ export default function ReportsScreen() {
       </div>
 
       {/* Loading state for ticket-based tabs */}
-      {ticketsLoading && ['overview', 'filter', 'revenue', 'tasks'].includes(activeTab) ? (
+      {ticketsLoading && ['filter', 'revenue'].includes(activeTab) ? (
         <p className="loading">Loading report data...</p>
       ) : (
         <>
-          {activeTab === 'overview' && (
-            <OverviewTab
-              totalCalls={totalCalls}
-              totalClosed={totalClosed}
-              totalRevenue={totalRevenue}
-              closureRate={closureRate}
-              getTrendData={getTrendData}
-              callTypeChartData={callTypeChartData}
-              statusChartData={statusChartData}
-            />
-          )}
-
           {activeTab === 'filter' && (
             <FilterDownloadTab
               period={period}
@@ -141,22 +121,6 @@ export default function ReportsScreen() {
               totalRevenue={totalRevenue}
               revenueChartData={revenueChartData}
               engData={engData}
-            />
-          )}
-
-          {activeTab === 'tasks' && (
-            <TasksTab
-              filtered={filtered}
-              engineers={engineers}
-            />
-          )}
-
-          {activeTab === 'punch' && (
-            <PunchLogsTab
-              logs={punchLogs}
-              loading={punchLoading}
-              onVerify={handleVerifyPunch}
-              currentUserName={currentUserName}
             />
           )}
 

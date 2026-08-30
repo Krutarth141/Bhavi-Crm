@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Ticket, PunchLog, DailyReport, WCDailyReport, ImportRow } from '@/types/reports';
+import { Ticket, DailyReport, WCDailyReport, ImportRow } from '@/types/reports';
 
 // ─── Tickets ─────────────────────────────────────────────────────────────────
 
@@ -19,35 +19,6 @@ export async function fetchAllTickets(): Promise<Ticket[]> {
         from += PAGE;
     }
     return all;
-}
-
-// ─── Punch Logs ──────────────────────────────────────────────────────────────
-
-export async function fetchPunchLogs(): Promise<PunchLog[]> {
-    const { data, error } = await supabase
-        .from('punch_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-    if (error) throw error;
-    return data || [];
-}
-
-export async function verifyPunchLog(
-    id: string,
-    adminRemark: string,
-    verifiedBy: string
-): Promise<void> {
-    const { error } = await supabase
-        .from('punch_logs')
-        .update({
-            status: 'verified',
-            admin_remark: adminRemark || 'Approved',
-            verified_by: verifiedBy,
-            updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-    if (error) throw error;
 }
 
 // ─── Engineer Daily Reports ───────────────────────────────────────────────────
