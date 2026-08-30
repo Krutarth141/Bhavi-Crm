@@ -35,6 +35,8 @@ export default function TicketsScreen() {
   const { tickets, loading, fetchTickets } = useTickets({
     userRole: currentUserRole,
     userId: currentUserId,
+    userName: (session?.user as any)?.name,
+    isAccountant: isAcct,
     cspOnly: cspMgr,
   });
   const { engineers, loading: engineersLoading, error: engineersError, loadEngineers: refetchEngineers } = useEngineers()

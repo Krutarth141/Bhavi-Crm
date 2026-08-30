@@ -3,7 +3,6 @@ export interface NavPermissionItem { id: string; label: string; }
 export const WC_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'tickets', label: '🎫 Tickets' },
     { id: 'pending', label: '📋 Pending List' },
-    { id: 'tasks', label: '✅ Tasks' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'walkin', label: '🚶 Walk-in' },
     { id: 'walkin-report', label: '📊 Walk-in Report' },
@@ -12,6 +11,10 @@ export const WC_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'reports', label: '📈 Reports' },
     { id: 'inquiries', label: '🔎 Inquiries' },
     { id: 'attendance', label: '🗓️ Attendance' },
+    { id: 'work-log', label: '🗒️ Work Log' },
+    { id: 'work-log-report', label: '📝 Work Log Report' },
+    { id: 'sales', label: '💼 Sales' },
+    { id: 'route-planning', label: '🗺️ Route Planning' },
 ];
 
 // Mirrors HTML's _NAV_ALL_ITEMS (index.html ~11977) restricted to the tabs an
@@ -21,7 +24,6 @@ export const WC_NAV_ITEMS: NavPermissionItem[] = [
 export const ENGINEER_NAV_ITEMS: NavPermissionItem[] = [
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'work-log', label: '🗒️ Work Log' },
-    { id: 'tasks', label: '📋 My Tasks' },
     { id: 'my-report', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },

@@ -302,11 +302,30 @@ export const fetchTicketsByEngineer = async (engineerId: string): Promise<Ticket
 };
 
 // Fetch tickets based on user role
-export const fetchTicketsForUser = async (userRole: string, userId: string): Promise<Ticket[]> => {
+export const fetchTicketsForUser = async (
+    userRole: string,
+    userId: string,
+    opts: { userName?: string; isAccountant?: boolean } = {}
+): Promise<Ticket[]> => {
     try {
-        // Admins and work controllers see all tickets
-        if (userRole === 'admin' || userRole === 'work_controller') {
+        // Admins see all tickets, unfiltered.
+        if (userRole === 'admin') {
             return fetchAllTickets();
+        }
+        // Work controllers are scoped to their own dealer network by wc_type,
+        // derived from their name/user_id — except the Accountant (ACCT001),
+        // who sees every ticket unfiltered (index.html:4773-4783, 3663).
+        if (userRole === 'work_controller') {
+            const all = await fetchAllTickets();
+            if (opts.isAccountant) return all;
+            const upperName = (opts.userName || '').toUpperCase();
+            const upperId = (userId || '').toUpperCase();
+            let wcType: 'ICP' | 'CSP' = 'ICP';
+            if (upperName.includes('CSP') || upperId.includes('CSP')) wcType = 'CSP';
+            else if (upperName.includes('ICP') || upperId.includes('ICP')) wcType = 'ICP';
+            return wcType === 'ICP'
+                ? all.filter((t) => t.wc_type === 'ICP' || !t.wc_type)
+                : all.filter((t) => t.wc_type === wcType);
         }
         // Engineers see only their assigned tickets
         if (userRole === 'engineer') {

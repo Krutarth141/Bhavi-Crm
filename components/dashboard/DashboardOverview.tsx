@@ -22,7 +22,7 @@ import {
 import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { hasDailyReportToday } from '@/services/engDailyReportService';
 import { DailyReportModal } from '@/components/screens/MyCallsScreen';
-import { isCspManager } from '@/lib/permissions';
+import { isCspManager, isAccountant } from '@/lib/permissions';
 import PunchModal from '@/components/screens/PunchModal';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import Modal from '@/components/Modal';
@@ -64,8 +64,9 @@ export default function DashboardOverview({ role }: Props) {
     const loginId = ((session?.user as any)?.email || '').toUpperCase(); // holds user_id, e.g. 'ENG002'
     const userName = (session?.user as any)?.name ?? '';
     const cspMgr = isCspManager(session);
+    const isAcct = isAccountant(session);
 
-    const { tickets: allTickets, loading } = useTickets({ userRole: role, userId });
+    const { tickets: allTickets, loading } = useTickets({ userRole: role, userId, userName, isAccountant: isAcct });
 
     // Punch In/Out bar — engineers AND work controllers (matches HTML:3754).
     const canPunch = role === 'engineer' || role === 'work_controller';

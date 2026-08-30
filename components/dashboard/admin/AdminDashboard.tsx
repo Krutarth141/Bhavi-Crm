@@ -7,7 +7,6 @@ import AdminUserManagement from './AdminUserManagement';
 // Existing screens
 import TicketsScreen from '@/components/screens/TicketsScreen';
 import InventoryScreen from '@/components/screens/InventoryScreen';
-import TasksScreen from '@/components/screens/TasksScreen';
 import CustomersScreen from '@/components/screens/CustomersScreen';
 import ReportsScreen from '@/components/screens/ReportsScreen';
 import MasterDataScreen from '@/components/screens/MasterDataScreen';
@@ -30,7 +29,6 @@ import SalesScreen from '@/components/screens/SalesScreen';
 import InquiriesScreen from '@/components/screens/InquiriesScreen';
 import AutoSitesScreen from '@/components/screens/AutoSitesScreen';
 import AutoInventoryScreen from '@/components/screens/AutoInventoryScreen';
-import ProfitScreen from '@/components/screens/ProfitScreen';
 import WeeklyReportScreen from '@/components/screens/WeeklyReportScreen';
 import AutoVisitsReportScreen from '@/components/screens/AutoVisitsReportScreen';
 import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
@@ -57,10 +55,10 @@ import '@/styles/dashboard.css';
 
 type AdminTab =
     | 'overview' | 'tickets' | 'pending' | 'inventory' | 'eng-parts'
-    | 'tasks' | 'customers' | 'walkin' | 'walkin-report' | 'courier'
+    | 'customers' | 'walkin' | 'walkin-report' | 'courier'
     | 'courier-report' | 'reports' | 'worklogs' | 'engineers' | 'master'
     | 'settings' | 'live-map' | 'attendance' | 'targets' | 'amc'
-    | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
+    | 'weekly-report' | 'sales' | 'parts-catalog'
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
@@ -72,7 +70,6 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'pending', label: '📋 Pending List' },
     { id: 'inventory', label: '📦 Inventory' },
     { id: 'eng-parts', label: '🔩 Eng. Parts' },
-    { id: 'tasks', label: '✅ Tasks' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'walkin', label: '🚶 Walk-in' },
     { id: 'walkin-report', label: '📊 Walk-in Report' },
@@ -88,7 +85,6 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'peon-activity', label: '🧹 Peon Activity' },
     { id: 'targets', label: '🎯 Targets' },
     { id: 'amc', label: '🔄 AMC' },
-    { id: 'profit', label: '💰 Profit' },
     { id: 'weekly-report', label: '📊 Weekly Report' },
     { id: 'sales', label: '💼 Sales' },
     { id: 'parts-catalog', label: '🔩 Parts Catalog' },
@@ -132,7 +128,6 @@ export default function AdminDashboard() {
             case 'pending': return <PendingListScreen />;
             case 'inventory': return <InventoryScreen />;
             case 'eng-parts': return <EngPartsScreen />;
-            case 'tasks': return <TasksScreen />;
             case 'customers': return <CustomersScreen />;
             case 'walkin': return <WalkInScreen />;
             case 'walkin-report': return <WalkInReportScreen />;
@@ -149,7 +144,6 @@ export default function AdminDashboard() {
             case 'peon-activity': return <PeonActivityScreen />;
             case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
-            case 'profit': return <ProfitScreen />;
             case 'weekly-report': return <WeeklyReportScreen />;
             case 'sales': return <SalesScreen />;
             case 'parts-catalog': return <PartsCatalogScreen />;

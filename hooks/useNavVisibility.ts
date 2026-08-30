@@ -13,9 +13,9 @@ export function useNavVisibility(uid: string | undefined) {
         }).catch(() => setLoaded(true));
     }, [uid]);
 
-    const isVisible = (navId: string): boolean => {
-        if (!overrides) return true;
-        if (overrides[navId] === undefined) return true;
+    const isVisible = (navId: string, defaultVisible: boolean = true): boolean => {
+        if (!overrides) return defaultVisible;
+        if (overrides[navId] === undefined) return defaultVisible;
         return overrides[navId];
     };
 

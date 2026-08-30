@@ -6,7 +6,6 @@ export function useMyCalls(engId: string, engName: string) {
     const [punchLog, setPunchLog] = useState<PunchLog | null>(null);
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
     const [myTickets, setMyTickets] = useState<any[]>([]);
-    const [myTasks, setMyTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +22,6 @@ export function useMyCalls(engId: string, engName: string) {
                 { data: punchData, error: punchError },
                 { data: workData, error: workError },
                 { data: ticketsData, error: ticketsError },
-                { data: tasksData, error: tasksError },
             ] = await Promise.all([
                 supabase
                     .from('punch_logs')
@@ -42,23 +40,15 @@ export function useMyCalls(engId: string, engName: string) {
                     .select('*')
                     .eq('assigned_to', engId)
                     .order('sequence_no', { ascending: true, nullsFirst: false }),
-                supabase
-                    .from('tasks')
-                    .select('*')
-                    .eq('assigned_to', engId)
-                    .neq('status', 'Closed')
-                    .order('created_at', { ascending: false }),
             ]);
 
             if (punchError) throw punchError;
             if (workError) throw workError;
             if (ticketsError) throw ticketsError;
-            if (tasksError) throw tasksError;
 
             setPunchLog(punchData ?? null);
             setWorkLogs(workData ?? []);
             setMyTickets(ticketsData ?? []);
-            setMyTasks(tasksData ?? []);
         } catch (err: any) {
             console.error('useMyCalls fetch error:', err);
             setError(err?.message ?? String(err));
@@ -69,5 +59,5 @@ export function useMyCalls(engId: string, engName: string) {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    return { punchLog, workLogs, myTickets, myTasks, loading, error, refetch: fetchAll };
+    return { punchLog, workLogs, myTickets, loading, error, refetch: fetchAll };
 }

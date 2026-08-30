@@ -5,7 +5,6 @@ import { useSession } from 'next-auth/react';
 import { useNavVisibility } from '@/hooks/useNavVisibility';
 
 // Existing screens
-import TasksScreen from '@/components/screens/TasksScreen';
 import TicketsScreen from '@/components/screens/TicketsScreen';
 import MyReportScreen from '@/components/screens/MyReportScreen';
 
@@ -36,7 +35,7 @@ import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
 import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
 
-type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'tasks' | 'my-report' | 'reports' | 'attendance'
+type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'my-report' | 'reports' | 'attendance'
     | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'inquiries'
     | 'parts-catalog' | 'fault-finder'
     | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
@@ -48,7 +47,6 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
     { id: 'my-calls', label: '📞 My Calls' },
     { id: 'work-log', label: '🗒️ Work Log' },
-    { id: 'tasks', label: '📋 My Tasks' },
     { id: 'my-report', label: '📈 My Reports' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
@@ -129,7 +127,6 @@ export default function EngineerDashboard() {
             case 'overview': return <DashboardOverview role="engineer" />;
             case 'my-calls': return <MyCallsScreen initialTicketId={pendingTicketId} onConsumedInitialTicket={() => setPendingTicketId(null)} />;
             case 'work-log': return <EngineerWorkLogScreen engId={engId} engName={engName} />;
-            case 'tasks': return <TasksScreen />;
             case 'my-report': return <MyReportScreen />;
             case 'reports': return cspMgr ? <ReportsScreen /> : null;
             case 'attendance': return <AttendanceScreen />;

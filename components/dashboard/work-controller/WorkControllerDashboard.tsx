@@ -6,7 +6,6 @@ import { useNavVisibility } from '@/hooks/useNavVisibility';
 
 // Existing screens
 import TicketsScreen from '@/components/screens/TicketsScreen';
-import TasksScreen from '@/components/screens/TasksScreen';
 import CustomersScreen from '@/components/screens/CustomersScreen';
 import ReportsScreen from '@/components/screens/ReportsScreen';
 
@@ -29,18 +28,22 @@ import TatReportScreen from '@/components/screens/TatReportScreen';
 import PaymentQrModal from '@/components/screens/PaymentQrModal';
 import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 import PartRequestScreen from '@/components/screens/PartRequestScreen';
+import InventoryScreen from '@/components/screens/InventoryScreen';
+import MasterDataScreen from '@/components/screens/MasterDataScreen';
+import SalesScreen from '@/components/screens/SalesScreen';
+import RoutePlanningScreen from '@/components/screens/RoutePlanningScreen';
+import WorkLogScreen, { EngineerWorkLogScreen } from '@/components/screens/WorkLogScreen';
 
 type WorkControllerTab =
-    | 'overview' | 'tickets' | 'pending' | 'tasks' | 'customers'
+    | 'overview' | 'tickets' | 'pending' | 'customers'
     | 'walkin' | 'walkin-report' | 'courier' | 'courier-report'
     | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'tat-report'
-    | 'part-request';
+    | 'part-request' | 'inventory' | 'work-log' | 'work-log-report' | 'master' | 'sales' | 'route-planning';
 
 const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
     { id: 'tickets', label: '🎫 Tickets' },
     { id: 'pending', label: '📋 Pending List' },
-    { id: 'tasks', label: '✅ Tasks' },
     { id: 'customers', label: '👥 Customers' },
     { id: 'walkin', label: '🚶 Walk-in' },
     { id: 'walkin-report', label: '📊 Walk-in Report' },
@@ -51,22 +54,38 @@ const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
+    { id: 'inventory', label: '📦 Inventory' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     { id: 'site-visits', label: '🏗️ Site Visits' },
     { id: 'tat-report', label: '⏱️ TAT Compliance' },
     { id: 'part-request', label: '🧰 Part Requests' },
+    { id: 'work-log', label: '🗒️ Work Log' },
+    { id: 'work-log-report', label: '📝 Work Log Report' },
+    { id: 'master', label: '🗂️ Master Data' },
+    { id: 'sales', label: '💼 Sales' },
+    { id: 'route-planning', label: '🗺️ Route Planning' },
 ];
+
+// index.html:2914-2916 (setupNav's isWC branch) hides Reports, Walk-in Report,
+// and Courier Report from every Work Controller by default (sv(...,false)) —
+// unlike other WC items, these are NOT visible unless a per-employee nav
+// permission override explicitly turns them on.
+const WC_DEFAULT_OFF = new Set<WorkControllerTab>(['reports', 'walkin-report', 'courier-report']);
 
 export default function WorkControllerDashboard() {
     const { data: session } = useSession();
     const uid = (session?.user as any)?.id != null ? String((session?.user as any).id) : undefined;
+    const wcId = (session?.user as any)?.email || '';
+    const wcName = (session?.user as any)?.name || 'WC';
     const { isVisible } = useNavVisibility(uid);
     const isAcct = isAccountant(session);
-    // Payment Collection is Accountant-only among Work Controllers — plain WCs
-    // never see it, regardless of nav permission overrides (mirrors HTML).
+    // Payment Collection and Inventory are Accountant-only among Work
+    // Controllers — plain WCs never see either, regardless of nav permission
+    // overrides (index.html:2918-2921,2926: window._isAcct gates both).
     const visibleNavItems = NAV_ITEMS
         .filter((item) => item.id !== 'payment-collection' || isAcct)
-        .filter((item) => item.id === 'overview' || isVisible(item.id));
+        .filter((item) => item.id !== 'inventory' || isAcct)
+        .filter((item) => item.id === 'overview' || isVisible(item.id, !WC_DEFAULT_OFF.has(item.id)));
 
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -84,7 +103,6 @@ export default function WorkControllerDashboard() {
             case 'overview': return <DashboardOverview role="work_controller" />;
             case 'tickets': return <TicketsScreen />;
             case 'pending': return <PendingListScreen />;
-            case 'tasks': return <TasksScreen />;
             case 'customers': return <CustomersScreen />;
             case 'walkin': return <WalkInScreen />;
             case 'walkin-report': return <WalkInReportScreen />;
@@ -95,10 +113,16 @@ export default function WorkControllerDashboard() {
             case 'attendance': return <AttendanceScreen />;
             case 'km-report': return <KmTrackingScreen />;
             case 'payment-collection': return <PaymentCollectionScreen />;
+            case 'inventory': return <InventoryScreen />;
             case 'field-tasks': return <FieldTasksScreen />;
             case 'site-visits': return <SiteVisitsScreen />;
             case 'tat-report': return <TatReportScreen />;
             case 'part-request': return <PartRequestScreen />;
+            case 'work-log': return <EngineerWorkLogScreen engId={wcId} engName={wcName} />;
+            case 'work-log-report': return <WorkLogScreen />;
+            case 'master': return <MasterDataScreen />;
+            case 'sales': return <SalesScreen />;
+            case 'route-planning': return <RoutePlanningScreen />;
             default: return null;
         }
     };
@@ -168,8 +192,8 @@ export default function WorkControllerDashboard() {
             </div>
             {showWCReport && (
                 <WCDailyReportModal
-                    wcId={(session?.user as any)?.email || ''}
-                    wcName={(session?.user as any)?.name || 'WC'}
+                    wcId={wcId}
+                    wcName={wcName}
                     onClose={() => setShowWCReport(false)}
                     onSaved={() => setShowWCReport(false)}
                 />
