@@ -5,7 +5,9 @@ export const printDeliveryChallan = async (params: {
     dcNumber: string;
     dispatchDate: string;
     receiverName?: string;
-    deliveryDetail?: string;
+    receiverMobile?: string;
+    deliveryMode?: string;
+    courierDetail?: string;
     engineerName: string;
     items: { item_name: string; qty: number; unit?: string; note?: string; model_no?: string; brand?: string; made_in?: string; category?: string; description?: string }[];
     customerSignature?: string;
@@ -42,7 +44,8 @@ ${logo ? `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;"><
 </div>
 <div style="background:#f0f4ff;border-radius:6px;padding:10px;margin-bottom:14px;font-size:12px;">
 <b>Site:</b> ${esc(params.siteName)} &nbsp;&nbsp; <b>Engineer:</b> ${esc(params.engineerName)}
-${params.deliveryDetail ? `<br><b>Delivery Mode:</b> ${esc(params.deliveryDetail)}` : ''}
+${params.deliveryMode ? `<br><b>Delivery:</b> ${esc(params.deliveryMode)}${params.courierDetail ? ' — ' + esc(params.courierDetail) : ''}` : ''}
+${params.receiverMobile ? `<br><b>Receiver Mobile:</b> ${esc(params.receiverMobile)}` : ''}
 </div>
 <table style="margin-bottom:16px;">
 <thead><tr style="background:#f9fafb;"><th style="padding:6px;border:1px solid #e5e7eb;">#</th><th style="padding:6px;border:1px solid #e5e7eb;">Item</th><th style="padding:6px;border:1px solid #e5e7eb;">Model No</th><th style="padding:6px;border:1px solid #e5e7eb;">Brand</th><th style="padding:6px;border:1px solid #e5e7eb;">Category</th><th style="padding:6px;border:1px solid #e5e7eb;">Unit</th><th style="padding:6px;border:1px solid #e5e7eb;">Qty</th><th style="padding:6px;border:1px solid #e5e7eb;">Note</th></tr></thead>

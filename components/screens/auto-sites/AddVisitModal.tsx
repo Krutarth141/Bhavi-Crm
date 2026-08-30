@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Modal from '@/components/Modal';
 import { AutoSiteItem, VisitMaterialItem, VisitDeliveryDetails } from '@/types/autoSites';
+import AIWriteButton from '@/components/shared/AIWriteButton';
 
 interface MaterialRow {
     site_item_id: number | null;
@@ -135,6 +136,9 @@ export default function AddVisitModal({ siteName, pendingSiteItems, onClose, onS
             <div style={{ marginBottom: 10 }}>
                 <label style={labelStyle}>Work Done 🔧</label>
                 <textarea value={workDone} onChange={e => setWorkDone(e.target.value)} rows={3} placeholder="Describe the work done..." style={{ ...fieldStyle, resize: 'vertical' }} />
+                <div style={{ marginTop: 6, textAlign: 'right' }}>
+                    <AIWriteButton type="visit" onInsert={(text) => setWorkDone(text)} label="✨ AI Remark" />
+                </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>

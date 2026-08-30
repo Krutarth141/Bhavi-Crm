@@ -6,6 +6,7 @@ export interface SignatureCanvasHandle {
     getDataUrl: () => string;
     clear: () => void;
     isEmpty: () => boolean;
+    skip: () => void;
 }
 
 interface Props {
@@ -87,6 +88,19 @@ const SignatureCanvas = forwardRef<SignatureCanvasHandle, Props>(({ width = 420,
             hasDrawnRef.current = false;
         },
         isEmpty: () => !hasDrawnRef.current,
+        skip: () => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.fillStyle = '#f3f4f6';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '13px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('— Skipped —', canvas.width / 2, canvas.height / 2);
+            hasDrawnRef.current = true;
+        },
     }));
 
     return (

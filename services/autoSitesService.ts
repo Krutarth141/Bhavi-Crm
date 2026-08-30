@@ -160,14 +160,14 @@ export const fetchAllSitePaymentSums = async (): Promise<Record<number, number>>
 
 export const fetchAllSiteItemAggregates = async (): Promise<Record<number, { total: number; delivered: number; value: number }>> => {
     try {
-        const { data, error } = await supabase.from('auto_site_items').select('site_id, unit_price, qty, gst_percent, delivery_status');
+        const { data, error } = await supabase.from('auto_site_items').select('site_id, total_price, delivery_status');
         if (error) throw error;
         const map: Record<number, { total: number; delivered: number; value: number }> = {};
         (data || []).forEach((i: any) => {
             if (!map[i.site_id]) map[i.site_id] = { total: 0, delivered: 0, value: 0 };
             map[i.site_id].total++;
             if (i.delivery_status === 'delivered') map[i.site_id].delivered++;
-            map[i.site_id].value += Math.round((i.unit_price || 0) * (i.qty || 0) * (1 + (i.gst_percent || 0) / 100));
+            map[i.site_id].value += parseFloat(i.total_price || 0);
         });
         return map;
     } catch (err) { console.error('fetchAllSiteItemAggregates:', err); return {}; }

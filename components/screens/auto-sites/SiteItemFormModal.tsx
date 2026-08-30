@@ -88,8 +88,10 @@ export default function SiteItemFormModal({ siteItems, editItem, onClose, onSave
         setSaving(true);
         const r = await onSave({ ...form, item_name: finalName });
         setSaving(false);
-        if (r.success) onClose();
-        else alert('Error: ' + r.error);
+        if (r.success) {
+            if (!isEdit) alert('✅ Item saved!');
+            onClose();
+        } else alert('Error: ' + r.error);
     };
 
     const footer = (

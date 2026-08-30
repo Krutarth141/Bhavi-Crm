@@ -130,7 +130,7 @@ export default function AutoSitesScreen() {
         return r;
     };
 
-    const grandSell = siteItems.reduce((a, i) => a + (i.total_price || Math.round((i.unit_price || 0) * (i.qty || 0) * (1 + (i.gst_percent || 0) / 100))), 0);
+    const grandSell = siteItems.reduce((a, i) => a + (i.total_price || (i.unit_price || 0) * (i.qty || 0)), 0);
     const totalPaid = sitePayments.reduce((a, p) => a + (p.amount || 0), 0);
     const pending = grandSell - totalPaid;
     const delivCount = siteItems.filter(i => i.delivery_status === 'delivered').length;
@@ -243,7 +243,8 @@ export default function AutoSitesScreen() {
                 dcNumber: r.dcNumber || '',
                 dispatchDate: params.date,
                 receiverName: params.receiverName,
-                deliveryDetail: `${params.mode}${params.deliveredBy ? ' | ' + params.deliveredBy : ''}`,
+                deliveryMode: params.mode,
+                courierDetail: params.deliveredBy,
                 engineerName: userName,
                 items: params.items.map(d => ({ item_name: d.item.item_name, qty: d.qty, unit: d.item.unit, note: d.item.note })),
             });
@@ -259,7 +260,8 @@ export default function AutoSitesScreen() {
             dcNumber: d.dc_number || '',
             dispatchDate: d.dispatch_date || '',
             receiverName: d.receiver_name,
-            deliveryDetail: d.delivery_mode + (d.delivery_detail ? ` | ${d.delivery_detail}` : ''),
+            deliveryMode: d.delivery_mode,
+            courierDetail: d.delivery_detail,
             engineerName: userName,
             items: its.map((i: any) => ({ item_name: i.item_name, qty: i.qty, unit: i.unit })),
         });
@@ -595,9 +597,22 @@ export default function AutoSitesScreen() {
             )}
             {dcPrintParams && (
                 <DCSignatureModal
+                    initial={{
+                        deliveryMode: dcPrintParams.deliveryMode || '',
+                        courierDetail: dcPrintParams.courierDetail || '',
+                        receiverName: dcPrintParams.receiverName || '',
+                    }}
                     onClose={() => setDcPrintParams(null)}
-                    onConfirm={(custSig, mgrSig) => {
-                        printDeliveryChallan({ ...dcPrintParams, customerSignature: custSig, managerSignature: mgrSig });
+                    onConfirm={(edited) => {
+                        printDeliveryChallan({
+                            ...dcPrintParams,
+                            receiverName: edited.receiverName,
+                            receiverMobile: edited.receiverMobile,
+                            deliveryMode: edited.deliveryMode,
+                            courierDetail: edited.courierDetail,
+                            customerSignature: edited.customerSig,
+                            managerSignature: edited.managerSig,
+                        });
                         setDcPrintParams(null);
                     }}
                 />
