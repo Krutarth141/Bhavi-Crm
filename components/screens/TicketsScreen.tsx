@@ -14,8 +14,6 @@ import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
 import { approveWarrantyClaim, rejectWarrantyClaim } from '@/services/warrantyClaimService';
 import VoidWarrantyModal from '@/components/screens/tickets/VoidWarrantyModal';
-import { buildFeedbackWhatsAppLink } from '@/services/feedbackService';
-import { fetchCompanyInfo } from '@/services/settingsService';
 import ReportEditRequestModal from '@/components/screens/tickets/ReportEditRequestModal';
 import { approveReportEdit, rejectReportEdit } from '@/services/ticketService';
 import { isCspManager, isAccountant } from '@/lib/permissions';
@@ -121,15 +119,6 @@ export default function TicketsScreen() {
     }
 
     return data;
-  };
-
-  const handleSendFeedbackRequest = async (t: Ticket) => {
-    const ci = await fetchCompanyInfo();
-    const link = buildFeedbackWhatsAppLink({
-      ticketId: t.id, customerName: t.cname, mobile: t.mobile, engineerName: t.assigned_name,
-      companyName: ci?.company_name, companyPhone: ci?.phone,
-    });
-    window.open(link, '_blank');
   };
 
   const handleAddClick = () => {
@@ -815,11 +804,6 @@ export default function TicketsScreen() {
                         ⚠️ Invoice Pending
                       </span>
                     )
-                  )}
-                  {selectedTicket?.status === 'Closed' && (
-                    <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => handleSendFeedbackRequest(selectedTicket!)}>
-                      ⭐ Feedback
-                    </button>
                   )}
                   {selectedTicket?.status !== 'Closed' && currentUserRole === 'work_controller' && !selectedTicket?.pending_edit && (
                     <button style={{ ...styles.btn, background: '#0ea5e9', color: 'white' }} onClick={() => setReportEditTicket(selectedTicket)}>

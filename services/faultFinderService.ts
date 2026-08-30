@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { FaultKnowledge, FaultKnowledgeForm, ModelError } from '@/types/faultFinder';
+import { FaultKnowledge, FaultKnowledgeForm } from '@/types/faultFinder';
 
 export const fetchFaultKnowledge = async (): Promise<FaultKnowledge[]> => {
     try {
@@ -32,20 +32,6 @@ export const createFaultKnowledge = async (
     } catch (err) {
         console.error('Failed to create fault knowledge:', err);
         return { success: false, error: (err as any).message };
-    }
-};
-
-export const fetchModelErrors = async (): Promise<ModelError[]> => {
-    try {
-        const { data, error } = await supabase
-            .from('model_errors')
-            .select('*')
-            .order('model_name');
-        if (error) throw error;
-        return data || [];
-    } catch (err) {
-        console.error('Failed to fetch model errors:', err);
-        return [];
     }
 };
 

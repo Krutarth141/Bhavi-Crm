@@ -4,16 +4,13 @@ import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useFaultFinder } from '@/hooks/useFaultFinder';
 import FaultKnowledgeTab from '@/components/screens/fault-finder/FaultKnowledgeTab';
-import ErrorCodesTab from '@/components/screens/fault-finder/ErrorCodesTab';
-import { FaultFinderTab } from '@/types/faultFinder';
 
 export default function FaultFinderScreen() {
     const { data: session } = useSession();
     // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
     // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
     const isAdmin = (session?.user as any)?.role === 'admin';
-    const { faults, errors, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
-    const [activeTab, setActiveTab] = useState<FaultFinderTab>('fault-knowledge');
+    const { faults, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [search, setSearch] = useState('');
 
     // Guided Model + Fault Type search — mirrors HTML's _ffModelSuggest()/
@@ -58,15 +55,6 @@ export default function FaultFinderScreen() {
             f.part_required?.toLowerCase().includes(q);
     });
 
-    const filteredErrors = errors.filter(e => {
-        if (!search.trim()) return true;
-        const q = search.toLowerCase();
-        return e.model_name?.toLowerCase().includes(q) ||
-            e.error_code?.toLowerCase().includes(q) ||
-            e.brand?.toLowerCase().includes(q) ||
-            e.cause?.toLowerCase().includes(q);
-    });
-
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -91,92 +79,66 @@ export default function FaultFinderScreen() {
             </div>
 
             {/* Guided Model + Fault Type search — mirrors HTML's "🔎 Fault Search" panel */}
-            {activeTab === 'fault-knowledge' && (
-                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 20, marginBottom: 16 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🔎 Fault Search</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                        <div style={{ position: 'relative' }}>
-                            <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: 6 }}>Model Select Karo</label>
-                            <input
-                                type="text" placeholder="Type model name..." autoComplete="off"
-                                value={modelQuery}
-                                onChange={e => { setModelQuery(e.target.value); setShowModelDropdown(true); }}
-                                onFocus={() => setShowModelDropdown(true)}
-                                onBlur={() => setTimeout(() => setShowModelDropdown(false), 150)}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
-                            />
-                            {showModelDropdown && modelSuggestions.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
-                                    {modelSuggestions.map(m => (
-                                        <div key={m} onMouseDown={() => { setModelQuery(m); setShowModelDropdown(false); }} style={{ padding: '9px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}>{m}</div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        <div style={{ position: 'relative' }}>
-                            <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: 6 }}>Fault / Error Type</label>
-                            <input
-                                type="text" placeholder="Type fault or error..." autoComplete="off"
-                                value={faultQuery}
-                                onChange={e => { setFaultQuery(e.target.value); setShowFaultDropdown(true); }}
-                                onFocus={() => setShowFaultDropdown(true)}
-                                onBlur={() => setTimeout(() => setShowFaultDropdown(false), 150)}
-                                style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
-                            />
-                            {showFaultDropdown && faultSuggestions.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
-                                    {faultSuggestions.map(f => (
-                                        <div key={f} onMouseDown={() => { setFaultQuery(f); setShowFaultDropdown(false); }} style={{ padding: '9px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}>{f}</div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 20, marginBottom: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🔎 Fault Search</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                    <div style={{ position: 'relative' }}>
+                        <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: 6 }}>Model Select Karo</label>
+                        <input
+                            type="text" placeholder="Type model name..." autoComplete="off"
+                            value={modelQuery}
+                            onChange={e => { setModelQuery(e.target.value); setShowModelDropdown(true); }}
+                            onFocus={() => setShowModelDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowModelDropdown(false), 150)}
+                            style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+                        />
+                        {showModelDropdown && modelSuggestions.length > 0 && (
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
+                                {modelSuggestions.map(m => (
+                                    <div key={m} onMouseDown={() => { setModelQuery(m); setShowModelDropdown(false); }} style={{ padding: '9px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}>{m}</div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                    <button
-                        onClick={() => setGuidedSearched(true)}
-                        style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}
-                    >
-                        🔍 Search Faults
-                    </button>
-                    {guidedSearched && (
-                        <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{guidedFaults?.length || 0} known fault(s) found for this combination.</span>
-                            <button onClick={() => { setGuidedSearched(false); setModelQuery(''); setFaultQuery(''); }} style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Clear</button>
-                        </div>
-                    )}
+                    <div style={{ position: 'relative' }}>
+                        <label style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, display: 'block', marginBottom: 6 }}>Fault / Error Type</label>
+                        <input
+                            type="text" placeholder="Type fault or error..." autoComplete="off"
+                            value={faultQuery}
+                            onChange={e => { setFaultQuery(e.target.value); setShowFaultDropdown(true); }}
+                            onFocus={() => setShowFaultDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowFaultDropdown(false), 150)}
+                            style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+                        />
+                        {showFaultDropdown && faultSuggestions.length > 0 && (
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto', marginTop: 2 }}>
+                                {faultSuggestions.map(f => (
+                                    <div key={f} onMouseDown={() => { setFaultQuery(f); setShowFaultDropdown(false); }} style={{ padding: '9px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}>{f}</div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
-                {([
-                    { id: 'fault-knowledge', label: `🧠 Fault Knowledge (${filteredFaults.length})` },
-                    { id: 'error-codes', label: `❌ Error Codes (${filteredErrors.length})` },
-                ] as { id: FaultFinderTab; label: string }[]).map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        style={{
-                            padding: '8px 16px', border: 'none', background: 'none',
-                            cursor: 'pointer', fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400,
-                            color: activeTab === tab.id ? '#185FA5' : '#6b7280',
-                            borderBottom: activeTab === tab.id ? '2px solid #185FA5' : '2px solid transparent',
-                            marginBottom: -1,
-                        }}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+                <button
+                    onClick={() => setGuidedSearched(true)}
+                    style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', width: '100%' }}
+                >
+                    🔍 Search Faults
+                </button>
+                {guidedSearched && (
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{guidedFaults?.length || 0} known fault(s) found for this combination.</span>
+                        <button onClick={() => { setGuidedSearched(false); setModelQuery(''); setFaultQuery(''); }} style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}>Clear</button>
+                    </div>
+                )}
             </div>
 
             {/* Tab Content */}
             <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
-                ) : activeTab === 'fault-knowledge' ? (
-                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
                 ) : (
-                    <ErrorCodesTab errors={filteredErrors} />
+                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
                 )}
             </div>
         </div>

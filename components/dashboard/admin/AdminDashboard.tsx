@@ -23,7 +23,6 @@ import PendingListScreen from '@/components/screens/PendingListScreen';
 import EngPartsScreen from '@/components/screens/EngPartsScreen';
 import AttendanceScreen from '@/components/screens/AttendanceScreen';
 import AMCScreen from '@/components/screens/AMCScreen';
-import FeedbackScreen from '@/components/screens/FeedbackScreen';
 import PartsCatalogScreen from '@/components/screens/PartsCatalogScreen';
 import FaultFinderScreen from '@/components/screens/FaultFinderScreen';
 import TargetsScreen from '@/components/screens/TargetsScreen';
@@ -61,7 +60,7 @@ type AdminTab =
     | 'tasks' | 'customers' | 'walkin' | 'walkin-report' | 'courier'
     | 'courier-report' | 'reports' | 'worklogs' | 'engineers' | 'master'
     | 'settings' | 'live-map' | 'attendance' | 'targets' | 'amc'
-    | 'feedback' | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
+    | 'profit' | 'weekly-report' | 'sales' | 'parts-catalog'
     | 'fault-finder' | 'route-planning' | 'inquiries' | 'auto-inventory'
     | 'auto-sites' | 'auto-visits-report' | 'ai-agent' | 'ai-analysis'
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
@@ -89,7 +88,6 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'peon-activity', label: '🧹 Peon Activity' },
     { id: 'targets', label: '🎯 Targets' },
     { id: 'amc', label: '🔄 AMC' },
-    { id: 'feedback', label: '⭐ Feedback' },
     { id: 'profit', label: '💰 Profit' },
     { id: 'weekly-report', label: '📊 Weekly Report' },
     { id: 'sales', label: '💼 Sales' },
@@ -151,7 +149,6 @@ export default function AdminDashboard() {
             case 'peon-activity': return <PeonActivityScreen />;
             case 'targets': return <TargetsScreen />;
             case 'amc': return <AMCScreen />;
-            case 'feedback': return <FeedbackScreen />;
             case 'profit': return <ProfitScreen />;
             case 'weekly-report': return <WeeklyReportScreen />;
             case 'sales': return <SalesScreen />;
