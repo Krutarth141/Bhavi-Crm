@@ -30,7 +30,7 @@ const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', fontSiz
 
 export default function AutoSitesScreen() {
     const { data: session } = useSession();
-    const userId = (session?.user as any)?.user_id ?? '';
+    const userId = (session?.user as any)?.email || 'ENG002';
     const userName = (session?.user as any)?.name ?? 'Admin';
 
     const { sites, payMap, itemMap, loading, error, add, remove, refetch } = useAutoSites();

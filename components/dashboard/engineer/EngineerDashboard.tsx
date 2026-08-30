@@ -112,7 +112,7 @@ export default function EngineerDashboard() {
         const onNavigate = (e: Event) => {
             const detail = (e as CustomEvent<{ tab: EngineerTab; ticketId?: string }>).detail;
             const tab = detail?.tab;
-            if (tab && allNavItems.some((n) => n.id === tab)) {
+            if (tab && (allNavItems.some((n) => n.id === tab) || tab === 'pending')) {
                 setActiveTab(tab);
                 if (tab === 'my-calls' && detail?.ticketId) setPendingTicketId(detail.ticketId);
             }
@@ -139,7 +139,7 @@ export default function EngineerDashboard() {
             case 'site-visits': return null;
             case 'tickets': return cspMgr ? <TicketsScreen /> : null;
             case 'eng-parts': return <EngPartsScreen />;
-            case 'pending': return cspMgr ? <PendingListScreen /> : null;
+            case 'pending': return <PendingListScreen />;
             case 'route-planning': return cspMgr ? <RoutePlanningScreen /> : null;
             case 'customers': return cspMgr ? <CustomersScreen /> : null;
             case 'inventory': return cspMgr ? <InventoryScreen /> : null;

@@ -124,9 +124,8 @@ export default function InquiriesScreen() {
         setUpdateSaving(false);
         if (!r.success) { alert('Error: ' + r.error); return; }
         setUpdateId(null);
-        if (updateStatus === 'Converted' || updateStatus === 'Lost') {
-            const icon = updateStatus === 'Converted' ? '🏆' : '❌';
-            notifyAll(`${icon} <b>Inquiry ${updateStatus}</b>\n👤 ${inq?.customer_name || ''} | 📱 ${inq?.mobile || ''}\n🔖 ${inq?.inquiry_type || ''}${inq?.assigned_name ? '\n👷 ' + inq.assigned_name : ''}${updateRemark ? '\n💬 ' + updateRemark : ''}`);
+        if (updateStatus === 'Lost') {
+            notifyAll(`❌ <b>Inquiry ${updateStatus}</b>\n👤 ${inq?.customer_name || ''} | 📱 ${inq?.mobile || ''}\n🔖 ${inq?.inquiry_type || ''}${inq?.assigned_name ? '\n👷 ' + inq.assigned_name : ''}${updateRemark ? '\n💬 ' + updateRemark : ''}`);
         } else if (updateStatus === 'Site Visit Scheduled' || updateStatus === 'Demo Scheduled') {
             notifyAll(`📅 <b>${updateStatus}</b>\n👤 ${inq?.customer_name || ''} | 📱 ${inq?.mobile || ''}\n🔖 ${inq?.inquiry_type || ''}${inq?.assigned_name ? '\n👷 ' + inq.assigned_name : ''}`);
             if (inq?.assigned_to) notifyEngineer(inq.assigned_to, `📅 <b>${updateStatus}</b>\n👤 ${inq?.customer_name || ''} | 📱 ${inq?.mobile || ''}\n🔖 ${inq?.inquiry_type || ''}${updateRemark ? '\n💬 ' + updateRemark : ''}`);
