@@ -34,14 +34,44 @@ export const fetchEngMovements = async (): Promise<EngMovement[]> => {
 
 // ─── Issue parts to engineer (office → field) ─────────────────────────────────
 
+export const advancePendingEngineerStockTickets = async (
+    engName: string, partId: string, updatedBy: string, requireAllParts: boolean, actionLabel: string
+) => {
+    try {
+        const { data: invItem } = await supabase.from('inventory').select('part_code').eq('id', partId).limit(1).maybeSingle();
+        const partCode = invItem?.part_code;
+        if (!partCode) return;
+        const { data: pendingTickets } = await supabase
+            .from('tickets')
+            .select('id, spares, timeline, service_type')
+            .eq('assigned_name', engName)
+            .eq('status', 'Pending Engineer Stock');
+        for (const t of (pendingTickets || [])) {
+            const spares = t.spares || [];
+            if (!spares.some((s: any) => s.code === partCode)) continue;
+            if (requireAllParts) {
+                const missing = await missingBagParts(engName, spares);
+                if (missing.length) continue;
+            }
+            const newStatus = t.service_type === 'Carry In' ? 'Pending Repair Carry In' : 'Pending Repair On Site';
+            const note = requireAllParts
+                ? `Part ${partCode} issued to engineer bag via approved request. All required parts now in bag.`
+                : `Part ${partCode} issued to engineer bag. Call ready to proceed.`;
+            const tl = [...(t.timeline || []), { action: `${actionLabel} → ${newStatus}`, by: updatedBy, at: new Date().toISOString(), note }];
+            await supabase.from('tickets').update({ status: newStatus, timeline: tl, updated_at: new Date().toISOString() }).eq('id', t.id);
+        }
+    } catch (e) { console.warn('Auto-status update error:', e); }
+};
+
 export const issueToEngineer = async (params: {
-    part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string;
+    part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string; by?: string;
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         const { part_id, eng_name, qty, note } = params;
         await invQtyAdjust(part_id, -qty);
         await engStockAdjust(eng_name, part_id, qty);
         await logMovement({ type: 'ISSUE', part_id, qty, from_owner: 'MAIN', to_owner: eng_name, notes: note || null });
+        await advancePendingEngineerStockTickets(eng_name, part_id, params.by || 'Admin', false, 'Parts Issued by Admin');
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
@@ -52,11 +82,53 @@ export const issueToEngineer = async (params: {
 
 export const recordUsage = async (params: {
     part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string;
+    warranty?: boolean; by?: string;
 }): Promise<{ success: boolean; error?: string }> => {
     try {
-        const { part_id, eng_name, qty, ticket_id, note } = params;
+        const { part_id, eng_name, qty, note, warranty } = params;
+        const jobSheet = (params.ticket_id || '').trim();
+        if (warranty && !jobSheet) {
+            return { success: false, error: 'SE Call ID is required for warranty parts.\n\nThis is needed to track the part return from company.' };
+        }
         await engStockAdjust(eng_name, part_id, -qty);
-        await logMovement({ type: 'USE', part_id, qty, from_owner: eng_name, to_owner: null, job_sheet: ticket_id || null, notes: note || null });
+        await logMovement({
+            type: 'USE', part_id, qty, from_owner: eng_name, to_owner: null,
+            job_sheet: jobSheet || null, notes: note || null,
+            warranty: !!warranty, warranty_status: warranty ? 'PENDING' : null,
+        } as any);
+
+        if (warranty && jobSheet) {
+            try {
+                const trackKey = jobSheet.split('/').pop()!.trim().toUpperCase();
+                const { data: matchTickets } = await supabase.from('tickets')
+                    .select('id, spares, se_call_id, timeline').ilike('se_call_id', `%${trackKey}%`).limit(10);
+                const matchTkt = (matchTickets || []).find((t: any) => {
+                    const raw = (t.se_call_id || '').trim().toUpperCase();
+                    return raw === trackKey || raw.endsWith('/' + trackKey) || raw.endsWith(trackKey);
+                });
+                if (matchTkt) {
+                    const { data: invItem } = await supabase.from('inventory').select('*').eq('id', part_id).maybeSingle();
+                    const existingSpares = matchTkt.spares || [];
+                    const alreadyHas = existingSpares.some((s: any) => s.code && invItem && s.code === invItem.part_code);
+                    if (!alreadyHas) {
+                        const newSpare = {
+                            code: invItem?.part_code || part_id, name: invItem?.item_name || 'Part',
+                            qty, price: parseFloat(invItem?.unit_price) || 0,
+                            gst_pct: invItem?.gst_pct != null ? parseFloat(String(invItem.gst_pct)) : 0,
+                            requested: true, stock_deducted: false, warranty_supplied: true,
+                        };
+                        const linkTl = [...(matchTkt.timeline || []), {
+                            action: 'Part Auto-Linked (Eng Use)', by: params.by || 'Admin', at: new Date().toISOString(),
+                            note: `Part: ${newSpare.code || ''} ${newSpare.name || ''} × ${qty} | SE Call ID: ${jobSheet}`,
+                        }];
+                        await supabase.from('tickets').update({
+                            spares: [...existingSpares, newSpare], timeline: linkTl, updated_at: new Date().toISOString(),
+                        }).eq('id', matchTkt.id).then(() => undefined, () => undefined);
+                    }
+                }
+            } catch (e) { console.log('Auto-link to ticket failed:', e); }
+        }
+
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };
@@ -82,12 +154,61 @@ export const engineerReturn = async (params: {
 // ─── Warranty return (Canon receives the part back) ───────────────────────────
 
 export const warrantyReturn = async (params: {
-    part_id: string; eng_name: string; qty: number; note?: string;
+    part_id: string; qty: number; job_sheet: string; note?: string;
 }): Promise<{ success: boolean; error?: string }> => {
     try {
         const { part_id, qty, note } = params;
+        const jobSheetRaw = params.job_sheet.trim().toUpperCase();
+        if (!jobSheetRaw) {
+            return { success: false, error: 'SE Call ID is required to match the warranty return.' };
+        }
+        const trackKey = jobSheetRaw.split('/').pop()!.trim();
+
+        const { data: dup } = await supabase.from('eng_movements').select('id, qty, created_at')
+            .eq('type', 'WARRANTY_RETURN').eq('warranty', true).eq('job_sheet', trackKey).eq('part_id', part_id);
+        if (dup && dup.length) {
+            const d = dup[0] as any;
+            const existingDate = d.created_at ? new Date(d.created_at).toLocaleDateString('en-IN') : '-';
+            const proceed = confirm(
+                `A warranty return entry already exists for this SE Call ID (${jobSheetRaw}) and part.\n\n`
+                + `Existing: Qty ${d.qty} on ${existingDate}.\n\nAdd another return entry anyway?`
+            );
+            if (!proceed) return { success: false, error: 'Cancelled' };
+        }
+
         await invQtyAdjust(part_id, qty);
-        await logMovement({ type: 'WARRANTY_RETURN', part_id, qty, from_owner: 'COMPANY', to_owner: 'MAIN', warranty: true, notes: note || null });
+        await logMovement({
+            type: 'WARRANTY_RETURN', part_id, qty, from_owner: 'COMPANY', to_owner: 'MAIN',
+            job_sheet: trackKey, se_call_id_full: jobSheetRaw, warranty: true, notes: note || null,
+        } as any);
+
+        try {
+            const { data: useEntries } = await supabase.from('eng_movements').select('id, qty, warranty_status')
+                .eq('type', 'USE').eq('warranty', true).eq('job_sheet', trackKey).eq('part_id', part_id);
+            const { data: retEntries } = await supabase.from('eng_movements').select('qty')
+                .eq('type', 'WARRANTY_RETURN').eq('job_sheet', trackKey).eq('part_id', part_id);
+            const usedQty = (useEntries || []).reduce((a: number, m: any) => a + (m.qty || 1), 0);
+            const totalReceived = (retEntries || []).reduce((a: number, m: any) => a + (m.qty || 1), 0);
+            const pendingEntries = (useEntries || []).filter((m: any) => ['PENDING', 'PARTIAL'].includes(m.warranty_status));
+            if (pendingEntries.length) {
+                const newStatus = totalReceived >= usedQty ? 'RECEIVED' : 'PARTIAL';
+                const patch: any = { warranty_status: newStatus, warranty_received_qty: totalReceived };
+                if (newStatus === 'RECEIVED') patch.warranty_received_at = new Date().toISOString();
+                for (const ue of pendingEntries) {
+                    await supabase.from('eng_movements').update(patch).eq('id', (ue as any).id).then(() => undefined, () => undefined);
+                }
+            }
+            const extraQty = qty - usedQty;
+            if (extraQty > 0) {
+                const { data: invRow } = await supabase.from('inventory').select('warranty_qty').eq('id', part_id).maybeSingle();
+                if (invRow) {
+                    await supabase.from('inventory').update({
+                        warranty_qty: (invRow.warranty_qty || 0) + extraQty, updated_at: new Date().toISOString(),
+                    }).eq('id', part_id).then(() => undefined, () => undefined);
+                }
+            }
+        } catch (e) { console.log('Auto-match err:', e); }
+
         return { success: true };
     } catch (err) {
         return { success: false, error: String(err) };

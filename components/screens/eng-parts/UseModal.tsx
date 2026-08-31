@@ -8,7 +8,7 @@ interface Props {
   engineers: string[];
   engStock: EngStock[];
   inventory: InventoryItem[];
-  onSave: (params: { part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string }) => Promise<void>;
+  onSave: (params: { part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string; warranty?: boolean }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -17,6 +17,7 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
   const [partId, setPartId] = useState('');
   const [qty, setQty] = useState(1);
   const [ticketId, setTicketId] = useState('');
+  const [warranty, setWarranty] = useState(false);
   const [note, setNote] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -34,9 +35,10 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
     engineer: submitted && !engineer ? 'Engineer is required' : '',
     part: submitted && !partId ? 'Part is required' : '',
     qty: submitted && qty < 1 ? 'Quantity must be at least 1' : '',
+    ticketId: submitted && warranty && !ticketId.trim() ? 'SE Call ID is required for warranty parts.' : '',
   };
 
-  const isValid = engineer && partId && qty >= 1;
+  const isValid = !!engineer && !!partId && qty >= 1 && (!warranty || !!ticketId.trim());
 
   const handleEngineerChange = (eng: string) => {
     setEngineer(eng);
@@ -54,6 +56,7 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
         qty,
         ticket_id: ticketId || undefined,
         note: note || undefined,
+        warranty,
       });
       onClose();
     } finally {
@@ -144,17 +147,26 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
               )}
             </div>
 
-            {/* Ticket ID */}
+            {/* SE Call ID — required once "Under Warranty" is checked */}
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Ticket ID (optional)</label>
+              <label style={styles.formLabel}>{warranty ? 'SE Call ID (Required — Warranty tracking) *' : 'SE Call ID (optional)'}</label>
               <input
                 type="text"
-                style={styles.formInput}
+                style={{ ...styles.formInput, borderColor: errors.ticketId ? colors.danger : (warranty ? '#f59e0b' : colors.border) }}
                 value={ticketId}
                 onChange={e => setTicketId(e.target.value)}
-                placeholder="e.g. TKT-001"
+                placeholder="e.g. BH-2025-001"
               />
+              {errors.ticketId && (
+                <span style={{ fontSize: '11px', color: colors.danger }}>{errors.ticketId}</span>
+              )}
             </div>
+          </div>
+
+          {/* Under Warranty */}
+          <div style={{ ...styles.formGroup, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" id="eu-warranty" checked={warranty} onChange={e => setWarranty(e.target.checked)} style={{ width: 16, height: 16 }} />
+            <label htmlFor="eu-warranty" style={{ margin: 0, fontWeight: 600 }}>Under Warranty (part will be claimed back from company)</label>
           </div>
 
           {/* Note */}

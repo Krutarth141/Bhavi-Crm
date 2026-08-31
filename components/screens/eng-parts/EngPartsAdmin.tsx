@@ -88,28 +88,30 @@ export default function EngPartsAdmin({
   const handleIssueSave = async (params: {
     part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string;
   }) => {
-    await issueToEngineer(params);
+    await issueToEngineer({ ...params, by: approvedBy });
     onRefetch();
   };
 
   const handleUseSave = async (params: {
-    part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string;
+    part_id: string; eng_name: string; qty: number; ticket_id?: string; note?: string; warranty?: boolean;
   }) => {
-    await recordUsage(params);
+    const r = await recordUsage({ ...params, by: approvedBy });
+    if (!r.success) alert('Error: ' + r.error);
     onRefetch();
   };
 
   const handleReturnSave = async (params: {
-    part_id: string; eng_name: string; qty: number; note?: string;
+    part_id: string; eng_name?: string; qty: number; note?: string;
   }) => {
-    await engineerReturn(params);
+    await engineerReturn({ part_id: params.part_id, eng_name: params.eng_name || '', qty: params.qty, note: params.note });
     onRefetch();
   };
 
   const handleWarrantySave = async (params: {
-    part_id: string; eng_name: string; qty: number; note?: string;
+    part_id: string; qty: number; job_sheet?: string; note?: string;
   }) => {
-    await warrantyReturn(params);
+    const r = await warrantyReturn({ part_id: params.part_id, qty: params.qty, job_sheet: params.job_sheet || '', note: params.note });
+    if (!r.success && r.error !== 'Cancelled') alert('Error: ' + r.error);
     onRefetch();
   };
 
@@ -363,7 +365,8 @@ export default function EngPartsAdmin({
                               <button
                                 style={{ ...styles.btn, ...styles.btnSm, backgroundColor: colors.success, color: '#fff', border: 'none' }}
                                 onClick={async () => {
-                                  await approvePartRequest(req, approvedBy);
+                                  const r = await approvePartRequest(req, approvedBy);
+                                  if (!r.success) alert('⚠️ ' + (r.error || 'Approve failed'));
                                   onRefetch();
                                 }}
                               >

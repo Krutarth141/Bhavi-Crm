@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { PartItem, PartRequest, PartRequestFilter } from '@/types/partRequest';
+import { advancePendingEngineerStockTickets } from './engPartsService';
 
 export const fetchPartRequests = async (filter: PartRequestFilter): Promise<PartRequest[]> => {
     try {
@@ -54,15 +55,20 @@ export const approvePartRequest = async (
     approvedBy: string
 ): Promise<{ success: boolean; error?: string }> => {
     try {
-        const { error: statusError } = await supabase
+        const { data: claimed, error: statusError } = await supabase
             .from('eng_part_requests')
             .update({
                 status: 'APPROVED',
                 approved_by: approvedBy,
                 approved_at: new Date().toISOString(),
             })
-            .eq('id', req.id);
+            .eq('id', req.id)
+            .eq('status', 'PENDING')
+            .select();
         if (statusError) throw statusError;
+        if (!claimed || !claimed.length) {
+            return { success: false, error: 'This request was already approved/rejected — not approving again.' };
+        }
 
         const parts = req.parts || [];
         const isReturn = req.type === 'RETURN';
@@ -107,6 +113,10 @@ export const approvePartRequest = async (
                 to_owner: isReturn ? 'MAIN' : req.engineer_name,
                 notes: `Request by ${req.engineer_name}`, created_by: approvedBy,
             }]).then(() => { }, () => { });
+
+            if (!isReturn) {
+                await advancePendingEngineerStockTickets(req.engineer_name, part.part_id, approvedBy, true, 'Parts Approved');
+            }
         }
 
         return { success: true };

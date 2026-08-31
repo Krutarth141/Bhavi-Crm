@@ -110,7 +110,7 @@ export default function RoutePlanningScreen() {
                         <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Engineer</label>
                         <select value={engId} onChange={(e) => setEngId(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, width: '100%' }}>
                             <option value="">-- Select Engineer --</option>
-                            {engineers.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+                            {engineers.map((e) => (<option key={e.id} value={e.user_id}>{e.name}</option>))}
                         </select>
                     </div>
                     <div style={{ minWidth: 160 }}>

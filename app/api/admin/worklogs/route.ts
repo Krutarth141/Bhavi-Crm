@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/auth.config';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { isCspManager } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
     try {
@@ -10,11 +11,28 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // A plain (non-CSP-manager) engineer may only ever see their OWN
+        // entries here — force the filter to themselves regardless of what
+        // the caller asked for, matching HTML's loadWorkLogReport() self-scope
+        // (index.html:21727: `if(role==='engineer'&&!isCspMgr){eng=eng_id}`).
+        // This is enforced server-side (not just hidden in the UI) since the
+        // route reads via the service-role client and previously accepted
+        // any engId/mode from any authenticated caller.
+        const roleType = (session.user as any)?.roleType;
+        const isPlainEngineer = roleType === 'engineer' && !isCspManager(session);
+
         const { searchParams } = new URL(request.url);
         const from = searchParams.get('from');
         const to = searchParams.get('to');
-        const engId = searchParams.get('engId');
+        let engId = searchParams.get('engId');
         const mode = searchParams.get('mode');
+
+        if (isPlainEngineer) {
+            if (mode === 'peon') {
+                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+            }
+            engId = session.user.email as string;
+        }
 
         // Peon task logs are a completely different table/shape — matches
         // HTML's isPeonSel branch in loadWorkLogReport().

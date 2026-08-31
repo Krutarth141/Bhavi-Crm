@@ -7,6 +7,7 @@ export interface TicketSpare {
     requested?: boolean;
     stock_deducted?: boolean;
     warranty_chargeable?: boolean;
+    warranty_supplied?: boolean;
 }
 
 export const isChargeableSpare = (s: TicketSpare | undefined, consumableCodes?: Set<string>): boolean => {
