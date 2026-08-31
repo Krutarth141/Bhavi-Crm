@@ -4,6 +4,7 @@ import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import { notifyTicketClosed } from './telegramNotify';
 import { missingBagParts, missingCompanyStockParts, fetchConsumableCodes } from './engPartsService';
 import { saveWorkLog, saveLocationEvent } from './myCallsService';
+import { getAllowedStatuses } from '@/types/ticketStatus';
 
 const TICKET_COLUMNS = 'id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, final_charges, charges_note, payment_mode, work_done, jobsheet_photo, attachments, address, area, city, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date, visit_out, meter_start, meter_end, se_call_id, page_count, other_charge, wc_type';
 
@@ -113,8 +114,7 @@ const isOutOfCoverage = (t: EngineerTicket) => t.warranty_coverage === 'Out of C
 // (index.html:7850). rerepair is a boolean in this schema; HTML also accepted
 // the legacy string 'Yes', so both are handled.
 const isRepeatFoc = (t: EngineerTicket) =>
-    t.rerepair_foc === true || ((t.rerepair === true || (t.rerepair as unknown) === 'Yes') && !Number(t.service_charges));
-
+    t.rerepair_foc === true || ((t.rerepair === true || (t.rerepair as unknown) === 'Yes') && ((t.service_charges as unknown) === 0 || (t.service_charges as unknown) === '0'));
 // ─── Close guards (index.html:7710-7803) ─────────────────────────────────────
 // Run BEFORE anything is written, so a blocked close leaves the ticket
 // completely untouched. Returns null when the update may proceed.
@@ -165,6 +165,13 @@ export const validateEngineerUpdate = async (
     // Action Taken — required (Field Rules default 'required', index.html:7701).
     if (!workDone.trim()) {
         return '❌ Action Taken is required.\nPlease describe what was done.';
+    }
+
+    if (statusChanged) {
+        const allowedEng = getAllowedStatuses(ticket.status, 'engineer', ticket.service_type, ticket.call_type, ticket.warranty_coverage);
+        if (!allowedEng.includes(newStatus)) {
+            return `❌ Cannot change to "${newStatus}" from the current status.`;
+        }
     }
 
     // Work Start must precede any status change except Resolved By Phone,
@@ -431,7 +438,7 @@ export const updateTicketStatus = async (
             : (note || undefined);
         const firstEntry = newStatus === 'Call Cancel'
             ? { action: 'Call Cancelled by Engineer', by: updatedBy, at: nowIso, note: `Reason: ${workDone}` }
-            : { action: isMsc ? 'Sent to MSC' : `Status → ${newStatus}`, by: updatedBy, at: nowIso, note: timelineNote };
+            : { action: isMsc ? 'Sent to MSC' : `Updated — ${newStatus}`, by: updatedBy, at: nowIso, note: timelineNote };
 
         const updateData: any = {
             status: newStatus,
@@ -710,8 +717,50 @@ export const updateTicketStatus = async (
             const isChargeable = !['Warranty', 'Warranty Repeat', 'AMC'].includes(ticket.call_type || '');
             notifyTicketClosed(ticket, newStatus, {
                 engName: updatedBy, workDone, remarks: note, spareLines,
-                isChargeable, totalAmt: charges.applies ? charges.finalCharges : 0,
+                isChargeable, totalAmt: charges.applies ? updateData.final_charges ?? charges.finalCharges : 0,
             });
+        }
+
+        const PAUSED_STATUSES = ['Pending Parts', 'Pending Customer Approval', 'Pending Engineer Stock', 'Pending Spare', 'Hold', 'Sent to MSC', 'Repaired'];
+        if (PAUSED_STATUSES.includes(ticket.status || '') || PAUSED_STATUSES.includes(status)) {
+            try {
+                const pNow = new Date();
+                const pTime = pNow.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                const pDate = pNow.toLocaleDateString('en-CA');
+                const pEngId = extra?.engId || '';
+                if (pEngId) {
+                    const { data: pOpenLogs } = await supabase.from('work_logs').select('id, log_type, from_time')
+                        .eq('eng_id', pEngId).eq('log_date', pDate).eq('ticket_id', ticket.id).eq('to_time', 'OPEN');
+                    let workDur = 0;
+                    for (const pl of (pOpenLogs || [])) {
+                        if (pl.log_type === 'work' && pl.from_time) {
+                            const [fH, fM] = pl.from_time.split(':').map(Number);
+                            const [tH, tM] = pTime.split(':').map(Number);
+                            const d = (tH * 60 + tM) - (fH * 60 + fM);
+                            if (d > 0) workDur += d;
+                        }
+                        await supabase.from('work_logs').update({ to_time: pTime }).eq('id', pl.id).then(() => undefined, () => undefined);
+                    }
+                    if (workDur > 0) {
+                        try {
+                            const { data: pTk } = await supabase.from('tickets').select('timeline').eq('id', ticket.id).maybeSingle();
+                            if (pTk) {
+                                const pTl = [...(pTk.timeline || []), { action: 'Work Session End', by: updatedBy, at: pNow.toISOString(), note: `Session ended ${pTime}`, duration_min: workDur }];
+                                await supabase.from('tickets').update({ timeline: pTl, updated_at: pNow.toISOString() }).eq('id', ticket.id).then(() => undefined, () => undefined);
+                            }
+                        } catch { /* best-effort */ }
+                    }
+                    const statusIcons: Record<string, string> = { 'Pending Parts': '⏸️', 'Pending Customer Approval': '⏳', 'Pending Engineer Stock': '📦', 'Pending Spare': '🔧', Hold: '🔒', 'Sent to MSC': '📤', Repaired: '✅' };
+                    const pIcon = statusIcons[status] || '⏸️';
+                    const pLabel = `${ticket.job_sheet || ticket.id}${ticket.cname ? ' — ' + ticket.cname : ''}${ticket.model ? ' | ' + ticket.model : ''}`;
+                    await saveWorkLog({
+                        eng_id: pEngId, eng_name: updatedBy, member_role: extra?.memberRole || 'Engineer',
+                        log_date: pDate, from_time: pTime, to_time: pTime,
+                        task_description: `${pIcon} ${status} — ${pLabel}`,
+                        ticket_id: ticket.id, log_type: 'work',
+                    } as any);
+                }
+            } catch (e) { console.log('WorkLog pause-close err:', e); }
         }
 
         return { success: true, finalStatus: status, stockWarning };

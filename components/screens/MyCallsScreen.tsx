@@ -185,6 +185,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const [panelBusy, setPanelBusy] = useState(false);
   const [kmGateTicket, setKmGateTicket] = useState<any | null>(null);
   const [catchupTicket, setCatchupTicket] = useState<{ newTicket: any; skipTicketId: string } | null>(null);
+  const [punchOutKmCatchup, setPunchOutKmCatchup] = useState<string | null>(null);
   const [reachedTicket, setReachedTicket] = useState<any | null>(null);
   const [holdTicket, setHoldTicket] = useState<any | null>(null);
   const [holdRemark, setHoldRemark] = useState('');
@@ -690,10 +691,26 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     setForcedDailyReport(true);
   };
   const handlePunchOut = async () => {
+    const today = new Date().toLocaleDateString('en-CA');
+    const skipKey = `kmSkip_${engId}_${today}`;
+    let skipTicket: string | null = null;
+    try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+    if (skipTicket) { setPunchOutKmCatchup(skipTicket); return; }
     const hasClosing = await hasKmEntryToday(engId, 'closing');
     if (!hasClosing) { setKmCaptureType('closing'); return; }
     await proceedToPunchOutReportGate();
   };
+  const handlePunchOutKmCatchupDone = async () => {
+    try { window.localStorage.removeItem(`kmSkip_${engId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+    setPunchOutKmCatchup(null);
+    await handlePunchOut();
+  };
+
+  useEffect(() => {
+    if (punchLog?.punch_in_time && !punchLog?.punch_out_time) {
+      startLocationTracking(engId, engName);
+    }
+  }, [punchLog?.punch_in_time, punchLog?.punch_out_time, engId, engName]);
 
   // 8:30 PM auto punch-out reminder (index.html:5147-5154). One-shot per mount /
   // punch-state change, same as HTML — it does not nag repeatedly.
@@ -1735,7 +1752,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       )}
       {partIndentOpen && updateTicket && (
         <PartIndentModal
-          ticket={updateTicket}
+          ticket={{ ...updateTicket, spares: updateSpares }}
           byUser={engName}
           isEngineerOnSite={updateTicket.service_type === 'On Site'}
           onClose={() => setPartIndentOpen(false)}
@@ -1895,6 +1912,16 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
           ticketId={catchupTicket.skipTicketId}
           onClose={() => setCatchupTicket(null)}
           onDone={handleCatchupDone}
+        />
+      )}
+      {punchOutKmCatchup && (
+        <KmCaptureModal
+          type="arrival"
+          engId={engId}
+          engName={engName}
+          ticketId={punchOutKmCatchup}
+          onClose={() => setPunchOutKmCatchup(null)}
+          onDone={handlePunchOutKmCatchupDone}
         />
       )}
       {reachedTicket && (

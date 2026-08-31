@@ -73,11 +73,18 @@ export default function DashboardOverview({ role }: Props) {
     const { punchLog, refetch: refetchPunch } = useMyCalls(canPunch ? (userId ?? '') : '', userName);
     const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
     const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
+    const [punchOutKmCatchup, setPunchOutKmCatchup] = useState<string | null>(null);
     // Mandatory Daily Report gate before the punch-out selfie — mirrors HTML's
     // startPunchOutDailyReport() (index.html:4402), auto-skipped when today's
     // report is already submitted. Same flow MyCallsScreen implements.
     const [forcedDailyReport, setForcedDailyReport] = useState(false);
     const memberRole = role === 'work_controller' ? 'WC' : 'Engineer';
+
+    useEffect(() => {
+        if (canPunch && punchLog?.punch_in_time && !punchLog?.punch_out_time) {
+            startLocationTracking(userId ?? '', userName);
+        }
+    }, [canPunch, punchLog?.punch_in_time, punchLog?.punch_out_time, userId, userName]);
 
     const handlePunchIn = async () => {
         const hasOpening = await hasKmEntryToday(userId ?? '', 'opening');
@@ -91,9 +98,19 @@ export default function DashboardOverview({ role }: Props) {
         setForcedDailyReport(true);
     };
     const handlePunchOut = async () => {
+        const today = new Date().toLocaleDateString('en-CA');
+        const skipKey = `kmSkip_${userId}_${today}`;
+        let skipTicket: string | null = null;
+        try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+        if (skipTicket) { setPunchOutKmCatchup(skipTicket); return; }
         const hasClosing = await hasKmEntryToday(userId ?? '', 'closing');
         if (!hasClosing) { setKmCaptureType('closing'); return; }
         await proceedToPunchOutReportGate();
+    };
+    const handlePunchOutKmCatchupDone = async () => {
+        try { window.localStorage.removeItem(`kmSkip_${userId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+        setPunchOutKmCatchup(null);
+        await handlePunchOut();
     };
     const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
         if (punchModalMode === 'in') {
@@ -367,6 +384,13 @@ export default function DashboardOverview({ role }: Props) {
                         setKmCaptureType(null);
                         if (type === 'opening') setPunchModalMode('in'); else proceedToPunchOutReportGate();
                     }}
+                />
+            )}
+            {punchOutKmCatchup && (
+                <KmCaptureModal
+                    type="arrival" engId={userId ?? ''} engName={userName} ticketId={punchOutKmCatchup}
+                    onClose={() => setPunchOutKmCatchup(null)}
+                    onDone={handlePunchOutKmCatchupDone}
                 />
             )}
             {forcedDailyReport && (
