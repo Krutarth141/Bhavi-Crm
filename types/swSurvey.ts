@@ -9,11 +9,22 @@ export const SW_ITEM_DEFS = [
     { key: 'bell', label: 'Bell / Buzzer' },
 ];
 
+// index.html:20144
+export const SW_MODULE_SIZES = ['', '2', '3', '4', '6', '8', '12', '16', '18', '24', '32'];
+
+export interface SwCustomItem {
+    name: string;
+    qty: number;
+}
+
 export interface SwBoard {
     id: string;
     name: string;
+    type: 'Automation' | 'Non-Automation';
     location: string;
+    moduleCount: string;
     items: Record<string, number>;
+    custom: SwCustomItem[];
 }
 
 export interface SwRoom {
@@ -42,11 +53,16 @@ export const swUid = (): string => Date.now().toString(36) + Math.random().toStr
 
 export const swEmptyItems = (): Record<string, number> => Object.fromEntries(SW_ITEM_DEFS.map(d => [d.key, 0]));
 
-export const swNewBoard = (name = 'SW1'): SwBoard => ({ id: swUid(), name, location: '', items: swEmptyItems() });
+// index.html:20152
+export const swNewBoard = (name = 'SW1'): SwBoard => ({
+    id: swUid(), name, type: 'Automation', location: '', moduleCount: '', items: swEmptyItems(), custom: [],
+});
 
 export const swNewRoom = (name = 'Room'): SwRoom => ({ id: swUid(), name, boards: [swNewBoard('SW1')] });
 
-export const swBoardTotal = (b: SwBoard): number => SW_ITEM_DEFS.reduce((t, d) => t + (b.items?.[d.key] || 0), 0);
+// index.html:20154 — sums both the fixed SW_ITEM_DEFS counters and any custom items.
+export const swBoardTotal = (b: SwBoard): number =>
+    SW_ITEM_DEFS.reduce((t, d) => t + (b.items?.[d.key] || 0), 0) + (b.custom || []).reduce((t, c) => t + (c.qty || 0), 0);
 
 export const swRoomTotal = (r: SwRoom): number => (r.boards || []).reduce((t, b) => t + swBoardTotal(b), 0);
 

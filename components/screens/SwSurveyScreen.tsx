@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import {
-    SW_ITEM_DEFS, SwSurvey, SwSurveyData, SwRoom, SwBoard,
+    SW_ITEM_DEFS, SW_MODULE_SIZES, SwSurvey, SwSurveyData, SwRoom, SwBoard,
     swNewRoom, swNewBoard, swBoardTotal, swRoomTotal, swSurveyTotal,
 } from '@/types/swSurvey';
 import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey, fetchSwSurveysBySite } from '@/services/swSurveyService';
@@ -31,6 +31,11 @@ export default function SwSurveyScreen() {
     const [rooms, setRooms] = useState<SwRoom[]>([]);
     const [saving, setSaving] = useState(false);
     const [siteSurveyNote, setSiteSurveyNote] = useState('');
+    const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+    // index.html:20392-20403 — swSave()/swSaveNow(): edits autosave 700ms after
+    // the last change instead of requiring an explicit Save click.
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const skipAutosaveRef = useRef(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -42,18 +47,24 @@ export default function SwSurveyScreen() {
     useEffect(() => { load(); }, [load]);
 
     const openCreate = () => {
+        skipAutosaveRef.current = true;
+        setSaveStatus('idle');
         setEditId(null);
         setClientName(''); setSiteName(''); setSiteId(null); setSurveyDate(new Date().toLocaleDateString('en-CA'));
         setRooms([swNewRoom('Room 1')]);
+        setCustomInputs({});
         setSiteSurveyNote('');
         setEditing(true);
     };
 
     const openEdit = (s: SwSurvey) => {
+        skipAutosaveRef.current = true;
+        setSaveStatus('idle');
         setSiteSurveyNote('');
         setEditId(s.id);
         setClientName(s.client_name || ''); setSiteName(s.site_name || ''); setSiteId(s.site_id ?? null); setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
         setRooms((s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]));
+        setCustomInputs({});
         setEditing(true);
     };
 
@@ -62,6 +73,7 @@ export default function SwSurveyScreen() {
     // silently creating a duplicate blank one. Only when there is none does the
     // form stay on "new", pre-filled from the site.
     const handleSiteSelect = async (id: string) => {
+        skipAutosaveRef.current = true;
         setSiteSurveyNote('');
         if (!id) {
             setSiteId(null);
@@ -78,6 +90,7 @@ export default function SwSurveyScreen() {
             setSiteName(s.site_name || site?.site_name || '');
             setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
             setRooms(s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]);
+            setCustomInputs({});
             setSiteSurveyNote('📂 Aa site nu survey pehlethi chhe — ae j kholyu. Save karso to aej update thashe.');
             return;
         }
@@ -102,6 +115,51 @@ export default function SwSurveyScreen() {
         ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, items: { ...b.items, [key]: Math.max(0, (b.items[key] || 0) + delta) } } : b),
     } : x));
 
+    // index.html:20383 swBoardType / 20385 swBoardSize
+    const setBoardType = (roomId: string, boardId: string, type: string) => setRooms(r => r.map(x => x.id === roomId ? {
+        ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, type: type as SwBoard['type'] } : b),
+    } : x));
+    const setBoardSize = (roomId: string, boardId: string, moduleCount: string) => setRooms(r => r.map(x => x.id === roomId ? {
+        ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, moduleCount } : b),
+    } : x));
+
+    // index.html:20387-20389 swAddCust / swCustDelta / swDelCust
+    const addCustomItem = (roomId: string, boardId: string) => {
+        const key = `${roomId}:${boardId}`;
+        const name = (customInputs[key] || '').trim();
+        if (!name) return;
+        setRooms(r => r.map(x => x.id === roomId ? {
+            ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, custom: [...(b.custom || []), { name, qty: 1 }] } : b),
+        } : x));
+        setCustomInputs(ci => ({ ...ci, [key]: '' }));
+    };
+    const bumpCustomItem = (roomId: string, boardId: string, index: number, delta: number) => setRooms(r => r.map(x => x.id === roomId ? {
+        ...x, boards: x.boards.map(b => b.id === boardId ? {
+            ...b, custom: (b.custom || []).map((c, i) => i === index ? { ...c, qty: Math.max(0, (c.qty || 0) + delta) } : c),
+        } : b),
+    } : x));
+    const removeCustomItem = (roomId: string, boardId: string, index: number) => setRooms(r => r.map(x => x.id === roomId ? {
+        ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, custom: (b.custom || []).filter((_, i) => i !== index) } : b),
+    } : x));
+
+    // index.html:20392-20403 — debounced autosave, 700ms after the last edit.
+    // Skipped once right after opening/switching survey (skipAutosaveRef) so
+    // loading an existing survey doesn't immediately re-PATCH it.
+    useEffect(() => {
+        if (!editing) return;
+        if (skipAutosaveRef.current) { skipAutosaveRef.current = false; return; }
+        if (!clientName.trim()) return;
+        setSaveStatus('saving');
+        const t = setTimeout(async () => {
+            const data: SwSurveyData = { rooms };
+            const r = await saveSwSurvey(editId, clientName.trim(), siteName.trim(), surveyDate, data, myName, siteId);
+            if (r.success) { if (!editId && r.id) setEditId(r.id); setSaveStatus('saved'); }
+            else setSaveStatus('error');
+        }, 700);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editing, clientName, siteName, siteId, surveyDate, rooms]);
+
     const handleSave = async () => {
         if (!clientName.trim()) { alert('Client name is required.'); return; }
         setSaving(true);
@@ -113,29 +171,37 @@ export default function SwSurveyScreen() {
         await load();
     };
 
+    // index.html:20406-20436 swExport() — Board details + Room summary sheets.
     const downloadSurveyExcel = (s: SwSurvey) => {
         const roomsData = s.data?.rooms || [];
-        const header = ['Room', 'Switchboard', 'Location'].concat(SW_ITEM_DEFS.map(d => d.label)).concat(['Total Items']);
+        const header = ['Room', 'Switchboard', 'Type', 'Location', 'Board size (M)'].concat(SW_ITEM_DEFS.map(d => d.label)).concat(['Other items', 'Total items']);
         const rows: any[] = [header];
         roomsData.forEach(r => {
             (r.boards || []).forEach(b => {
-                const row: (string | number)[] = [r.name, b.name, b.location || ''];
+                const row: (string | number)[] = [r.name, b.name, b.type || 'Automation', b.location || '', b.moduleCount || ''];
                 SW_ITEM_DEFS.forEach(d => row.push(b.items?.[d.key] || 0));
+                const cust = (b.custom || []).map(c => `${c.name} x${c.qty}`).join(', ');
+                row.push(cust);
                 row.push(swBoardTotal(b));
                 rows.push(row);
             });
         });
-        const totalRow: (string | number)[] = ['', '', 'TOTAL'];
+        const totalRow: (string | number)[] = ['TOTAL', '', '', '', ''];
         SW_ITEM_DEFS.forEach(d => {
             let sum = 0;
             roomsData.forEach(r => (r.boards || []).forEach(b => { sum += b.items?.[d.key] || 0; }));
             totalRow.push(sum);
         });
-        totalRow.push(swSurveyTotal(s.data));
+        totalRow.push(''); totalRow.push(swSurveyTotal(s.data));
         rows.push(totalRow);
-        const ws = XLSX.utils.aoa_to_sheet(rows);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'SW Survey');
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, 'Board details');
+        const summary: any[] = [['Room', 'Switchboards', 'Items']];
+        roomsData.forEach(r => summary.push([r.name || '', (r.boards || []).length, swRoomTotal(r)]));
+        summary.push(['Grand total', '', swSurveyTotal(s.data)]);
+        const ws2 = XLSX.utils.aoa_to_sheet(summary);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
         XLSX.writeFile(wb, `SW_Survey_${(s.client_name || 'survey').replace(/[^A-Za-z0-9]/g, '_')}.xlsx`);
     };
 
@@ -156,14 +222,15 @@ export default function SwSurveyScreen() {
         const grand = swSurveyTotal(s.data);
         const itemHead = SW_ITEM_DEFS.map(d => `<th class="c">${esc(d.label)}</th>`).join('');
         const trs = rooms.flatMap(r => (r.boards || []).map(b => {
-            const cells = `<td>${esc(r.name)}</td><td>${esc(b.name)}</td><td>${esc(b.location)}</td>`
+            const cust = (b.custom || []).map(c => `${esc(c.name)} x${c.qty}`).join(', ');
+            const cells = `<td>${esc(r.name)}</td><td>${esc(b.name)}</td><td>${esc(b.type || 'Automation')}</td><td>${esc(b.location)}</td><td class="c">${esc(b.moduleCount)}</td>`
                 + SW_ITEM_DEFS.map(d => `<td class="c">${b.items?.[d.key] || ''}</td>`).join('')
-                + `<td class="c b">${swBoardTotal(b)}</td>`;
+                + `<td>${cust}</td><td class="c b">${swBoardTotal(b)}</td>`;
             return `<tr>${cells}</tr>`;
         })).join('');
-        const totCells = `<td class="b">TOTAL</td><td></td><td></td>`
+        const totCells = `<td class="b">TOTAL</td><td></td><td></td><td></td><td></td>`
             + SW_ITEM_DEFS.map(d => `<td class="c b">${itemTotals[d.key] || ''}</td>`).join('')
-            + `<td class="c b">${grand}</td>`;
+            + `<td></td><td class="c b">${grand}</td>`;
         const dstr = s.survey_date ? new Date(s.survey_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SW Survey - ${esc(s.client_name)}</title>
 <style>*{box-sizing:border-box;} body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:0;padding:18px 22px;font-size:12px;}
@@ -186,7 +253,7 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
 <div class="chip"><div class="cv">${boards}</div><div class="cl">Switchboards</div></div>
 <div class="chip"><div class="cv">${grand}</div><div class="cl">Total Items</div></div>
 </div>
-<table><thead><tr><th>Room</th><th>Switchboard</th><th>Location</th>${itemHead}<th>Total</th></tr></thead>
+<table><thead><tr><th>Room</th><th>Switchboard</th><th>Type</th><th>Location</th><th>Size (M)</th>${itemHead}<th>Other items</th><th>Total</th></tr></thead>
 <tbody>${trs}<tr>${totCells}</tr></tbody></table>
 <script>window.onload=function(){window.print();};</script>
 </body></html>`;
@@ -198,7 +265,13 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
         return (
             <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-                    <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🔌 {editId ? 'Edit' : 'New'} Switchboard Survey</h1>
+                    <div>
+                        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>🔌 {editId ? 'Edit' : 'New'} Switchboard Survey</h1>
+                        {/* index.html:20275 #sw-save-ind */}
+                        <div style={{ fontSize: 11, marginTop: 2, color: saveStatus === 'error' ? '#dc2626' : saveStatus === 'saving' ? '#d97706' : '#16a34a' }}>
+                            {saveStatus === 'saving' ? '… saving' : saveStatus === 'error' ? '⚠️ Save failed' : saveStatus === 'saved' ? '✓ Saved' : ' '}
+                        </div>
+                    </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => setEditing(false)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>← Back</button>
                         <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '💾 Save Survey'}</button>
@@ -249,28 +322,74 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
                             {rooms.length > 1 && <button onClick={() => removeRoom(room.id)} style={{ padding: '5px 10px', border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑</button>}
                         </div>
 
-                        {room.boards.map((board: SwBoard) => (
-                            <div key={board.id} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 8 }}>
-                                <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                                    <input type="text" value={board.name} onChange={e => renameBoard(room.id, board.id, e.target.value)} style={{ ...fieldStyle, width: 120 }} placeholder="Board name" />
-                                    <input type="text" value={board.location} onChange={e => relocateBoard(room.id, board.id, e.target.value)} style={{ ...fieldStyle, flex: 1, minWidth: 120 }} placeholder="Location (near door, etc.)" />
-                                    <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center', whiteSpace: 'nowrap' }}>Total: <b>{swBoardTotal(board)}</b></span>
-                                    {room.boards.length > 1 && <button onClick={() => removeBoard(room.id, board.id)} style={{ padding: '4px 8px', border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>🗑</button>}
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
-                                    {SW_ITEM_DEFS.map(d => (
-                                        <div key={d.key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px' }}>
-                                            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>{d.label}</div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <button onClick={() => bumpItem(room.id, board.id, d.key, -1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>−</button>
-                                                <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{board.items[d.key] || 0}</span>
-                                                <button onClick={() => bumpItem(room.id, board.id, d.key, 1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>+</button>
+                        {room.boards.map((board: SwBoard) => {
+                            const isAuto = (board.type || 'Automation') === 'Automation';
+                            const accent = isAuto ? '#0891b2' : '#d97706';
+                            const total = swBoardTotal(board);
+                            const overCapacity = board.moduleCount ? total > Number(board.moduleCount) : false;
+                            const custKey = `${room.id}:${board.id}`;
+                            return (
+                                <div key={board.id} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderLeft: `3px solid ${accent}`, borderRadius: 8, padding: 12, marginBottom: 8 }}>
+                                    <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                                        <input type="text" value={board.name} onChange={e => renameBoard(room.id, board.id, e.target.value)} style={{ ...fieldStyle, width: 120 }} placeholder="Board name" />
+                                        {/* index.html:20354 swBoardType select */}
+                                        <select value={board.type || 'Automation'} onChange={e => setBoardType(room.id, board.id, e.target.value)} title="Automation / Non-Automation" style={{ ...fieldStyle, width: 150, fontWeight: 700, color: accent }}>
+                                            <option value="Automation">⚙️ Automation</option>
+                                            <option value="Non-Automation">🔧 Non-Auto</option>
+                                        </select>
+                                        <span style={{ fontSize: 12, color: '#6b7280', alignSelf: 'center', whiteSpace: 'nowrap' }}>Total: <b>{total}</b></span>
+                                        {room.boards.length > 1 && <button onClick={() => removeBoard(room.id, board.id)} style={{ padding: '4px 8px', border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>🗑</button>}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                                        <input type="text" value={board.location} onChange={e => relocateBoard(room.id, board.id, e.target.value)} style={{ ...fieldStyle, flex: 1, minWidth: 120 }} placeholder="📍 Location (near door, etc.)" />
+                                        {/* index.html:20323-20325 sizeSel + used indicator */}
+                                        <select value={board.moduleCount || ''} onChange={e => setBoardSize(room.id, board.id, e.target.value)} style={{ ...fieldStyle, width: 140 }}>
+                                            {SW_MODULE_SIZES.map(v => <option key={v} value={v}>{v === '' ? 'Board size' : `${v} Module`}</option>)}
+                                        </select>
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: overCapacity ? '#dc2626' : '#64748b', alignSelf: 'center', whiteSpace: 'nowrap' }}>
+                                            {board.moduleCount ? `used ${total} / ${board.moduleCount}` : `used ${total}`}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                                        {SW_ITEM_DEFS.map(d => (
+                                            <div key={d.key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '6px 8px' }}>
+                                                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>{d.label}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <button onClick={() => bumpItem(room.id, board.id, d.key, -1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>−</button>
+                                                    <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{board.items[d.key] || 0}</span>
+                                                    <button onClick={() => bumpItem(room.id, board.id, d.key, 1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>+</button>
+                                                </div>
                                             </div>
+                                        ))}
+                                    </div>
+                                    {/* index.html:20342-20349 custom items */}
+                                    {(board.custom || []).length > 0 && (
+                                        <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                                            {board.custom.map((c, ci) => (
+                                                <div key={ci} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#faf5ff', borderRadius: 6, padding: '6px 8px' }}>
+                                                    <span style={{ fontSize: 13, color: '#7c3aed', fontWeight: 600 }}>{c.name}</span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        <button onClick={() => bumpCustomItem(room.id, board.id, ci, -1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>−</button>
+                                                        <span style={{ minWidth: 18, textAlign: 'center', fontWeight: 700, fontSize: 13 }}>{c.qty || 0}</span>
+                                                        <button onClick={() => bumpCustomItem(room.id, board.id, ci, 1)} style={{ width: 24, height: 24, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>+</button>
+                                                        <button onClick={() => removeCustomItem(room.id, board.id, ci)} style={{ width: 22, height: 22, border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                                                    </span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
+                                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                                        <input
+                                            type="text" placeholder="Other item name…" value={customInputs[custKey] || ''}
+                                            onChange={e => setCustomInputs(ci => ({ ...ci, [custKey]: e.target.value }))}
+                                            onKeyDown={e => { if (e.key === 'Enter') addCustomItem(room.id, board.id); }}
+                                            style={{ ...fieldStyle, flex: 1 }}
+                                        />
+                                        <button onClick={() => addCustomItem(room.id, board.id)} style={{ padding: '6px 14px', border: '1px solid #185FA5', color: '#185FA5', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Add</button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 ))}
             </div>

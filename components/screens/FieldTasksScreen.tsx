@@ -50,6 +50,10 @@ export default function FieldTasksScreen() {
 
     const [kmTaskId, setKmTaskId] = useState<number | null>(null);
     const [kmStep, setKmStep] = useState<'opening' | 'arrival' | null>(null);
+    // Final safety net — mandatory (no-skip) arrival KM catch-up if a
+    // kmSkip_ flag is still set from an earlier "Reached → Skip KM" choice
+    // that never got caught up (index.html:23611-23616, doFtTravelStart).
+    const [ftKmCatchup, setFtKmCatchup] = useState<{ pendingTravelStart: FieldTask; skipTicketId: string } | null>(null);
 
     const load = useCallback(async () => {
         if (!myId) return;
@@ -102,14 +106,28 @@ export default function FieldTasksScreen() {
     };
 
     // Travel Start — opening KM required first if not yet captured today (engineers only)
-    // Travel Start — opening KM required first if not yet captured today (engineers only)
     const handleTravelStart = async (t: FieldTask) => {
         if (isEng) {
+            // index.html:23611-23616 — mirror the call flow so the day's KM
+            // chain stays intact: a skipped arrival KM from an earlier
+            // "Reached" must be caught up before starting the next travel.
+            const today = new Date().toLocaleDateString('en-CA');
+            const skipKey = `kmSkip_${myId}_${today}`;
+            let skipTicket: string | null = null;
+            try { skipTicket = window.localStorage.getItem(skipKey); } catch { /* localStorage unavailable */ }
+            if (skipTicket) { setFtKmCatchup({ pendingTravelStart: t, skipTicketId: skipTicket }); return; }
             const hasOpening = await hasKmEntryToday(myId, 'opening');
             if (!hasOpening) { setKmTaskId(t.id); setKmStep('opening'); return; }
         }
         const r = await ftTravelStart(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
+    };
+    const handleFtKmCatchupDone = async () => {
+        if (!ftKmCatchup) return;
+        const { pendingTravelStart } = ftKmCatchup;
+        try { window.localStorage.removeItem(`kmSkip_${myId}_${new Date().toLocaleDateString('en-CA')}`); } catch { /* localStorage unavailable */ }
+        setFtKmCatchup(null);
+        await handleTravelStart(pendingTravelStart);
     };
     const handleReached = async (t: FieldTask) => {
         if (isEng) {
@@ -126,9 +144,14 @@ export default function FieldTasksScreen() {
         const r = await ftReached(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error); else await load();
     };
-    const handleKmDone = async () => {
+    const handleKmDone = async (skipped?: boolean) => {
         if (kmTaskId == null || !kmStep) return;
         const t = tasks.find((x) => x.id === kmTaskId);
+        // index.html:25582 — a skipped arrival KM leaves a kmSkip_ flag for
+        // the mandatory catch-up at the next Travel Start (see above).
+        if (kmStep === 'arrival' && skipped) {
+            try { window.localStorage.setItem(`kmSkip_${myId}_${new Date().toLocaleDateString('en-CA')}`, `FT${kmTaskId}`); } catch { /* localStorage unavailable */ }
+        }
         const r = kmStep === 'opening' ? await ftTravelStart(kmTaskId, myId, myName, memberRole, t) : await ftReached(kmTaskId, myId, myName, memberRole, t);
         setKmTaskId(null); setKmStep(null);
         if (!r.success) alert('Error: ' + r.error); else await load();
@@ -367,8 +390,19 @@ export default function FieldTasksScreen() {
                     engId={myId}
                     engName={myName}
                     ticketId={`FT${kmTaskId}`}
+                    allowSkip={kmStep === 'arrival'}
                     onClose={() => { setKmTaskId(null); setKmStep(null); }}
                     onDone={handleKmDone}
+                />
+            )}
+            {ftKmCatchup && (
+                <KmCaptureModal
+                    type="arrival"
+                    engId={myId}
+                    engName={myName}
+                    ticketId={ftKmCatchup.skipTicketId}
+                    onClose={() => setFtKmCatchup(null)}
+                    onDone={handleFtKmCatchupDone}
                 />
             )}
         </div>

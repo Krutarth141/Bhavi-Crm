@@ -11,9 +11,10 @@ interface Props {
     isPeonMode: boolean;
     stats: WorkLogStats;
     searched: boolean;
+    onOpenTicket: (id: string) => void;
 }
 
-export default function WorkLogResults({ loading, error, grouped, peonGrouped, isPeonMode, stats, searched }: Props) {
+export default function WorkLogResults({ loading, error, grouped, peonGrouped, isPeonMode, stats, searched, onOpenTicket }: Props) {
     if (loading) {
         return <div className="loading">Loading...</div>;
     }
@@ -52,7 +53,7 @@ export default function WorkLogResults({ loading, error, grouped, peonGrouped, i
         <div>
             <WorkLogStatsCards stats={stats} />
             {engineers.map(([engName, dateMap]) => (
-                <WorkLogEngineerCard key={engName} engName={engName} dateMap={dateMap} />
+                <WorkLogEngineerCard key={engName} engName={engName} dateMap={dateMap} onOpenTicket={onOpenTicket} />
             ))}
         </div>
     );

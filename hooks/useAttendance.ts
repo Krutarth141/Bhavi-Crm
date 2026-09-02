@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { PunchLog } from '@/types/attendance';
 import { EmployeeShift } from '@/types/settings';
 import {
-    fetchPunchLogs, fetchAttendanceEmployees, verifyPunchLog, rejectPunchLog,
+    fetchPunchLogs, fetchAttendanceFilterEmployees, fetchAttendanceAddEmployees, verifyPunchLog, rejectPunchLog,
     fetchSundayExclude, toggleSundayExclude as toggleSundayExcludeService,
 } from '@/services/attendanceService';
 import { fetchShiftMap } from '@/services/settingsService';
@@ -19,6 +19,7 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
     const [logs, setLogs] = useState<PunchLog[]>([]);
     const [shiftMap, setShiftMap] = useState<Record<string, EmployeeShift>>({});
     const [employees, setEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
+    const [addEmployees, setAddEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
     const [sundayExclude, setSundayExclude] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,10 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        if (isAdmin) fetchAttendanceEmployees().then(setEmployees);
+        if (isAdmin) {
+            fetchAttendanceFilterEmployees().then(setEmployees);
+            fetchAttendanceAddEmployees().then(setAddEmployees);
+        }
     }, [isAdmin]);
 
     useEffect(() => { fetchSundayExclude().then(setSundayExclude); }, []);
@@ -66,5 +70,5 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
         return result;
     };
 
-    return { logs, shiftMap, employees, sundayExclude, loading, error, refetch: load, verify, rejectPunch, toggleSunday };
+    return { logs, shiftMap, employees, addEmployees, sundayExclude, loading, error, refetch: load, verify, rejectPunch, toggleSunday };
 };

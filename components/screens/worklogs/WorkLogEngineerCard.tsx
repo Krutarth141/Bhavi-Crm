@@ -4,9 +4,10 @@ import { WorkLog, PeonTaskLog } from '@/types/workLogs';
 interface Props {
     engName: string;
     dateMap: Record<string, WorkLog[]>;
+    onOpenTicket: (id: string) => void;
 }
 
-export default function WorkLogEngineerCard({ engName, dateMap }: Props) {
+export default function WorkLogEngineerCard({ engName, dateMap, onOpenTicket }: Props) {
     const allLogs = Object.values(dateMap).flat();
     const totalEntries = allLogs.length;
     const totalDays = Object.keys(dateMap).length;
@@ -91,7 +92,7 @@ export default function WorkLogEngineerCard({ engName, dateMap }: Props) {
 
             {/* Date groups */}
             {sortedDates.map(([date, entries]) => (
-                <WorkLogDateGroup key={date} date={date} entries={entries} />
+                <WorkLogDateGroup key={date} date={date} entries={entries} onOpenTicket={onOpenTicket} />
             ))}
         </div>
     );
@@ -100,9 +101,11 @@ export default function WorkLogEngineerCard({ engName, dateMap }: Props) {
 function WorkLogDateGroup({
     date,
     entries,
+    onOpenTicket,
 }: {
     date: string;
     entries: WorkLog[];
+    onOpenTicket: (id: string) => void;
 }) {
     const dObj = new Date(`${date}T00:00:00`);
     const dLabel = dObj.toLocaleDateString('en-IN', {
@@ -130,13 +133,13 @@ function WorkLogDateGroup({
             </div>
 
             {entries.map((log, i) => (
-                <WorkLogEntry key={log.id ?? i} log={log} />
+                <WorkLogEntry key={log.id ?? i} log={log} onOpenTicket={onOpenTicket} />
             ))}
         </div>
     );
 }
 
-function WorkLogEntry({ log }: { log: WorkLog }) {
+function WorkLogEntry({ log, onOpenTicket }: { log: WorkLog; onOpenTicket: (id: string) => void }) {
     const isOpen = log.to_time === 'OPEN';
     const isTravel = log.log_type === 'travel';
     // A "status" entry has a single timestamp, not a from–to range — either
@@ -187,6 +190,27 @@ function WorkLogEntry({ log }: { log: WorkLog }) {
         </a>
     ) : null;
 
+    // index.html:21882-21891 — ticket IDs inside the description are
+    // clickable (opens the ticket). HTML gates this on `role!=='engineer'
+    // || isCspMgr`, but this whole cross-staff Work Log Report screen is
+    // itself only ever reachable by Admin/WC/CSP-manager engineers (a plain
+    // engineer never gets the 'work-log-report' nav item) — so every viewer
+    // who can see this component satisfies that condition already.
+    const desc = log.task_description || '';
+    const descNode = (log.ticket_id && desc.includes(log.ticket_id))
+        ? desc.split(log.ticket_id).reduce<React.ReactNode[]>((acc, part, i, arr) => {
+            acc.push(part);
+            if (i < arr.length - 1) {
+                acc.push(
+                    <a key={i} href="javascript:void(0)" onClick={() => onOpenTicket(log.ticket_id!)} style={{ color: '#1d4ed8', fontWeight: 700, textDecoration: 'none' }}>
+                        {log.ticket_id}
+                    </a>
+                );
+            }
+            return acc;
+        }, [])
+        : desc;
+
     return (
         <div
             style={{
@@ -214,7 +238,7 @@ function WorkLogEntry({ log }: { log: WorkLog }) {
                 {timeLabel}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
-                {log.task_description}{areaBadge}{gpsLink}{arrivalLink}
+                {descNode}{areaBadge}{gpsLink}{arrivalLink}
             </div>
         </div>
     );

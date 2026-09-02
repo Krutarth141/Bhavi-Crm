@@ -60,14 +60,34 @@ export const fetchPunchLogs = async (params: {
     }
 };
 
-// Active punchable employees — for the admin filter dropdown and roster mode.
-// Pure admins (non-WC) don't punch; excluded like HTML does.
-export const fetchAttendanceEmployees = async (): Promise<{ user_id: string; name: string; role: string; role_type?: string }[]> => {
+// index.html:24882-24886 — the top-of-page report filter dropdown lists
+// EVERY user (active or not — admins can still review a former employee's
+// attendance history), excluding only ATT_EXCLUDED_IDS. No admin-exclusion
+// here either.
+export const fetchAttendanceFilterEmployees = async (): Promise<{ user_id: string; name: string; role: string; role_type?: string }[]> => {
     try {
         const { data, error } = await supabase
             .from('users')
             .select('user_id, name, role, role_type')
-            .eq('is_active', true)
+            .order('name');
+        if (error) throw error;
+        return (data || []).filter((u: any) => !ATT_EXCLUDED_IDS.includes(u.user_id));
+    } catch (err) {
+        console.error('Failed to fetch employees:', err);
+        return [];
+    }
+};
+
+// index.html:26200-26205 — the manual "Add Attendance" employee list also has
+// no is_active filter (a former employee's record can still be corrected
+// manually), but DOES exclude pure admins (non-WC) — the comment there notes
+// WC accounts are role='admin'/role_type='work_controller' and must still
+// appear.
+export const fetchAttendanceAddEmployees = async (): Promise<{ user_id: string; name: string; role: string; role_type?: string }[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('user_id, name, role, role_type')
             .order('name');
         if (error) throw error;
         return (data || []).filter((u: any) =>

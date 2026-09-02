@@ -35,7 +35,7 @@ export default function AttendanceScreen() {
     const [editLog, setEditLog] = useState<PunchLog | null>(null);
     const [requestLog, setRequestLog] = useState<PunchLog | null>(null);
 
-    const { logs, shiftMap, employees, sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch } = useAttendance({
+    const { logs, shiftMap, employees, addEmployees, sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
 
@@ -261,7 +261,7 @@ export default function AttendanceScreen() {
             </div>
 
             {addOpen && (
-                <AttAddModal employees={employees} shiftMap={shiftMap} onClose={() => setAddOpen(false)} onDone={async () => { setAddOpen(false); await refetch(); }} />
+                <AttAddModal employees={addEmployees} shiftMap={shiftMap} onClose={() => setAddOpen(false)} onDone={async () => { setAddOpen(false); await refetch(); }} />
             )}
             {editLog && (
                 <AttEditModal log={editLog} shift={editLog.eng_id ? shiftMap[editLog.eng_id] : undefined} onClose={() => setEditLog(null)} onDone={async () => { setEditLog(null); await refetch(); }} />
