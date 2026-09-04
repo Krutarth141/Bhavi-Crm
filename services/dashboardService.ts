@@ -32,7 +32,7 @@ export const fetchEngineerLiveStatus = async (): Promise<EngineerLiveStatusRow[]
     const ticketIds = [...new Set(openLogs.filter((l: any) => l.ticket_id).map((l: any) => l.ticket_id))];
     const ticketMap: Record<string, any> = {};
     if (ticketIds.length) {
-        const { data: tks } = await supabase.from('tickets').select('id, cname, city, area, address, pin, model, problem, status').in('id', ticketIds);
+        const { data: tks } = await supabase.from('tickets').select('id, cname, city, area, address, pin, model, problem, status, service_type').in('id', ticketIds);
         (tks || []).forEach((t: any) => { ticketMap[t.id] = t; });
     }
 
@@ -67,8 +67,15 @@ export const fetchEngineerLiveStatus = async (): Promise<EngineerLiveStatusRow[]
         let area = '-';
 
         if (ol) {
+            // index.html:3960-3962 — a "Working" engineer on a Carry In ticket
+            // gets a distinct purple badge instead of the On Site green one.
+            const olTk = ol.ticket_id ? ticketMap[ol.ticket_id] : null;
+            const isCarryIn = !!olTk && olTk.service_type === 'Carry In';
             if (ol.log_type === 'travel') { statusLabel = '🚗 Traveling'; statusColor = { bg: '#fef3c7', color: '#92400e' }; }
-            else if (ol.log_type === 'work') { statusLabel = '🔧 On Site / Working'; statusColor = { bg: '#d1fae5', color: '#065f46' }; }
+            else if (ol.log_type === 'work') {
+                if (isCarryIn) { statusLabel = '📦 Carry In / Working'; statusColor = { bg: '#ede9fe', color: '#6d28d9' }; }
+                else { statusLabel = '🔧 On Site / Working'; statusColor = { bg: '#d1fae5', color: '#065f46' }; }
+            }
             else { statusLabel = '⚙️ Active'; statusColor = { bg: '#dbeafe', color: '#1e40af' }; }
 
             if (ol.ticket_id) {

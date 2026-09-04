@@ -29,7 +29,7 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'logo', label: '🖼️ Logo' },
     { id: 'company', label: '🏢 Company Info' },
     { id: 'portal', label: '🌐 Portal Services' },
-    { id: 'msc', label: '📊 MSC Centers' },
+    { id: 'msc', label: '🏭 MSC Centers' },
     { id: 'telegram', label: '📱 Telegram' },
     { id: 'navperms', label: '🔐 Nav Permissions' },
 ];

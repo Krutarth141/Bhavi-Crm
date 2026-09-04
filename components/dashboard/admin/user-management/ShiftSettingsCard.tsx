@@ -27,15 +27,15 @@ export default function ShiftSettingsCard() {
         <div className="card" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: loaded ? 16 : 0 }}>
                 <div>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>🕐 SHIFT / WORKING HOURS SETTINGS</h3>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>⏰ Shift / Working Hours Settings</h3>
                     {!loaded && (
-                        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            CLICK LOAD TO VIEW EMPLOYEE SHIFT SETTINGS
+                        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                            Click Load to view employee shift settings
                         </p>
                     )}
                 </div>
                 <button onClick={load} disabled={loading} style={{ padding: '6px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: loading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: loading ? 0.6 : 1 }}>
-                    {loading ? 'Loading...' : loaded ? '🔄 Reload' : '📂 Load'}
+                    {loading ? 'Loading...' : '🔄 Load'}
                 </button>
             </div>
 

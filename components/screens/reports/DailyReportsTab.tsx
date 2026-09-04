@@ -2,6 +2,10 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { DailyReport } from '@/types/reports';
+import { waArr } from '@/services/engDailyReportService';
+
+// index.html:1395 — owCount=(Array.isArray(owList)&&owList.length)||r.total_office_work||0
+const officeWorkCount = (r: DailyReport): number => waArr<unknown>(r.office_work as any).length || r.total_office_work || 0;
 
 interface DailyReportsTabProps {
     reports: DailyReport[];
@@ -33,6 +37,7 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
             'W-Breakdown': r.warranty_breakdown,
             'OW-Breakdown': r.outwarranty_breakdown,
             'OW-Other': r.outwarranty_other,
+            'Office Work Count': officeWorkCount(r),
             'Total Calls': r.total_calls,
             'Petrol KM': r.petrol_km,
             'Total Collection': r.total_amount,
@@ -76,6 +81,7 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
                                 <th style={{ background: '#eff6ff', color: '#1d4ed8' }}>W-Break</th>
                                 <th style={{ background: '#fff7ed', color: '#d97706' }}>OW-Break</th>
                                 <th style={{ background: '#fff7ed', color: '#d97706' }}>OW-Other</th>
+                                <th style={{ background: '#f5f3ff', color: '#5b21b6' }}>Office Work</th>
                                 <th>Total</th>
                                 <th>KM</th>
                                 <th style={{ color: '#065f46' }}>Collection</th>
@@ -91,6 +97,7 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
                                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#1d4ed8' }}>{r.warranty_breakdown || 0}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_breakdown || 0}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_other || 0}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: officeWorkCount(r) ? '#5b21b6' : '#cbd5e1' }}>{officeWorkCount(r)}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{r.total_calls || 0}</td>
                                     <td style={{ textAlign: 'center' }}>{r.petrol_km || 0} km</td>
                                     <td style={{ fontWeight: 700, color: '#065f46' }}>₹{r.total_amount || 0}</td>

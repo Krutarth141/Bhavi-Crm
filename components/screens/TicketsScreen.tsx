@@ -425,9 +425,10 @@ export default function TicketsScreen() {
           <option value="done">✅ Invoice Done</option>
         </select>
         <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={styles.filterSelect}>
+          <option value={30}>30 / page</option>
           <option value={50}>50 / page</option>
           <option value={100}>100 / page</option>
-          <option value={250}>250 / page</option>
+          <option value={200}>200 / page</option>
         </select>
       </div>
 
@@ -452,40 +453,49 @@ export default function TicketsScreen() {
               </tr>
             </thead>
             <tbody>
-              {pagedTickets.map((t) => (
-                <tr key={t.id} style={styles.tableRow} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = colors.card)}>
-                  <td style={styles.tableCell}><strong>{t.id}</strong></td>
-                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString()}</td>
-                  <td style={styles.tableCell}><strong>{t.cname}</strong></td>
-                  <td style={{ ...styles.tableCell, color: colors.primary, fontWeight: 600 }}>{t.mobile}</td>
-                  <td style={styles.tableCell}>{t.brand_name} / {t.model}</td>
-                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.serial}</td>
-                  <td style={styles.tableCell}><span style={{ ...styles.badge, ...getBadgeStyle(callTypeBadges[t.call_type] || 'badge-open') }}>{t.call_type}</span></td>
-                  <td style={styles.tableCell}>{t.service_type}</td>
-                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.problem}</td>
-                  <td style={styles.tableCell}><span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
-                  <td style={styles.tableCell}>
-                    {isInvoiceable(t) && (
-                      t.invoice_done
-                        ? <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Inv</span>
-                        : <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>🧾 Pending</span>
-                    )}
-                  </td>
-                  <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.assigned_name || '—'}</td>
-                  <td style={styles.tableCell}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-                      <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
-                        👁 View
-                      </button>
-                      {currentUserRole === 'engineer' && (
-                        <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={() => handleAddProductSameCustomer(t)}>
-                          ➕ Add Product
-                        </button>
+              {pagedTickets.map((t) => {
+                const isCarryIn = t.service_type === 'Carry In';
+                return (
+                  <tr key={t.id} style={{ ...styles.tableRow, ...(isCarryIn ? { backgroundColor: '#ffedd5' } : {}) }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isCarryIn ? '#ffedd5' : colors.card)}>
+                    <td style={styles.tableCell}><strong>{t.id}</strong></td>
+                    <td style={{ ...styles.tableCell, fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString()}</td>
+                    <td style={styles.tableCell}><strong>{t.cname}</strong></td>
+                    <td style={{ ...styles.tableCell, color: colors.primary, fontWeight: 600 }}>{t.mobile}</td>
+                    <td style={styles.tableCell}>{t.brand_name} / {t.model}</td>
+                    <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.serial}</td>
+                    <td style={styles.tableCell}>
+                      <span style={{ ...styles.badge, ...getBadgeStyle(callTypeBadges[t.call_type] || 'badge-open') }}>{t.call_type}</span>{' '}
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, ...(isCarryIn ? { background: '#fed7aa', color: '#9a3412' } : { background: '#bfdbfe', color: '#1e40af' }) }}>{isCarryIn ? '🏠 CARRY IN' : '📍 ON SITE'}</span>
+                    </td>
+                    <td style={styles.tableCell}>{t.service_type}</td>
+                    <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.problem}</td>
+                    <td style={styles.tableCell}>
+                      <span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span>
+                      {t.pending_edit && <span style={{ marginLeft: 4, background: '#fbbf24', color: '#78350f', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>✏️ Edit</span>}
+                    </td>
+                    <td style={styles.tableCell}>
+                      {isInvoiceable(t) && (
+                        t.invoice_done
+                          ? <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#15803d' }}>✅ Inv</span>
+                          : <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>🧾 Pending</span>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td style={{ ...styles.tableCell, fontSize: '12px' }}>{t.assigned_name || <span style={{ color: colors.danger, fontSize: 12 }}>⚠️ Unassigned</span>}</td>
+                    <td style={styles.tableCell}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                        <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
+                          👁 View
+                        </button>
+                        {currentUserRole === 'engineer' && (
+                          <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={() => handleAddProductSameCustomer(t)}>
+                            ➕ Add Product
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 4px', fontSize: '13px', color: colors.textMuted }}>

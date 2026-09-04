@@ -45,7 +45,8 @@ export function InventoryTable({
                         <th style={inventoryStyles.tableHeader}>Part Code</th>
                         <th style={inventoryStyles.tableHeader}>Item Name</th>
                         <th style={inventoryStyles.tableHeader}>Brand</th>
-                        <th style={inventoryStyles.tableHeader}>Category</th>
+                        {/* index.html:8256 — HTML's own header literally reads "Model" here, though the cell renders item.category; matching that displayed label as-is. */}
+                        <th style={inventoryStyles.tableHeader}>Model</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>Stock</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'center' }}>Min</th>
                         <th style={{ ...inventoryStyles.tableHeader, textAlign: 'right' }}>DTP ₹</th>
@@ -86,6 +87,9 @@ export function InventoryTable({
                                     >
                                         {item.item_name}
                                     </span>
+                                    {item.is_consumable && (
+                                        <span style={{ marginLeft: 5, fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>CONSUMABLE</span>
+                                    )}
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, fontSize: '12px', color: inventoryColors.textMuted }}>
                                     {brandName(item.brand_id)}

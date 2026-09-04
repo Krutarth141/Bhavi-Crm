@@ -93,6 +93,10 @@ export interface DailyReport {
     payment_details?: PaymentDetail[];
     remarks?: string;
     created_at?: string;
+    // index.html:1387,1395 — Office Work column count. office_work is jsonb
+    // (or a legacy JSON string), total_office_work a fallback stored count.
+    office_work?: unknown;
+    total_office_work?: number;
 }
 
 // ─── WC Daily Reports ─────────────────────────────────────────────────────────
@@ -271,11 +275,12 @@ export const CALL_TYPE_COLORS: Record<string, string> = {
     Other: '#64748b',
 };
 
+// index.html:9213-9218 — order and exact labels.
 export const REPORT_TABS: { key: ReportTab; label: string }[] = [
     { key: 'filter', label: '🔍 Filter & Download' },
     { key: 'revenue', label: '💰 Revenue' },
-    { key: 'daily', label: '📋 Engineer Daily' },
-    { key: 'wcdaily', label: '🎯 WC Daily' },
-    { key: 'import', label: '📥 Import Calls' },
     { key: 'tat', label: '⏱️ TAT Compliance' },
+    { key: 'daily', label: '📋 Eng Daily Reports' },
+    { key: 'wcdaily', label: '🎯 WC Daily Reports' },
+    { key: 'import', label: '📥 Import Calls' },
 ];

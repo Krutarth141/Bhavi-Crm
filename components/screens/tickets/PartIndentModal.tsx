@@ -6,6 +6,8 @@ import { TicketSpare } from '@/types/tickets';
 
 interface IndentTicket {
     id: string;
+    cname?: string;
+    model?: string;
     call_type?: string;
     service_type?: string;
     warranty_coverage?: string;
@@ -75,6 +77,10 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
                 </div>
                 <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+                    {/* index.html:570-574,7427 — ticket-context box (#part-req-info) */}
+                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: 10, marginBottom: 12, fontSize: 13 }}>
+                        <b>{ticket.id}</b> | {ticket.cname || '-'} | {ticket.model || '-'} | {ticket.call_type || '-'} | {ticket.service_type || '-'}
+                    </div>
                     <div style={{ marginBottom: 10, position: 'relative' }}>
                         <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Part Code / Name</label>
                         <input type="text" value={query} onChange={(e) => handleSearch(e.target.value)} placeholder="Search part code or name..." style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' }} autoComplete="off" />

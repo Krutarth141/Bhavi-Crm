@@ -53,3 +53,11 @@ export const isExpiringSoon = (d?: string) => {
     const diff = (new Date(d).getTime() - Date.now()) / 86400000;
     return diff >= 0 && diff <= 30;
 };
+// index.html:15659-15690 — daysLeft=Math.ceil((endDate-today)/86400000), with
+// both dates at midnight.
+export const daysUntil = (d?: string): number => {
+    if (!d) return 0;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const end = new Date(d); end.setHours(0, 0, 0, 0);
+    return Math.ceil((end.getTime() - today.getTime()) / 86400000);
+};

@@ -51,13 +51,13 @@ const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
-    { id: 'inquiries', label: '🔎 Inquiries' },
+    { id: 'inquiries', label: '🔍 Inquiries' },
     { id: 'field-tasks', label: '🚚 Other Work' },
     // HTML setupNav(): `if(isEng){sv('nav-parts-catalog',true);sv('nav-fault-finder',true);}`
     // — every engineer gets these two, regardless of CSP-manager status.
-    { id: 'parts-catalog', label: '📚 Parts Catalog' },
+    { id: 'parts-catalog', label: '🔩 Parts Catalog' },
     { id: 'fault-finder', label: '🔍 Fault Finder' },
-    { id: 'eng-parts', label: '🔩 Eng. Parts' },
+    { id: 'eng-parts', label: '🧰 Eng. Parts' },
 ];
 
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
@@ -68,17 +68,17 @@ const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'pending', label: '📋 Pending List' },
     { id: 'route-planning', label: '🗺️ Route Planning' },
     { id: 'customers', label: '👥 Customers' },
-    { id: 'inventory', label: '📦 Inventory' },
-    { id: 'work-log-report', label: '📝 Work Log Report' },
-    { id: 'amc', label: '🛡️ AMC' },
+    { id: 'inventory', label: '🗃️ Inventory' },
+    { id: 'work-log-report', label: '📋 Work Log Report' },
+    { id: 'amc', label: '🔄 AMC' },
 ];
 
 // "Auto engineer" accounts (ENG002/ENG008) — mirrors HTML's isAutoEng nav
 // gate, granted independent of CSP-manager status.
 const AUTO_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
-    { id: 'auto-sites', label: '🏢 Auto Sites' },
-    { id: 'sw-survey', label: '📝 SW Survey' },
-    { id: 'auto-visits-report', label: '📊 Auto Visits Report' },
+    { id: 'auto-sites', label: '🏗️ Auto Sites' },
+    { id: 'sw-survey', label: '🔌 SW Survey' },
+    { id: 'auto-visits-report', label: '📋 Visit Report' },
     { id: 'auto-inventory', label: '📦 Auto Inventory' },
 ];
 

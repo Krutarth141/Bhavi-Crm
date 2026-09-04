@@ -12,7 +12,7 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const [photo, setPhoto] = useState<string | null>(null);
-    const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
+    const [loc, setLoc] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
     const [gpsStatus, setGpsStatus] = useState<'pending' | 'ready' | 'error'>('pending');
     // GPS retry + "Punch without GPS" fallback so an engineer is never fully
     // stuck when GPS won't fix (index.html:4288-4326, pinFetchGPS/pinAllowNoGps).
@@ -41,7 +41,7 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
         setGpsStatus('pending');
         setGpsAttempts((n) => n + 1);
         navigator.geolocation?.getCurrentPosition(
-            (pos) => { setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsStatus('ready'); },
+            (pos) => { setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }); setGpsStatus('ready'); },
             () => setGpsStatus('error'),
             { enableHighAccuracy: true, timeout: 15000 }
         );
@@ -187,8 +187,15 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span style={{ ...chipStyle, ...(allowNoGps ? chipError : gpsStatus === 'ready' ? chipReady : gpsStatus === 'error' ? chipError : chipPending) }}>
-                        📍 {allowNoGps ? '⚠️ Punching WITHOUT GPS (location unavailable)' : gpsStatus === 'ready' ? 'GPS Ready' : gpsStatus === 'error' ? 'GPS Not Available' : 'Fetching GPS...'}
+                    {/* index.html:4297-4304 — accuracy-tiered GPS status text/colors. */}
+                    <span style={{ ...chipStyle, ...(allowNoGps ? chipError : gpsStatus === 'ready' && loc ? { background: loc.accuracy <= 200 ? '#d1fae5' : '#fef3c7', color: loc.accuracy <= 200 ? '#065f46' : '#92400e' } : gpsStatus === 'error' ? chipError : chipPending) }}>
+                        📍 {allowNoGps
+                            ? '⚠️ Punching WITHOUT GPS (location unavailable)'
+                            : gpsStatus === 'ready' && loc
+                                ? `GPS: ${loc.accuracy <= 50 ? `✅ High Accuracy (±${Math.round(loc.accuracy)}m)` : loc.accuracy <= 200 ? `⚠️ Medium (±${Math.round(loc.accuracy)}m)` : `⚠️ Low Accuracy (±${Math.round(loc.accuracy)}m — Move outdoors)`}`
+                                : gpsStatus === 'error'
+                                    ? '❌ GPS Not Available — Location ON karo / Retry karo'
+                                    : 'Fetching GPS...'}
                     </span>
                     <span style={{ ...chipStyle, ...(photo ? chipReady : chipPending) }}>
                         {mode === 'in' && selfieAutoText ? selfieAutoText : `📸 ${photo ? 'Selfie Captured' : 'Selfie Pending'}`}

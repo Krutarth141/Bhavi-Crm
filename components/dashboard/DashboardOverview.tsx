@@ -429,7 +429,7 @@ export default function DashboardOverview({ role }: Props) {
                         <KpiCard label="In Progress" sub="Being worked on" value={chartData.inProgress} icon="⚡" color="#1d4ed8" onClick={() => setKpiDetail({ title: 'In Progress', tickets: allTickets.filter(t => t.status === 'In Progress') })} />
                         <KpiCard label="Pending Parts" sub="Awaiting spare parts" value={chartData.pendParts} icon="🔩" color="#d97706" onClick={() => setKpiDetail({ title: 'Pending Parts', tickets: allTickets.filter(t => t.status === 'Pending Parts') })} />
                         <KpiCard label="Pending Repair" sub="Repair scheduled" value={chartData.pendRepair} icon="🔧" color="#0891b2" onClick={() => setKpiDetail({ title: 'Pending Repair', tickets: allTickets.filter(t => ['Pending Repair Carry In', 'Pending Repair On Site'].includes(t.status)) })} />
-                        <KpiCard label="Cancelled" sub="Rejected / Cancelled" value={chartData.cancelled} icon="🚫" color="#64748b" onClick={() => setKpiDetail({ title: 'Cancelled', tickets: allTickets.filter(t => isTicketCancelled(t.status)) })} />
+                        <KpiCard label="Cancelled" sub="Call cancelled" value={chartData.cancelled} icon="🚫" color="#64748b" onClick={() => setKpiDetail({ title: 'Cancelled', tickets: allTickets.filter(t => isTicketCancelled(t.status)) })} />
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>

@@ -130,8 +130,11 @@ export default function KmCaptureModal({ type, engId, engName, ticketId, allowSk
                         {saving ? 'Saving...' : '💾 Save KM Entry'}
                     </button>
                     {allowSkip && (
-                        <button onClick={() => onDone(true)} disabled={saving} style={{ width: '100%', padding: '8px', marginTop: 6, background: 'none', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                            ⏭️ Skip — record on next Visit Start
+                        // index.html:25473 — the skip label warns closing-KM
+                        // skips are mandatory at Punch Out; other types warn
+                        // it'll be caught up at the next Visit Start.
+                        <button onClick={() => onDone(true)} disabled={saving} style={{ width: '100%', padding: '8px', marginTop: 6, background: 'none', color: '#b45309', border: '1px solid #fde68a', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            ⏭️ {type === 'closing' ? 'Skip — mandatory at Punch Out' : 'Skip — record on next Visit Start'}
                         </button>
                     )}
                 </div>

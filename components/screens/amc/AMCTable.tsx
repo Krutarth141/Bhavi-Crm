@@ -1,6 +1,6 @@
 'use client';
 
-import { AMCContract, isExpired, isExpiringSoon } from '@/types/amc';
+import { AMCContract, isExpired, isExpiringSoon, daysUntil } from '@/types/amc';
 
 interface Props {
     contracts: AMCContract[];
@@ -10,9 +10,10 @@ interface Props {
     onDelete: (id: number, name: string) => void;
 }
 
+// index.html:15692 — the "expiring" state includes a days-left count.
 const StatusBadge = ({ c }: { c: AMCContract }) => {
     if (isExpired(c.amc_end)) return <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: '#fee2e2', color: '#991b1b' }}>❌ Expired</span>;
-    if (isExpiringSoon(c.amc_end)) return <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>⚠️ Expiring Soon</span>;
+    if (isExpiringSoon(c.amc_end)) return <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: '#fef3c7', color: '#92400e' }}>⚠️ Expiring in {daysUntil(c.amc_end)}d</span>;
     return <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: '#d1fae5', color: '#065f46' }}>✅ Active</span>;
 };
 
@@ -37,6 +38,9 @@ export default function AMCTable({ contracts, onEdit, onRenew, onWhatsApp, onDel
                             <td style={{ padding: '10px 12px' }}>
                                 <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
                                 {c.mobile && <div style={{ fontSize: 11, color: '#6b7280' }}>{c.mobile}</div>}
+                                {/* index.html:15698,15707 — address + notes lines */}
+                                {c.address && <div style={{ fontSize: 11, color: '#6b7280' }}>📍 {c.address}</div>}
+                                {c.notes && <div style={{ fontSize: 11, color: '#9ca3af' }}>{c.notes}</div>}
                             </td>
                             <td style={{ padding: '10px 12px', fontSize: 12 }}>{c.product || '—'}</td>
                             <td style={{ padding: '10px 12px', fontSize: 12, fontFamily: 'monospace' }}>{c.serial_no || '—'}</td>
