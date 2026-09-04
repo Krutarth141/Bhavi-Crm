@@ -140,9 +140,25 @@ export default function PendingListScreen() {
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateSaving, setUpdateSaving] = useState(false);
 
-  // Apply all filters
-  const filtered = useMemo(() => {
+  // index.html:26669-26686 — "Ready for Pickup" is computed from the RAW
+  // ticket list with only wcTypeFilter/brandFilter applied — deliberately
+  // independent of serviceFilter (whose default is 'On Site') and search
+  // text, so a Repaired/Carry-In device stays visible there regardless of
+  // what the main table's filters are set to.
+  const readyForPickup = useMemo(() => {
     return localTickets.filter((t) => {
+      if (t.status !== 'Repaired') return false;
+      if (wcTypeFilter && t.wc_type !== wcTypeFilter) return false;
+      if (brandFilter && !t.brand_name?.toLowerCase().includes(brandFilter.toLowerCase())) return false;
+      return true;
+    });
+  }, [localTickets, wcTypeFilter, brandFilter]);
+
+  // "actionable" (all non-Repaired) is filtered separately by every filter,
+  // including serviceFilter and searchText — this is the main table.
+  const actionable = useMemo(() => {
+    return localTickets.filter((t) => {
+      if (t.status === 'Repaired') return false;
       if (wcTypeFilter && t.wc_type !== wcTypeFilter) return false;
       if (serviceFilter && t.service_type !== serviceFilter) return false;
       if (brandFilter && !t.brand_name?.toLowerCase().includes(brandFilter.toLowerCase())) return false;
@@ -163,17 +179,6 @@ export default function PendingListScreen() {
       return true;
     });
   }, [localTickets, wcTypeFilter, serviceFilter, brandFilter, searchText]);
-
-  // Split into "Ready for Pickup" (Repaired) and actionable (all others)
-  const readyForPickup = useMemo(
-    () => filtered.filter((t) => t.status === 'Repaired'),
-    [filtered]
-  );
-
-  const actionable = useMemo(
-    () => filtered.filter((t) => t.status !== 'Repaired'),
-    [filtered]
-  );
 
   // In Route Mode: group actionable calls by engineer (sorted by sequence_no
   // within each group), unassigned at the bottom — matches HTML's grouping

@@ -82,9 +82,11 @@ export default function AutoVisitsReportScreen() {
         XLSX.writeFile(wb, `site_visits_${todayStr()}.xlsx`);
     };
 
-    // Stats
-    const uniqueSites = new Set(visits.map(v => v.site_id)).size;
-    const totalMaterial = visits.reduce((s, v) => s + (v.material_total || 0), 0);
+    // Stats (index.html:21643-21645)
+    // Each ad-hoc/one-off visit (no site_id) counts as its own "site" — not
+    // collapsed together under a single null bucket.
+    const uniqueSites = new Set(visits.map(v => v.site_id || `adhoc_${v.id}`)).size;
+    const withMaterial = visits.filter(v => v.material_delivered).length;
 
     return (
         <div style={{ padding: '20px 24px' }}>
@@ -118,7 +120,7 @@ export default function AutoVisitsReportScreen() {
                 {[
                     { label: 'Total Visits', value: String(visits.length), color: '#185FA5' },
                     { label: 'Sites Visited', value: String(uniqueSites), color: '#7c3aed' },
-                    { label: 'Material Value', value: '₹' + totalMaterial.toLocaleString('en-IN', { maximumFractionDigits: 0 }), color: '#059669' },
+                    { label: 'Material Delivered', value: String(withMaterial), color: '#0e9f6e' },
                 ].map(s => (
                     <div key={s.label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
                         <div style={{ fontSize: 26, fontWeight: 700, color: s.color }}>{s.value}</div>

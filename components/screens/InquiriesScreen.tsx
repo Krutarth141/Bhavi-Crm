@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useInquiries } from '@/hooks/useInquiries';
 import { useEngineers } from '@/hooks/useEngineers';
@@ -143,11 +143,41 @@ export default function InquiriesScreen() {
     const detailInq = detailId != null ? inquiries.find(i => i.id === detailId) : null;
     const updateInq = updateId != null ? inquiries.find(i => i.id === updateId) : null;
 
+    // index.html:23243-23285 — admin-only per-engineer breakdown. Since
+    // `inquiries` is already the full unrestricted list for an admin session
+    // (fetchInquiries skips the created_by/assigned_to filter when
+    // isAdmin), the report is derived from it directly rather than a
+    // separate re-fetch.
+    const [reportOpen, setReportOpen] = useState(false);
+    const engineerReportRows = useMemo(() => {
+        const map: Record<string, { name: string; total: number; open: number; inProgress: number; converted: number; lost: number }> = {};
+        inquiries.forEach(inq => {
+            const key = inq.assigned_name || inq.created_by_name || inq.created_by || 'Unassigned';
+            if (!map[key]) map[key] = { name: key, total: 0, open: 0, inProgress: 0, converted: 0, lost: 0 };
+            map[key].total++;
+            if (inq.status === 'Open') map[key].open++;
+            else if (inq.status === 'Converted') map[key].converted++;
+            else if (inq.status === 'Lost') map[key].lost++;
+            else map[key].inProgress++;
+        });
+        return Object.values(map).sort((a, b) => b.converted - a.converted);
+    }, [inquiries]);
+
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🔍 Inquiries ({inquiries.length})</h1>
-                <button onClick={openAdd} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>+ New Inquiry</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {isAdmin && (
+                        <button
+                            onClick={() => { if (!inquiries.length) { alert('No inquiry data loaded'); return; } setReportOpen(true); }}
+                            style={{ padding: '8px 16px', background: '#fff', color: '#185FA5', border: '1px solid #185FA5', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}
+                        >
+                            📊 Report
+                        </button>
+                    )}
+                    <button onClick={openAdd} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>+ New Inquiry</button>
+                </div>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
@@ -419,6 +449,54 @@ export default function InquiriesScreen() {
                                 viewing an inquiry's detail can fix a typo from here. */}
                             <button onClick={() => { setDetailId(null); openEdit(detailInq); }} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>✏️ Edit</button>
                             <button onClick={() => { setDetailId(null); openUpdate(detailInq); }} style={{ flex: 1, background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📝 Update</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {reportOpen && (
+                <div onClick={() => setReportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+                            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>📊 Inquiry Report — Engineer Wise</h2>
+                            <button onClick={() => setReportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                        </div>
+                        <div style={{ padding: 20, overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                <thead>
+                                    <tr style={{ background: '#1e293b', color: '#fff' }}>
+                                        <th style={{ padding: '10px 12px' }}>#</th>
+                                        <th style={{ padding: '10px 12px', textAlign: 'left' }}>Engineer</th>
+                                        <th style={{ padding: '10px 12px' }}>Total</th>
+                                        <th style={{ padding: '10px 12px' }}>Open</th>
+                                        <th style={{ padding: '10px 12px' }}>In Progress</th>
+                                        <th style={{ padding: '10px 12px' }}>Converted ✅</th>
+                                        <th style={{ padding: '10px 12px' }}>Lost ❌</th>
+                                        <th style={{ padding: '10px 12px' }}>Conv. %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {engineerReportRows.map((r, i) => {
+                                        const convRate = r.total > 0 ? Math.round(r.converted / r.total * 100) : 0;
+                                        const convColor = convRate >= 50 ? '#059669' : convRate >= 25 ? '#d97706' : '#dc2626';
+                                        return (
+                                            <tr key={r.name}>
+                                                <td style={{ padding: '10px 12px', fontWeight: 600 }}>{i + 1}</td>
+                                                <td style={{ padding: '10px 12px', fontWeight: 700 }}>{r.name}</td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700 }}>{r.total}</td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}><span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{r.open}</span></td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}><span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{r.inProgress}</span></td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}><span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{r.converted}</span></td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}><span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{r.lost}</span></td>
+                                                <td style={{ padding: '10px 12px', textAlign: 'center' }}><b style={{ color: convColor }}>{convRate}%</b></td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
+                            <button onClick={() => setReportOpen(false)} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Close</button>
                         </div>
                     </div>
                 </div>

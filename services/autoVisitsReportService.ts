@@ -8,17 +8,28 @@ export const fetchAutoVisitsReport = async (
     from?: string, to?: string, siteId?: number | null
 ): Promise<AutoSiteVisitReport[]> => {
     try {
-        let query = supabase
-            .from('auto_site_visits')
-            .select('*, auto_sites(site_name, client_name)')
-            .order('visit_date', { ascending: false })
-            .limit(300);
-        if (from) query = query.gte('visit_date', from);
-        if (to) query = query.lte('visit_date', to);
-        if (siteId) query = query.eq('site_id', siteId);
-        const { data, error } = await query;
-        if (error) throw error;
-        return (data || []).map((v: any) => {
+        // index.html:1222 — sb() sends Range: 0-9999, i.e. no meaningful cap
+        // for a report like this. Page through instead of a fixed .limit()
+        // so a busy date range doesn't silently drop rows past the cutoff.
+        let all: any[] = [];
+        let from0 = 0;
+        const PAGE = 1000;
+        while (true) {
+            let query = supabase
+                .from('auto_site_visits')
+                .select('*, auto_sites(site_name, client_name)')
+                .order('visit_date', { ascending: false })
+                .range(from0, from0 + PAGE - 1);
+            if (from) query = query.gte('visit_date', from);
+            if (to) query = query.lte('visit_date', to);
+            if (siteId) query = query.eq('site_id', siteId);
+            const { data, error } = await query;
+            if (error) throw error;
+            all = all.concat(data || []);
+            if (!data || data.length < PAGE) break;
+            from0 += PAGE;
+        }
+        return all.map((v: any) => {
             const isAdhoc = !v.site_id;
             const adhocPlace = [v.adhoc_address, v.adhoc_area].filter(Boolean).join(', ');
             return {

@@ -10,6 +10,7 @@ import { saveWorkLog, deleteWorkLog, fetchWorkLogsByDate } from '@/services/myCa
 import { WorkLog } from '@/types/myCalls';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import WorkLogShareModal from './WorkLogShareModal';
+import { supabase } from '@/lib/supabase';
 
 export default function WorkLogScreen() {
     const { members, loading: membersLoading } = useWorkLogMembers();
@@ -27,6 +28,19 @@ export default function WorkLogScreen() {
         handleSearch,
     } = useWorkLogs();
     const [searched, setSearched] = useState(true);
+
+    // index.html:21888-21890 — clicking a ticket ID inside a log entry opens
+    // the ticket. HTML uses the shared viewTicket() detail modal; this is a
+    // lightweight equivalent scoped to this screen.
+    const [viewTicket, setViewTicket] = useState<any | null>(null);
+    const [viewTicketLoading, setViewTicketLoading] = useState(false);
+    const openTicket = async (id: string) => {
+        setViewTicketLoading(true);
+        setViewTicket({ id });
+        const { data } = await supabase.from('tickets').select('id, cname, mobile, model, status, problem, assigned_name, call_type, service_type').eq('id', id).maybeSingle();
+        setViewTicket(data || { id, notFound: true });
+        setViewTicketLoading(false);
+    };
 
     const isPeonSelected = members.find((m) => m.id === filters.engId)?.role === 'Peon';
 
@@ -56,7 +70,33 @@ export default function WorkLogScreen() {
                 isPeonMode={isPeonMode}
                 stats={stats}
                 searched={searched}
+                onOpenTicket={openTicket}
             />
+
+            {viewTicket && (
+                <div onClick={() => setViewTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 420, padding: 20 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🎫 {viewTicket.id}</h3>
+                            <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                        </div>
+                        {viewTicketLoading ? (
+                            <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>
+                        ) : viewTicket.notFound ? (
+                            <div style={{ padding: 12, color: '#6b7280', fontSize: 13 }}>Ticket not found.</div>
+                        ) : (
+                            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div><b>Customer:</b> {viewTicket.cname || '—'}{viewTicket.mobile ? ` | ${viewTicket.mobile}` : ''}</div>
+                                <div><b>Model:</b> {viewTicket.model || '—'}</div>
+                                <div><b>Status:</b> {viewTicket.status || '—'}</div>
+                                <div><b>Type:</b> {viewTicket.call_type || '—'} | {viewTicket.service_type || '—'}</div>
+                                <div><b>Assigned:</b> {viewTicket.assigned_name || '—'}</div>
+                                {viewTicket.problem && <div><b>Problem:</b> {viewTicket.problem}</div>}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

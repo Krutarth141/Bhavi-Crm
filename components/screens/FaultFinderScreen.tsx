@@ -46,7 +46,13 @@ export default function FaultFinderScreen() {
         });
     }, [faults, guidedSearched, modelQuery, faultQuery]);
 
-    const filteredFaults = (guidedFaults ?? faults).filter(f => {
+    const SEV_COLOR: Record<string, string> = { Low: '#059669', Medium: '#d97706', High: '#dc2626', Critical: '#7c3aed' };
+    const SEV_BG: Record<string, string> = { Low: '#f0fdf4', Medium: '#fffbeb', High: '#fef2f2', Critical: '#fdf4ff' };
+
+    // index.html:28417-28418 — the guided-search results (#ff-results) are a
+    // dedicated card view, entirely separate from the persistent Knowledge
+    // Base table below (#ff-kb-list), which is unaffected by this search.
+    const filteredFaults = faults.filter(f => {
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         return f.model_name?.toLowerCase().includes(q) ||
@@ -133,7 +139,43 @@ export default function FaultFinderScreen() {
                 )}
             </div>
 
-            {/* Tab Content */}
+            {/* Guided search results — index.html:28420-28449 */}
+            {guidedSearched && (
+                guidedFaults && guidedFaults.length ? (
+                    <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+                        {guidedFaults.map((r, i) => {
+                            const sev = r.severity || 'Medium';
+                            return (
+                                <div key={i} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, borderLeft: `4px solid ${SEV_COLOR[sev] || '#d97706'}` }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                                        <div>
+                                            <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>📱 {r.model_name}</div>
+                                            <div style={{ fontSize: 13, fontWeight: 600, color: '#7c3aed', marginTop: 2 }}>🔧 {r.fault_type}</div>
+                                        </div>
+                                        <span style={{ background: SEV_BG[sev] || '#fffbeb', color: SEV_COLOR[sev] || '#d97706', padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{sev}</span>
+                                    </div>
+                                    {r.description && (
+                                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10, padding: '8px 10px', background: '#f8fafc', borderRadius: 6 }}>{r.description}</div>
+                                    )}
+                                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 12, marginBottom: 8 }}>
+                                        <div style={{ fontSize: 11, fontWeight: 700, color: '#065f46', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>✅ Solution</div>
+                                        <div style={{ fontSize: 13, color: '#1e293b', whiteSpace: 'pre-wrap' }}>{r.solution || 'No solution recorded yet'}</div>
+                                    </div>
+                                    {r.part_required && (
+                                        <div style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>🔩 Part Required: {r.part_required}</div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 14, fontSize: 13, color: '#991b1b', marginBottom: 16 }}>
+                        ⚠️ No known faults found for this combination. Admin/Engineer ne report karva &quot;Add Fault Entry&quot; use karo.
+                    </div>
+                )
+            )}
+
+            {/* Knowledge Base table — index.html:28452+, always visible, independent of guided search */}
             <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
