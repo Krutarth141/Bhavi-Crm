@@ -134,6 +134,8 @@ export const styles = {
     badgeReject: { backgroundColor: '#fef2f2', color: '#dc2626' },
     badgeApprove: { backgroundColor: '#d1fae5', color: '#065f46' },
     badgeWarranty: { backgroundColor: '#e0e7ff', color: '#4338ca' },
+    badgeMsc: { backgroundColor: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe' },
+    badgeDelivery: { backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac' },
     modalOverlay: {
         position: 'fixed' as const,
         inset: 0,

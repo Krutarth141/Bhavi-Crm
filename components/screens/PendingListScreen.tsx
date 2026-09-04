@@ -9,6 +9,7 @@ import Modal from '@/components/Modal';
 import { getAllowedStatuses } from '@/types/ticketStatus';
 import { updateTicketStatus, fetchTicketById } from '@/services/engineerUpdateService';
 import { EngineerTicket } from '@/types/engineerUpdate';
+import { isCspManager } from '@/lib/permissions';
 
 // Status badge color map
 const statusBadgeStyle = (status: string): React.CSSProperties => {
@@ -32,7 +33,7 @@ function TatBadge({ tatDate }: { tatDate?: string }) {
   if (!tatDate) return <span style={{ color: '#9ca3af', fontSize: 11 }}>—</span>;
   const isDateOnly = /T00:00:00/.test(tatDate);
   const d = new Date(tatDate);
-  const deadline = isDateOnly ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59) : d;
+  const deadline = isDateOnly ? new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59) : d;
   const timeStr = isDateOnly ? 'End of Day' : deadline.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   const dateStr = deadline.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
   const label = `${dateStr} · ${timeStr}`;
@@ -108,6 +109,12 @@ interface RouteChange {
 export default function PendingListScreen() {
   const { data: session } = useSession();
   const byUser = (session?.user as any)?.name ?? '';
+  // index.html:26718 — isAdminOrWC = admin || work_controller || CSP manager;
+  // gates the Ready-for-Pickup section's Update button.
+  const roleType = (session?.user as any)?.roleType;
+  const isAdmin = (session?.user as any)?.role === 'admin';
+  const isWC = roleType === 'work_controller';
+  const isAdminOrWC = isAdmin || isWC || isCspManager(session);
   const { tickets, engineers, loading, error, refetch } = usePendingList();
 
   // Local, move-able copy of the raw ticket list — mirrors HTML's
@@ -347,7 +354,13 @@ export default function PendingListScreen() {
       {/* Header */}
       <div style={styles.sectionHeader}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={styles.sectionTitle}>📋 Pending List</h2>
+          <div>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>📋 Pending List</h2>
+            {/* index.html:26846-26847 — live "As of {date}, {time}" subtitle */}
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>
+              As of {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+            </div>
+          </div>
           <span
             style={{
               ...styles.badge,
@@ -418,13 +431,16 @@ export default function PendingListScreen() {
           <option value="Carry In">Carry In</option>
         </select>
 
-        <input
-          type="text"
-          placeholder="Brand search..."
+        {/* index.html:26869-26873 — fixed 3-option dropdown, not free text */}
+        <select
           value={brandFilter}
           onChange={(e) => setBrandFilter(e.target.value)}
-          style={{ ...styles.filterInput, minWidth: '140px', flex: 'none' }}
-        />
+          style={styles.filterSelect}
+        >
+          <option value="">All Brands</option>
+          <option value="Printer">Printer</option>
+          <option value="Scanner">Scanner</option>
+        </select>
 
         <input
           type="text"
@@ -433,6 +449,17 @@ export default function PendingListScreen() {
           onChange={(e) => setSearchText(e.target.value)}
           style={{ ...styles.filterInput, flex: 1 }}
         />
+
+        {/* index.html:26874-26875 — one-click reset to the default filter state */}
+        <button
+          onClick={() => { setSearchText(''); setWcTypeFilter('CSP'); setServiceFilter('On Site'); setBrandFilter(''); }}
+          style={{ padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}
+        >
+          ✕ Reset
+        </button>
+
+        {/* index.html:26876 — live actionable-call count near the filter bar */}
+        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>{actionable.length} actionable calls</span>
       </div>
 
       {/* Ready for Pickup section */}
@@ -459,6 +486,7 @@ export default function PendingListScreen() {
             engineers={engineers}
             onUpdateClick={openUpdate}
             actionLabel="🔄 Update"
+            gateAction={isAdminOrWC}
           />
         </div>
       )}
@@ -564,9 +592,14 @@ interface TicketTableProps {
   onMove?: (ticketId: string, dir: 1 | -1) => void;
   onUpdateClick: (ticketId: string) => void;
   actionLabel: string;
+  // index.html:26768 — when set, gates the Action cell to the Update button
+  // for permitted roles only, showing a plain "Awaiting pickup" text
+  // otherwise. Omitted (undefined) means always show the button, matching
+  // the main actionable table's unconditional behavior.
+  gateAction?: boolean;
 }
 
-function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngChange, onRouteSeqChange, onMove, onUpdateClick, actionLabel }: TicketTableProps) {
+function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngChange, onRouteSeqChange, onMove, onUpdateClick, actionLabel, gateAction }: TicketTableProps) {
   const inlineSelectStyle: React.CSSProperties = {
     border: `1px solid ${colors.border}`,
     borderRadius: '6px',
@@ -606,16 +639,25 @@ function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngCh
             const seqPrefix = curEngName ? curEngName.trim().charAt(0).toUpperCase() : '';
             const seqValue = staged?.seq ?? (t.sequence_no ? String(t.sequence_no) : '');
 
+            // index.html:26815-26818 — Pending Parts/Pending Engineer Stock rows get a
+            // striped/hatched "on hold" background + badge; Pending Repair On Site
+            // rows get a green "ready" background + badge.
+            const isPendParts = t.status === 'Pending Parts' || t.status === 'Pending Engineer Stock';
+            const isReady = t.status === 'Pending Repair On Site';
+            const rowBg = isPendParts
+              ? 'repeating-linear-gradient(135deg,#f3f4f6,#f3f4f6 6px,#e5e7eb 6px,#e5e7eb 12px)'
+              : isReady ? '#dcfce7' : undefined;
+
             return (
               <tr
                 key={t.id}
-                style={styles.tableRow}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.backgroundColor = '#f8fafc')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.backgroundColor = colors.card)
-                }
+                style={{ ...styles.tableRow, ...(rowBg ? { background: rowBg } : {}) }}
+                onMouseEnter={(e) => {
+                  if (!rowBg) e.currentTarget.style.backgroundColor = '#f8fafc';
+                }}
+                onMouseLeave={(e) => {
+                  if (!rowBg) e.currentTarget.style.backgroundColor = colors.card;
+                }}
               >
                 {/* Ticket ID */}
                 <td style={styles.tableCell}>
@@ -635,9 +677,10 @@ function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngCh
                 {/* Mobile */}
                 <td style={styles.tableCell}>{t.mobile}</td>
 
-                {/* Brand/Model */}
+                {/* Brand/Model — index.html:26825-26826, Model + Serial combined */}
                 <td style={styles.tableCell}>
-                  {t.brand_name} {t.model}
+                  <div>{t.brand_name} {t.model}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280' }}>S/N: {t.serial || '—'}</div>
                 </td>
 
                 {/* Problem / Remarks */}
@@ -666,6 +709,8 @@ function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngCh
                   >
                     {t.status}
                   </span>
+                  {isPendParts && <span style={{ marginLeft: 4, background: '#fee2e2', color: '#b91c1c', padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700 }}>⛔ HOLD</span>}
+                  {isReady && <span style={{ marginLeft: 4, background: '#bbf7d0', color: '#15803d', padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700 }}>✅ READY</span>}
                   <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>{t.assigned_name || 'Unassigned'}</div>
                 </td>
 
@@ -722,12 +767,16 @@ function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngCh
 
                 {/* Action — opens the real status-update modal (timeline + notification) */}
                 <td style={{ ...styles.tableCell, textAlign: 'center' }}>
-                  <button
-                    onClick={() => onUpdateClick(t.id)}
-                    style={{ background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
-                  >
-                    {actionLabel}
-                  </button>
+                  {gateAction === false ? (
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>Awaiting pickup</span>
+                  ) : (
+                    <button
+                      onClick={() => onUpdateClick(t.id)}
+                      style={{ background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    >
+                      {actionLabel}
+                    </button>
+                  )}
                 </td>
               </tr>
             );

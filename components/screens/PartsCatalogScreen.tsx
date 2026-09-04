@@ -67,7 +67,10 @@ export default function PartsCatalogScreen() {
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>No parts found</p>
                 ) : (
                     <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
+                            <colgroup>
+                                <col style={{ width: 130 }} /><col style={{ width: 220 }} /><col style={{ width: 'auto' }} /><col style={{ width: 90 }} /><col style={{ width: 110 }} />
+                            </colgroup>
                             <thead>
                                 <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                                     {['Part Code', 'Part Name', 'Model No', 'MRP ₹', 'Stock'].map(h => (
@@ -80,9 +83,9 @@ export default function PartsCatalogScreen() {
                                     const badge = stockBadge(p);
                                     return (
                                         <tr key={p.code + i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                            <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600 }}>{p.code || '—'}</td>
-                                            <td style={{ padding: '10px 12px', fontWeight: 600 }}>{p.name}</td>
-                                            <td style={{ padding: '10px 12px', fontSize: 12, color: '#374151' }}>{p.model || '—'}</td>
+                                            <td title={p.code} style={{ padding: '10px 12px', fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>{p.code || '—'}</td>
+                                            <td title={p.name} style={{ padding: '10px 12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{p.name}</td>
+                                            <td title={p.model || '—'} style={{ padding: '10px 12px', fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{p.model || '—'}</td>
                                             <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700 }}>{p.price > 0 ? `₹${p.price.toLocaleString('en-IN')}` : '—'}</td>
                                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                                 <span style={{ background: badge.bg, color: badge.color, padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{badge.label}</span>

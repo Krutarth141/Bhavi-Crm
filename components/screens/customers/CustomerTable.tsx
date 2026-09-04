@@ -56,7 +56,7 @@ export default function CustomerTable({
                             <td style={tdStyle}>
                                 <a
                                     href={'tel:' + customer.mobile}
-                                    style={{ color: '#ec4899', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                    style={{ color: '#1d4ed8', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 >
                                     {'📞 ' + (customer.mobile || '-')}
                                 </a>

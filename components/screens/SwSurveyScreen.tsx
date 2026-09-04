@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import {
-    SW_ITEM_DEFS, SW_MODULE_SIZES, SwSurvey, SwSurveyData, SwRoom, SwBoard,
+    SW_ITEM_DEFS, SW_MODULE_SIZES, SW_ROOM_LIST, SwSurvey, SwSurveyData, SwRoom, SwBoard,
     swNewRoom, swNewBoard, swBoardTotal, swRoomTotal, swSurveyTotal,
 } from '@/types/swSurvey';
 import { fetchSwSurveys, saveSwSurvey, deleteSwSurvey, fetchSwSurveysBySite } from '@/services/swSurveyService';
@@ -14,7 +14,13 @@ import { fetchCompanyInfo } from '@/services/settingsService';
 
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13, boxSizing: 'border-box' as const };
 
-export default function SwSurveyScreen() {
+interface Props {
+    initialSiteId?: number | null;
+    initialSiteName?: string | null;
+    onConsumedInitialSite?: () => void;
+}
+
+export default function SwSurveyScreen({ initialSiteId, initialSiteName, onConsumedInitialSite }: Props = {}) {
     const { data: session } = useSession();
     const myName = (session?.user as any)?.name ?? '';
 
@@ -97,6 +103,43 @@ export default function SwSurveyScreen() {
         if (site) { setClientName(site.client_name || ''); setSiteName(site.site_name || ''); }
     };
 
+    // Mirrors HTML's swOpenSiteSurvey() (index.html:20255-20262): a one-click
+    // launch straight into a given site's survey from AutoSitesScreen, via the
+    // bhavi:navigate-tab CustomEvent. Opens the site's existing survey if one
+    // is on file, else pre-fills a new one from the site.
+    const openForSite = useCallback(async (id: number, name?: string | null) => {
+        skipAutosaveRef.current = true;
+        setSaveStatus('idle');
+        setEditId(null);
+        setClientName(''); setSiteName(name || ''); setSiteId(id); setSurveyDate(new Date().toLocaleDateString('en-CA'));
+        setRooms([swNewRoom('Room 1')]);
+        setCustomInputs({});
+        setSiteSurveyNote('');
+        setEditing(true);
+        const site = sites.find((x) => x.id === id);
+        const existing = await fetchSwSurveysBySite(id);
+        if (existing.length) {
+            const s = existing[0];
+            setEditId(s.id);
+            setClientName(s.client_name || site?.client_name || '');
+            setSiteName(s.site_name || site?.site_name || name || '');
+            setSurveyDate(s.survey_date || new Date().toLocaleDateString('en-CA'));
+            setRooms(s.data?.rooms && s.data.rooms.length ? s.data.rooms : [swNewRoom('Room 1')]);
+            setCustomInputs({});
+            setSiteSurveyNote('📂 Aa site nu survey pehlethi chhe — ae j kholyu. Save karso to aej update thashe.');
+        } else if (site) {
+            setClientName(site.client_name || '');
+            setSiteName(site.site_name || name || '');
+        }
+    }, [sites]);
+
+    useEffect(() => {
+        if (initialSiteId == null || loading) return;
+        openForSite(initialSiteId, initialSiteName);
+        onConsumedInitialSite?.();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialSiteId, loading]);
+
     const handleDelete = async (s: SwSurvey) => {
         if (!confirm(`Delete survey for ${s.client_name || '(unnamed)'}?`)) return;
         const r = await deleteSwSurvey(s.id);
@@ -108,7 +151,7 @@ export default function SwSurveyScreen() {
     const renameRoom = (roomId: string, name: string) => setRooms(r => r.map(x => x.id === roomId ? { ...x, name } : x));
 
     const addBoard = (roomId: string) => setRooms(r => r.map(x => x.id === roomId ? { ...x, boards: [...x.boards, swNewBoard(`SW${x.boards.length + 1}`)] } : x));
-    const removeBoard = (roomId: string, boardId: string) => setRooms(r => r.map(x => x.id === roomId ? { ...x, boards: x.boards.filter(b => b.id !== boardId) } : x));
+    const removeBoard = (roomId: string, boardId: string) => { if (!confirm('Aa switchboard delete karvo? Data jato rahe.')) return; setRooms(r => r.map(x => x.id === roomId ? { ...x, boards: x.boards.filter(b => b.id !== boardId) } : x)); };
     const renameBoard = (roomId: string, boardId: string, name: string) => setRooms(r => r.map(x => x.id === roomId ? { ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, name } : b) } : x));
     const relocateBoard = (roomId: string, boardId: string, location: string) => setRooms(r => r.map(x => x.id === roomId ? { ...x, boards: x.boards.map(b => b.id === boardId ? { ...b, location } : b) } : x));
     const bumpItem = (roomId: string, boardId: string, key: string, delta: number) => setRooms(r => r.map(x => x.id === roomId ? {
@@ -196,13 +239,21 @@ export default function SwSurveyScreen() {
         rows.push(totalRow);
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(rows);
+        // index.html:20426 — Board details column widths.
+        ws['!cols'] = ([{ wch: 16 }, { wch: 14 }, { wch: 15 }, { wch: 20 }, { wch: 12 }] as any[])
+            .concat(SW_ITEM_DEFS.map(() => ({ wch: 16 })))
+            .concat([{ wch: 24 }, { wch: 12 }]);
         XLSX.utils.book_append_sheet(wb, ws, 'Board details');
         const summary: any[] = [['Room', 'Switchboards', 'Items']];
         roomsData.forEach(r => summary.push([r.name || '', (r.boards || []).length, swRoomTotal(r)]));
         summary.push(['Grand total', '', swSurveyTotal(s.data)]);
         const ws2 = XLSX.utils.aoa_to_sheet(summary);
+        // index.html:20431 — Summary column widths.
+        ws2['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 12 }];
         XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
-        XLSX.writeFile(wb, `SW_Survey_${(s.client_name || 'survey').replace(/[^A-Za-z0-9]/g, '_')}.xlsx`);
+        // index.html:20433 — SW-Survey-<client>.xlsx, hyphen-joined.
+        const fname = `SW-Survey-${(s.client_name || 'survey')}`.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') + '.xlsx';
+        XLSX.writeFile(wb, fname);
     };
 
     const downloadSurveyPDF = async (s: SwSurvey) => {
@@ -281,7 +332,13 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 160 }}>
                         <label style={{ fontSize: 12, fontWeight: 700 }}>Auto Site (optional)</label>
-                        <select value={siteId ?? ''} onChange={e => handleSiteSelect(e.target.value)} style={fieldStyle}>
+                        {/* index.html never lets an existing survey's site link change after
+                            creation — only settable while creating a brand-new survey (no id yet). */}
+                        <select
+                            value={siteId ?? ''} onChange={e => handleSiteSelect(e.target.value)}
+                            disabled={editId != null}
+                            style={{ ...fieldStyle, background: editId != null ? '#f1f5f9' : undefined }}
+                        >
                             <option value="">— Not linked —</option>
                             {sites.map(s => <option key={s.id} value={s.id}>{s.client_name} — {s.site_name}</option>)}
                         </select>
@@ -289,17 +346,21 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
                             Site pasand karo to teni sathe survey link thashe (already survey hoy to aej khulshe).
                         </div>
                     </div>
-                    {/* Client name locks once a site is chosen — the site's own
-                        client is authoritative (index.html:20200). */}
+                    {/* Client name is always editable — HTML never locks it. */}
                     <div style={{ flex: 1, minWidth: 160 }}>
                         <label style={{ fontSize: 12, fontWeight: 700 }}>Client Name *</label>
+                        <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} style={fieldStyle} />
+                    </div>
+                    {/* Site name locks once linked to an Auto Site — the site's own name
+                        is authoritative (index.html:20200,20296). */}
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700 }}>Site Name</label>
                         <input
-                            type="text" value={clientName} onChange={e => setClientName(e.target.value)}
+                            type="text" value={siteName} onChange={e => setSiteName(e.target.value)}
                             disabled={siteId != null}
                             style={{ ...fieldStyle, background: siteId != null ? '#f1f5f9' : undefined }}
                         />
                     </div>
-                    <div style={{ flex: 1, minWidth: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Site Name</label><input type="text" value={siteName} onChange={e => setSiteName(e.target.value)} style={fieldStyle} /></div>
                     <div style={{ width: 160 }}><label style={{ fontSize: 12, fontWeight: 700 }}>Survey Date</label><input type="date" value={surveyDate} onChange={e => setSurveyDate(e.target.value)} style={fieldStyle} /></div>
                     {siteSurveyNote && (
                         <div style={{ flexBasis: '100%', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e40af' }}>
@@ -310,15 +371,22 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>Total Items: <span style={{ color: '#185FA5' }}>{swSurveyTotal({ rooms })}</span></div>
-                    <button onClick={addRoom} style={{ padding: '6px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>+ Add Room</button>
                 </div>
+
+                {/* index.html:20302 — shared datalist backing every room-name input. */}
+                <datalist id="sw-room-list">
+                    {SW_ROOM_LIST.map(r => <option key={r} value={r} />)}
+                </datalist>
 
                 {rooms.map(room => (
                     <div key={room.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, marginBottom: 12 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-                            <input type="text" value={room.name} onChange={e => renameRoom(room.id, e.target.value)} style={{ ...fieldStyle, flex: 1, fontWeight: 700 }} placeholder="Room name" />
-                            <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>Total: <b>{swRoomTotal(room)}</b></span>
-                            <button onClick={() => addBoard(room.id)} style={{ padding: '5px 10px', border: '1px solid #185FA5', color: '#185FA5', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>+ Board</button>
+                            <input
+                                type="text" list="sw-room-list" value={room.name} onChange={e => renameRoom(room.id, e.target.value)}
+                                style={{ ...fieldStyle, flex: 1, fontWeight: 700 }} placeholder="Room pasand karo ke lakho…"
+                            />
+                            {/* index.html:20301 room-total pill */}
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', borderRadius: 20, padding: '3px 10px', whiteSpace: 'nowrap' }}>{swRoomTotal(room)} items</span>
                             {rooms.length > 1 && <button onClick={() => removeRoom(room.id)} style={{ padding: '5px 10px', border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>🗑</button>}
                         </div>
 
@@ -390,8 +458,12 @@ ${dstr ? `<div class="chip"><div class="cv">${dstr}</div><div class="cl">Survey 
                                 </div>
                             );
                         })}
+                        {/* index.html:20306 — "Add switchboard" sits below the boards, not the room header. */}
+                        <button onClick={() => addBoard(room.id)} style={{ padding: '5px 10px', border: '1px solid #185FA5', color: '#185FA5', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>➕ Add switchboard</button>
                     </div>
                 ))}
+                {/* index.html:20307 — "Add Room" sits below the room list. */}
+                <button onClick={addRoom} style={{ padding: '6px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginTop: 2 }}>🏠 ➕ Add Room</button>
             </div>
         );
     }

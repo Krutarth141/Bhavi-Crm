@@ -20,6 +20,7 @@ export default function PaymentQrModal({ isAdmin, onClose }: Props) {
     const fileRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState('');
+    const [showLightbox, setShowLightbox] = useState(false);
 
     useEffect(() => {
         fetchCompanyInfo().then(ci => { setQrUrl(ci?.upi_qr_url || null); setLoading(false); });
@@ -98,7 +99,12 @@ export default function PaymentQrModal({ isAdmin, onClose }: Props) {
                             {qrUrl ? (
                                 <>
                                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
-                                        <img src={`${qrUrl}${qrUrl.startsWith('data:') ? '' : `?t=${Date.now()}`}`} alt="Payment QR" style={{ width: 230, height: 230, objectFit: 'contain', borderRadius: 12, border: '2px solid #bfdbfe', background: '#fff' }} />
+                                        <img
+                                            src={`${qrUrl}${qrUrl.startsWith('data:') ? '' : `?t=${Date.now()}`}`}
+                                            alt="Payment QR"
+                                            style={{ width: 230, height: 230, objectFit: 'contain', borderRadius: 12, border: '2px solid #bfdbfe', background: '#fff', cursor: 'pointer' }}
+                                            onClick={() => setShowLightbox(true)}
+                                        />
                                     </div>
                                     <div style={{ textAlign: 'center', fontSize: 12, color: '#64748b', marginBottom: 10 }}>Customer can scan &amp; pay via any UPI app (GPay / PhonePe / Paytm / BHIM)</div>
                                 </>
@@ -108,7 +114,7 @@ export default function PaymentQrModal({ isAdmin, onClose }: Props) {
                                 </div>
                             )}
                             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                                {qrUrl && <button onClick={handleShare} style={{ padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📤 Share</button>}
+                                {qrUrl && <button onClick={handleShare} style={{ padding: '6px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📤 Share</button>}
                                 <button onClick={handleCopy} style={{ padding: '6px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📋 Copy Details</button>
                                 {qrUrl && <button onClick={handleDownload} style={{ padding: '6px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⬇️ Download QR</button>}
                             </div>
@@ -134,6 +140,19 @@ export default function PaymentQrModal({ isAdmin, onClose }: Props) {
                     )}
                 </div>
             </div>
+            {showLightbox && qrUrl && (
+                // index.html:25275-25282 showPhotoFull() — full-screen click-to-close lightbox.
+                <div
+                    onClick={(e) => { e.stopPropagation(); setShowLightbox(false); }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                >
+                    <img
+                        src={`${qrUrl}${qrUrl.startsWith('data:') ? '' : `?t=${Date.now()}`}`}
+                        alt="Payment QR"
+                        style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                    />
+                </div>
+            )}
         </div>
     );
 }

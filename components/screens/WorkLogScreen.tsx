@@ -288,24 +288,33 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
                     <div style={styles.emptyMessage}>No work log entries for today</div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {workLogs.map((log) => (
-                            <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', backgroundColor: colors.bg, flexWrap: 'wrap' }}>
-                                <span style={{ ...styles.badge, backgroundColor: '#e0e7ff', color: '#3730a3', fontWeight: 700, whiteSpace: 'nowrap' as const }}>
-                                    {log.from_time} – {log.to_time}
-                                </span>
-                                <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>{log.task_description}</span>
-                                {isAutoWorkLog(log) ? (
-                                    <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>⚡ Auto</span>
-                                ) : (
-                                    <button
-                                        onClick={() => handleDeleteWorkLog(log.id)} title="Delete entry"
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: colors.danger, padding: '2px 6px', borderRadius: '4px' }}
-                                    >
-                                        🗑️
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                        {workLogs.map((log) => {
+                            // Per-type color coding — mirrors HTML's logsHtml() (index.html:19022-19028):
+                            // travel = amber, currently-open/running = green, everything else = purple.
+                            const isOpen = log.to_time === 'OPEN';
+                            const isTravel = log.log_type === 'travel';
+                            const borderColor = isTravel ? '#f59e0b' : isOpen ? '#10b981' : '#1d4ed8';
+                            const timeBg = isTravel ? '#fef3c7' : isOpen ? '#d1fae5' : '#ede9fe';
+                            const timeColor = isTravel ? '#92400e' : isOpen ? '#065f46' : '#4c1d95';
+                            return (
+                                <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', backgroundColor: colors.bg, borderLeft: `3px solid ${borderColor}`, flexWrap: 'wrap' }}>
+                                    <span style={{ ...styles.badge, backgroundColor: timeBg, color: timeColor, fontWeight: 700, whiteSpace: 'nowrap' as const }}>
+                                        {log.from_time} – {isOpen ? <span style={{ color: '#10b981', fontWeight: 700 }}>Running ⏳</span> : log.to_time}
+                                    </span>
+                                    <span style={{ flex: 1, fontSize: '13px', color: colors.text }}>{log.task_description}</span>
+                                    {isAutoWorkLog(log) ? (
+                                        <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 99, fontWeight: 700 }}>⚡ Auto</span>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleDeleteWorkLog(log.id)} title="Delete entry"
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: colors.danger, padding: '2px 6px', borderRadius: '4px' }}
+                                        >
+                                            🗑️
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

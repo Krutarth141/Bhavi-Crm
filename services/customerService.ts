@@ -129,11 +129,12 @@ export const importCustomersFromFile = async (file: File): Promise<{ count: numb
 export const downloadCustomerTemplate = async (): Promise<void> => {
     try {
         const XLSX = await import('xlsx');
+        // index.html:9205 — columns/order: Name, Mobile, Alternate Mobile, Serial, Model, Address, City, Pin, Area.
         const data = [{
             'Name': 'Ramesh Shah', 'Mobile': '9876543210', 'Alternate Mobile': '',
-            'Serial No': 'SN123456', 'Model': 'MF3010',
+            'Serial': 'SN123456', 'Model': 'MF3010',
             'Address': '123 Street', 'City': 'Ahmedabad',
-            'Pin': '380015', 'Area': 'Ambawadi', 'State': 'Gujarat'
+            'Pin': '380015', 'Area': 'Ambawadi'
         }];
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();

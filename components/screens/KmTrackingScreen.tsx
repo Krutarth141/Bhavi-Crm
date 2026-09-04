@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { isCspManager } from '@/lib/permissions';
 import { fetchKmReport, setOfficeLocation, editKmReading, KmReportResult } from '@/services/kmTrackingService';
+import { supabase } from '@/lib/supabase';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 const TYPE_LABEL: Record<string, string> = { opening: '🏢 Day Start (Opening)', arrival: '📍 Reached Customer', closing: '🏁 Day End (Closing)' };
@@ -31,6 +32,17 @@ export default function KmTrackingScreen() {
     const [result, setResult] = useState<KmReportResult | null>(null);
     const [settingOffice, setSettingOffice] = useState(false);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+    // index.html:25711 — ticket ID in each row is clickable (viewTicket()).
+    const [viewTicket, setViewTicket] = useState<any | null>(null);
+    const [viewTicketLoading, setViewTicketLoading] = useState(false);
+    const openTicket = async (id: string) => {
+        setViewTicketLoading(true);
+        setViewTicket({ id });
+        const { data } = await supabase.from('tickets').select('id, cname, mobile, model, status, problem, assigned_name, call_type, service_type').eq('id', id).maybeSingle();
+        setViewTicket(data || { id, notFound: true });
+        setViewTicketLoading(false);
+    };
 
     // Accepts explicit from/to so callers that just changed the date range
     // (quick()) can fetch the new range immediately, rather than scheduling a
@@ -89,26 +101,52 @@ export default function KmTrackingScreen() {
     const grandKm = result?.grandKm || 0;
     const petrol = Math.round(grandKm * (parseFloat(rate) || 0) * 100) / 100;
 
-    const buildKmRows = (groups: KmReportResult['groups']) => {
-        const rows: any[] = [];
+    // Mirrors HTML's _buildKmSheet() (index.html:25816-25843): one aoa_to_sheet
+    // per engineer group with Engineer/Date/Total-KM/Start/End merged down
+    // each day's row-span, real column widths, and a FINAL TOTAL row.
+    const buildKmSheet = (groups: KmReportResult['groups']) => {
+        const stripEmoji = (s?: string) => (s || '').replace(/^\S+\s/, '');
+        const header = ['Engineer', 'Date', 'Time', 'Type', 'Ticket', 'Area', 'Odometer', 'Segment KM', 'Total KM', 'Start Location', 'End Location'];
+        const aoa: any[][] = [header];
+        const merges: any[] = [];
+        let grand = 0;
         groups.forEach((g) => {
-            g.entries.forEach((l, idx) => {
-                rows.push({
-                    Engineer: idx === 0 ? g.eng_name : '',
-                    Date: idx === 0 ? g.dateLabel : '',
-                    Time: l.captured_at ? new Date(l.captured_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
-                    Type: TYPE_LABEL[l.entry_type]?.replace(/^\S+\s/, '') || l.entry_type,
-                    Ticket: l.ticket_id || '',
-                    Area: l.area || '',
-                    Odometer: l.odometer_km ?? '',
-                    'Segment KM': l.segmentKm ?? '',
-                    'Total KM (day)': idx === 0 ? g.totalKm : '',
-                    'Start Location': idx === 0 ? g.startLabel : '',
-                    'End Location': idx === 0 ? g.endLabel : '',
-                });
+            const startRow = aoa.length;
+            const entryRows = g.entries.length ? g.entries.map((l) => [
+                l.captured_at ? new Date(l.captured_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-',
+                TYPE_LABEL[l.entry_type]?.replace(/^\S+\s/, '') || l.entry_type,
+                (l.ticket_id && String(l.ticket_id).startsWith('FT')) ? 'Other Work' : (l.ticket_id || ''),
+                l.area || '',
+                l.odometer_km ?? '',
+                l.segmentKm ?? '',
+            ]) : [['-', '-', '', '', '', '']];
+            entryRows.forEach((r, idx) => {
+                aoa.push([
+                    idx === 0 ? g.eng_name : '',
+                    idx === 0 ? g.dateLabel : '',
+                    r[0], r[1], r[2], r[3], r[4], r[5],
+                    idx === 0 ? g.totalKm : '',
+                    idx === 0 ? stripEmoji(g.startLabel) : '',
+                    idx === 0 ? stripEmoji(g.endLabel) : '',
+                ]);
             });
+            const endRow = aoa.length - 1;
+            if (endRow > startRow) {
+                merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
+                merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } });
+                merges.push({ s: { r: startRow, c: 8 }, e: { r: endRow, c: 8 } });
+                merges.push({ s: { r: startRow, c: 9 }, e: { r: endRow, c: 9 } });
+                merges.push({ s: { r: startRow, c: 10 }, e: { r: endRow, c: 10 } });
+            }
+            grand += g.totalKm || 0;
         });
-        return rows;
+        const finalRow = aoa.length;
+        aoa.push(['FINAL TOTAL', '', '', '', '', '', '', '', grand, '', '']);
+        merges.push({ s: { r: finalRow, c: 0 }, e: { r: finalRow, c: 7 } });
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!merges'] = merges;
+        ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 11 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+        return ws;
     };
 
     // Mirrors HTML's downloadKmReport() (index.html:25844-25873): one sheet
@@ -128,9 +166,7 @@ export default function KmTrackingScreen() {
             const usedNames = new Set<string>();
             order.forEach((key) => {
                 const eg = byEng.get(key)!;
-                const rows = buildKmRows(eg.groups);
-                rows.push({ Engineer: 'FINAL TOTAL', 'Total KM (day)': eg.groups.reduce((s, g) => s + (g.totalKm || 0), 0) });
-                const ws = XLSX.utils.json_to_sheet(rows);
+                const ws = buildKmSheet(eg.groups);
                 const base = (eg.name || 'Engineer').replace(/[[\]*?/\\:]/g, '').slice(0, 28) || 'Engineer';
                 let sheetName = base, n = 2;
                 while (usedNames.has(sheetName)) { sheetName = `${base} (${n})`; n++; }
@@ -138,9 +174,7 @@ export default function KmTrackingScreen() {
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
         } else {
-            const rows = buildKmRows(result.groups);
-            rows.push({ Engineer: 'FINAL TOTAL', 'Total KM (day)': grandKm });
-            const ws = XLSX.utils.json_to_sheet(rows);
+            const ws = buildKmSheet(result.groups);
             XLSX.utils.book_append_sheet(wb, ws, 'KM Report');
         }
         XLSX.writeFile(wb, `KM_Report_${from}_to_${to}.xlsx`);
@@ -239,7 +273,7 @@ export default function KmTrackingScreen() {
                                                             <span style={{ color: '#7c3aed', fontWeight: 700 }}>🚚 Other Work</span>
                                                         ) : l.ticket_id ? (
                                                             <>
-                                                                <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{l.ticket_id}</span>
+                                                                <a onClick={() => openTicket(l.ticket_id as string)} style={{ color: '#1d4ed8', fontWeight: 600, cursor: 'pointer' }}>{l.ticket_id}</a>
                                                                 {l.area && <div style={{ fontSize: 11, color: '#0d9488', fontWeight: 700 }}>📍 {l.area}</div>}
                                                             </>
                                                         ) : '—'}
@@ -263,6 +297,31 @@ export default function KmTrackingScreen() {
             {lightboxSrc && (
                 <div onClick={() => setLightboxSrc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <img src={lightboxSrc} style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} alt="Odometer photo" />
+                </div>
+            )}
+
+            {viewTicket && (
+                <div onClick={() => setViewTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 420, padding: 20 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🎫 {viewTicket.id}</h3>
+                            <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                        </div>
+                        {viewTicketLoading ? (
+                            <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>
+                        ) : viewTicket.notFound ? (
+                            <div style={{ padding: 12, color: '#6b7280', fontSize: 13 }}>Ticket not found.</div>
+                        ) : (
+                            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div><b>Customer:</b> {viewTicket.cname || '—'}{viewTicket.mobile ? ` | ${viewTicket.mobile}` : ''}</div>
+                                <div><b>Model:</b> {viewTicket.model || '—'}</div>
+                                <div><b>Status:</b> {viewTicket.status || '—'}</div>
+                                <div><b>Type:</b> {viewTicket.call_type || '—'} | {viewTicket.service_type || '—'}</div>
+                                <div><b>Assigned:</b> {viewTicket.assigned_name || '—'}</div>
+                                {viewTicket.problem && <div><b>Problem:</b> {viewTicket.problem}</div>}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

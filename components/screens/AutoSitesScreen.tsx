@@ -292,18 +292,18 @@ export default function AutoSitesScreen() {
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🏗️ Auto Sites ({sites.length})</h1>
-                <button onClick={() => { setEditingSite(null); setForm(emptySiteForm); setAddModalOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ New Site</button>
+                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🏗️ Automation Sites ({sites.length})</h1>
+                <button onClick={() => { setEditingSite(null); setForm(emptySiteForm); setAddModalOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>+ New Site</button>
             </div>
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
             <div style={{ marginBottom: 16 }}>
-                <input type="text" placeholder="Search site name, client, mobile..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                <input type="text" placeholder="Search site / client / mobile..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }} />
             </div>
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                : filtered.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>No sites found</p>
+                : sites.length === 0 ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>🏗️ No sites yet. Click &quot;New Site&quot; to get started!</p>
                     : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
                             {filtered.map(s => {
@@ -321,7 +321,7 @@ export default function AutoSitesScreen() {
                                             <div style={{ display: 'flex', gap: 4 }}>
                                                 <button onClick={() => openContacts(s)} title="Contacts" style={{ background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>📞</button>
                                                 <button onClick={() => openEditSite(s)} title="Edit" style={{ background: '#e0e7ff', color: '#3730a3', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>✏️</button>
-                                                <button onClick={() => { if (confirm(`Delete "${s.site_name}"? This also deletes its items, visits, and payments.`)) remove(s.id); }} title="Delete" style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
+                                                <button onClick={() => { if (confirm('⚠️ WARNING: This will permanently delete the site AND all its items, visits, and payments. This cannot be undone.')) remove(s.id); }} title="Delete" style={{ background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: 6, cursor: 'pointer', padding: '2px 8px', fontSize: 12 }}>🗑️</button>
                                             </div>
                                         </div>
                                         <div style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>👤 {s.client_name}</div>
@@ -491,6 +491,19 @@ export default function AutoSitesScreen() {
                                     <button onClick={() => { setEditingItem(null); setItemFormOpen(true); }} style={{ padding: '7px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>➕ Add Item</button>
                                     <button onClick={() => setPaymentModalOpen(true)} style={{ padding: '7px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>💰 Add Payment</button>
                                     {pendingItems.length > 0 && <button onClick={() => setDispatchModalOpen(true)} style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>📤 Dispatch Material</button>}
+                                    {/* index.html:20747 — swOpenSiteSurvey() one-click launch into this site's SW Survey. */}
+                                    <button
+                                        onClick={() => {
+                                            const site = detailSite;
+                                            setDetailSite(null);
+                                            try {
+                                                window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'sw-survey', siteId: site?.id, siteName: site?.site_name } }));
+                                            } catch { /* noop */ }
+                                        }}
+                                        style={{ padding: '7px 14px', background: '#0891b2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                                    >
+                                        🔌 Switchboard Survey
+                                    </button>
                                     <button onClick={() => setTcSelectorOpen(true)} style={{ padding: '7px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>📄 Quotation</button>
                                 </div>
                             </div>

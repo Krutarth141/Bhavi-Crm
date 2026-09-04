@@ -19,6 +19,7 @@ export const fetchAutoVisitsReport = async (
                 .from('auto_site_visits')
                 .select('*, auto_sites(site_name, client_name)')
                 .order('visit_date', { ascending: false })
+                .order('created_at', { ascending: false })
                 .range(from0, from0 + PAGE - 1);
             if (from) query = query.gte('visit_date', from);
             if (to) query = query.lte('visit_date', to);

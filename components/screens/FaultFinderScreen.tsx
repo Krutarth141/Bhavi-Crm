@@ -10,6 +10,7 @@ export default function FaultFinderScreen() {
     // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
     // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
     const isAdmin = (session?.user as any)?.role === 'admin';
+    const myName = (session?.user as any)?.name ?? '';
     const { faults, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [search, setSearch] = useState('');
 
@@ -35,8 +36,11 @@ export default function FaultFinderScreen() {
         return (q ? knownFaultTypes.filter(f => f.toLowerCase().includes(q)) : knownFaultTypes).slice(0, 10);
     }, [knownFaultTypes, faultQuery]);
 
+    // index.html:28431 — blocks the search entirely (no results shown, just
+    // a prompt) when both the model and fault-type fields are empty.
+    const guidedBothEmpty = !modelQuery.trim() && !faultQuery.trim();
     const guidedFaults = useMemo(() => {
-        if (!guidedSearched) return null;
+        if (!guidedSearched || guidedBothEmpty) return null;
         const m = modelQuery.trim().toLowerCase();
         const f = faultQuery.trim().toLowerCase();
         return faults.filter(r => {
@@ -44,7 +48,7 @@ export default function FaultFinderScreen() {
             const fMatch = !f || (r.fault_type || '').toLowerCase().includes(f) || (r.description || '').toLowerCase().includes(f);
             return mMatch && fMatch;
         });
-    }, [faults, guidedSearched, modelQuery, faultQuery]);
+    }, [faults, guidedSearched, guidedBothEmpty, modelQuery, faultQuery]);
 
     const SEV_COLOR: Record<string, string> = { Low: '#059669', Medium: '#d97706', High: '#dc2626', Critical: '#7c3aed' };
     const SEV_BG: Record<string, string> = { Low: '#f0fdf4', Medium: '#fffbeb', High: '#fef2f2', Critical: '#fdf4ff' };
@@ -141,7 +145,11 @@ export default function FaultFinderScreen() {
 
             {/* Guided search results — index.html:28420-28449 */}
             {guidedSearched && (
-                guidedFaults && guidedFaults.length ? (
+                guidedBothEmpty ? (
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 14, fontSize: 13, color: '#1e40af', marginBottom: 16 }}>
+                        Model ya fault type enter karo ne Search karo.
+                    </div>
+                ) : guidedFaults && guidedFaults.length ? (
                     <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
                         {guidedFaults.map((r, i) => {
                             const sev = r.severity || 'Medium';
@@ -180,7 +188,7 @@ export default function FaultFinderScreen() {
                 {loading ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
                 ) : (
-                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
+                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} currentUserName={myName} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
                 )}
             </div>
         </div>

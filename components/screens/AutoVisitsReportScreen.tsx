@@ -53,7 +53,7 @@ export default function AutoVisitsReportScreen() {
             'Client': v.client_name,
             'Visit Date': fmtDate(v.visit_date),
             'Time': v.visit_time || '',
-            'Logged By': v.created_by_name || '',
+            'Logged By': v.created_by_name || v.created_by || '',
             'Work Done': v.work_done || '',
             'Material Delivered': v.material_delivered || '',
         }));
@@ -91,7 +91,7 @@ export default function AutoVisitsReportScreen() {
     return (
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>🏗️ Auto Site Visits Report</h1>
+                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>📋 Site Visit Report</h1>
                 <button onClick={exportExcel} style={{ padding: '8px 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>📊 Export Excel</button>
             </div>
 
@@ -133,7 +133,7 @@ export default function AutoVisitsReportScreen() {
                 (index.html:21651-21683), one card + mini-table per site
                 (ad-hoc visits with no site_id each get their own card). */}
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>
-                : filtered.length === 0 ? <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 40 }}><p style={{ textAlign: 'center', color: '#6b7280', margin: 0 }}>No visits found for this period</p></div>
+                : filtered.length === 0 ? <div className="alert alert-info">No visits found for the selected filter.</div>
                     : (() => {
                         const bySite = new Map<string, { site_name: string; client_name: string; visits: AutoSiteVisitReport[] }>();
                         filtered.forEach(v => {
@@ -159,7 +159,7 @@ export default function AutoVisitsReportScreen() {
                                                 <tr key={v.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                                                     <td style={{ padding: '10px 12px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{v.visit_date || '—'}</td>
                                                     <td style={{ padding: '10px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{v.visit_time || '—'}</td>
-                                                    <td style={{ padding: '10px 12px' }}><span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{v.created_by_name || '—'}</span></td>
+                                                    <td style={{ padding: '10px 12px' }}><span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{v.created_by_name || v.created_by || '—'}</span></td>
                                                     <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200, whiteSpace: 'pre-wrap' }}>{v.work_done || '—'}</td>
                                                     <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 200, whiteSpace: 'pre-wrap' }}>{v.material_delivered || '—'}</td>
                                                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>

@@ -8,6 +8,7 @@ import AutoInventoryFormModal from '@/components/screens/auto-inventory/AutoInve
 import StockModal from '@/components/screens/auto-inventory/StockModal';
 import InventoryHistoryModal from '@/components/screens/auto-inventory/InventoryHistoryModal';
 import BulkStockModal from '@/components/screens/auto-inventory/BulkStockModal';
+import Modal from '@/components/Modal';
 import { downloadInventoryTemplate, parseInventoryFile } from '@/utils/autoInventoryImport';
 
 const outlineBtn = { padding: '8px 14px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 } as const;
@@ -16,7 +17,7 @@ export default function AutoInventoryScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name || '';
 
-    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, stockTxn, bulkStock, bulkImport } = useAutoInventory();
+    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport } = useAutoInventory();
 
     const [search, setSearch] = useState('');
     const [brandFilter, setBrandFilter] = useState('');
@@ -28,6 +29,14 @@ export default function AutoInventoryScreen() {
     const [importing, setImporting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Session Trash — index.html:19719-19741 deleteAutoInvItem()/trashPush():
+    // lets an engineer undo an accidental delete within the same session.
+    // Scoped to this screen only, mirroring AutoSitesScreen's session trash.
+    interface TrashEntry { trashId: number; label: string; data: AutoInventoryItem; deletedAt: string }
+    const [sessionTrash, setSessionTrash] = useState<TrashEntry[]>([]);
+    const [trashOpen, setTrashOpen] = useState(false);
+    const [restoringId, setRestoringId] = useState<number | null>(null);
+
     const filtered = items.filter(i => {
         const q = search.toLowerCase();
         const matchSearch = !search.trim() || i.item_name?.toLowerCase().includes(q) || i.brand?.toLowerCase().includes(q) || i.model_no?.toLowerCase().includes(q);
@@ -36,9 +45,25 @@ export default function AutoInventoryScreen() {
     });
 
     const handleDelete = async (item: AutoInventoryItem) => {
-        if (!confirm(`Delete "${item.item_name}"? This cannot be undone.`)) return;
+        if (!confirm(`Delete "${item.item_name}"? You can restore it from Trash during this session.`)) return;
         const r = await remove(item.id);
-        if (!r.success) alert('Delete error: ' + r.error);
+        if (r.success) {
+            setSessionTrash((prev) => [{
+                trashId: Date.now(), label: item.item_name, data: item,
+                deletedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+            }, ...prev]);
+        } else alert('Delete error: ' + r.error);
+    };
+
+    const handleRestoreTrash = async (trashId: number) => {
+        const entry = sessionTrash.find((t) => t.trashId === trashId);
+        if (!entry) return;
+        setRestoringId(trashId);
+        const r = await restore(entry.data);
+        setRestoringId(null);
+        if (!r.success) { alert('Restore failed: ' + r.error); return; }
+        setSessionTrash((prev) => prev.filter((t) => t.trashId !== trashId));
+        alert(`✅ "${entry.label}" restored successfully!`);
     };
 
     const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +96,8 @@ export default function AutoInventoryScreen() {
                     <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleImportFile} />
                     <button onClick={() => setBulkStockType('in')} style={{ ...outlineBtn, background: '#059669', color: '#fff', borderColor: '#059669' }}>⬇️ Bulk IN</button>
                     <button onClick={() => setBulkStockType('out')} style={{ ...outlineBtn, borderColor: '#dc2626', color: '#dc2626' }}>⬆️ Bulk OUT</button>
-                    <button onClick={() => { setEditItem(null); setFormOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>➕ Add Item</button>
+                    <button onClick={() => { setEditItem(null); setFormOpen(true); }} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>+ Add Item</button>
+                    <button onClick={() => setTrashOpen(true)} style={{ ...outlineBtn, color: '#6b7280' }}>🗑️ Trash{sessionTrash.length > 0 ? ` (${sessionTrash.length})` : ''}</button>
                 </div>
             </div>
 
@@ -174,6 +200,31 @@ export default function AutoInventoryScreen() {
                     onSave={bulkStock}
                 />
             )}
+
+            {/* Session Trash — index.html:19719-19741. */}
+            <Modal isOpen={trashOpen} onClose={() => setTrashOpen(false)} title="🗑️ Trash">
+                {sessionTrash.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#9ca3af', padding: 24, fontSize: 13 }}>Trash is empty — no items deleted this session.</div>
+                ) : (
+                    <div>
+                        {sessionTrash.map((t) => (
+                            <div key={t.trashId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 8, background: '#fafafa' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111' }}>{t.label}</div>
+                                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Inventory Item &nbsp;·&nbsp; Deleted at {t.deletedAt}</div>
+                                </div>
+                                <button
+                                    onClick={() => handleRestoreTrash(t.trashId)}
+                                    disabled={restoringId === t.trashId}
+                                    style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: restoringId === t.trashId ? 0.6 : 1 }}
+                                >
+                                    {restoringId === t.trashId ? '...' : '↩️ Restore'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 }

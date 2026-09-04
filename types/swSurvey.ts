@@ -12,6 +12,17 @@ export const SW_ITEM_DEFS = [
 // index.html:20144
 export const SW_MODULE_SIZES = ['', '2', '3', '4', '6', '8', '12', '16', '18', '24', '32'];
 
+// index.html:20148 — curated room-name suggestions, wired to a <datalist> on
+// the room-name input so it types as freely as HTML's <input list=...>.
+export const SW_ROOM_LIST = [
+    'Entry', 'Entry Passage', 'Vestibule', 'Foyer', 'Porch', 'Lobby', 'Lift Lobby', 'Living Room', 'Drawing Room',
+    'Family Lounge', 'Dining Room', 'Kitchen', 'Utility', 'Pantry', 'Store Room', 'Pooja Room', 'Study', 'Home Office',
+    'Master Bedroom', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Bedroom 4', 'Kids Room', 'Guest Bedroom', 'Dressing Room',
+    'Walk-in Closet', 'Master Bathroom', 'Common Bathroom', 'Powder Room', 'Passage / Corridor', 'Staircase', 'Balcony',
+    'Terrace', 'Servant Room', 'Servant Bathroom', 'Garage', 'Home Theatre', 'Gym', 'Bar', 'Games Room', 'Library',
+    'Garden / Lawn', 'Basement', 'Reception', 'Cabin', 'Conference Room', 'Office', 'Common Area',
+];
+
 export interface SwCustomItem {
     name: string;
     qty: number;

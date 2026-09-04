@@ -1,100 +1,97 @@
 'use client';
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useEngParts } from '@/hooks/useEngParts';
-import EngPartsAdmin from './eng-parts/EngPartsAdmin';
-import EngPartsEngineer from './eng-parts/EngPartsEngineer';
-import { styles, colors } from '@/styles/ticketsStyles';
-import { isCspManager } from '@/lib/permissions';
 
-interface Props {
-  isEngineerView?: boolean;
-}
+import { useState, useEffect } from 'react';
+import { useUsers } from '@/hooks/useUsers';
+import { WC_NAV_ITEMS, ENGINEER_NAV_ITEMS } from '@/types/navPermissions';
+import { fetchNavPermissions, saveNavPermissionsForUser, resetNavPermissionsForUser } from '@/services/navPermissionsService';
 
-export default function EngPartsScreen({ isEngineerView }: Props) {
-  const { data: session } = useSession();
-  const roleType = (session?.user as any)?.roleType ?? '';
-  const userName = (session?.user as any)?.name ?? '';
-  const engineerId = (session?.user as any)?.email ?? '';
+export default function NavPermissionsTab() {
+  const { workControllers, engineers } = useUsers();
+  const employees = [...engineers, ...workControllers].filter((u) => u.is_active);
 
-  const {
-    inventory,
-    engStock,
-    movements,
-    requests,
-    engineers,
-    pendingRequests,
-    loading,
-    error,
-    refetch,
-  } = useEngParts();
+  const [selectedId, setSelectedId] = useState('');
+  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
 
-  const isEngRole = isEngineerView === true || roleType === 'engineer';
-  const cspMgr = isEngRole && isCspManager(session);
-  // HTML: isFullAccess = isAdmin || isCspMgr — CSP managers get the SAME full
-  // admin page as a real admin (stock overview, issue/use/warranty/return
-  // tools, approve+reject on any request), not a cut-down view.
-  const showEngineerView = isEngRole && !cspMgr;
+  const selected = employees.find((u) => String(u.id) === selectedId);
+  const isEng = selected?.role_type === 'engineer';
+  const items = isEng ? ENGINEER_NAV_ITEMS : WC_NAV_ITEMS;
 
-  // CSP managers ALSO keep their own self-service — "📥 Request Parts (Self)",
-  // "↩️ Return My Parts", and a "📋 My Requests" tab alongside the full admin
-  // page (index.html:10142-10144). Reuses EngPartsEngineer's already-built
-  // My Stock/My Requests/Request/Return views rather than re-implementing
-  // them inside EngPartsAdmin.
-  const [cspView, setCspView] = useState<'admin' | 'self'>('admin');
-
-  if (loading) return <div style={styles.loadingText}>Loading parts data...</div>;
-  if (error) return <div style={{ padding: '20px', color: colors.danger }}>❌ {error}</div>;
-
-  const selfServiceView = (
-    <EngPartsEngineer
-      engName={userName}
-      engineerId={engineerId}
-      inventory={inventory}
-      myStock={engStock.filter(s => s.owner === userName)}
-      myRequests={requests.filter(r => r.engineer_name === userName)}
-      onRefetch={refetch}
-    />
-  );
-
-  if (showEngineerView) return selfServiceView;
-
-  if (cspMgr) {
-    const toggleStyle = (key: 'admin' | 'self'): React.CSSProperties => ({
-      padding: '8px 16px', border: 'none', borderRadius: '8px 8px 0 0',
-      background: cspView === key ? '#fff' : 'transparent',
-      color: cspView === key ? colors.primary : colors.textMuted,
-      fontWeight: cspView === key ? 700 : 400, fontSize: 13, cursor: 'pointer',
-      borderBottom: `2px solid ${cspView === key ? colors.primary : 'transparent'}`,
+  useEffect(() => {
+    if (!selected) { setChecks({}); return; }
+    fetchNavPermissions().then((perms) => {
+      const userOverride = perms.users[String(selected.id)];
+      const next: Record<string, boolean> = {};
+      // Stored keys carry HTML's "nav-" prefix (e.g. "nav-auto-sites") —
+      // strip it back off for this component's internal unprefixed state.
+      items.forEach((item) => { next[item.id] = userOverride ? userOverride[`nav-${item.id}`] !== false : true; });
+      setChecks(next);
     });
-    return (
-      <div style={{ background: colors.bg, minHeight: '100vh' }}>
-        <div style={{ display: 'flex', gap: 4, padding: '16px 20px 0' }}>
-          <button style={toggleStyle('admin')} onClick={() => setCspView('admin')}>🛠️ Manage Parts</button>
-          <button style={toggleStyle('self')} onClick={() => setCspView('self')}>👤 My Requests (Self)</button>
-        </div>
-        {cspView === 'admin' ? (
-          <EngPartsAdmin
-            inventory={inventory}
-            engStock={engStock}
-            movements={movements}
-            engineers={engineers}
-            pendingRequests={pendingRequests}
-            onRefetch={refetch}
-          />
-        ) : selfServiceView}
-      </div>
-    );
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const showMsg = (m: string) => { setMessage(m); setTimeout(() => setMessage(''), 3000); };
+
+  const handleSave = async () => {
+    if (!selected) { alert('Select an employee first'); return; }
+    setSaving(true);
+    try {
+      // Write back with HTML's "nav-" prefixed key format so legacy
+      // production data (and the HTML app itself) stays compatible.
+      const prefixed: Record<string, boolean> = {};
+      Object.entries(checks).forEach(([id, v]) => { prefixed[`nav-${id}`] = v; });
+      await saveNavPermissionsForUser(String(selected.id), prefixed);
+      showMsg(`✅ Saved for ${selected.name}! Changes apply on next login.`);
+    } catch (e: any) {
+      showMsg('❌ ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!selected) { alert('Select an employee first'); return; }
+    if (!confirm('Reset to role defaults?')) return;
+    await resetNavPermissionsForUser(String(selected.id));
+    const next: Record<string, boolean> = {};
+    items.forEach((item) => { next[item.id] = true; });
+    setChecks(next);
+    showMsg('↩ Reset to default!');
+  };
 
   return (
-    <EngPartsAdmin
-      inventory={inventory}
-      engStock={engStock}
-      movements={movements}
-      engineers={engineers}
-      pendingRequests={pendingRequests}
-      onRefetch={refetch}
-    />
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>🔐 Nav Permissions — Per Employee</h3>
+      <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+        Select an employee, uncheck any tab to hide it for them specifically, then Save. Everything is visible by default.
+      </p>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, minWidth: 220 }}>
+          <option value="">-- Select Employee --</option>
+          {employees.map((u) => (
+            <option key={u.id} value={u.id}>{u.name} ({u.role_type === 'engineer' ? 'Eng' : 'WC'})</option>
+          ))}
+        </select>
+        <button onClick={handleSave} disabled={!selected || saving} className="btn btn-primary btn-sm">💾 Save</button>
+        <button onClick={handleReset} disabled={!selected} className="btn btn-outline btn-sm" style={{ color: '#dc2626' }}>↩ Reset to Default</button>
+        {message && <span style={{ fontSize: 12, color: '#166534' }}>{message}</span>}
+      </div>
+      {selected && (
+        <div style={{ maxWidth: 420 }}>
+          {items.map((item) => (
+            <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={checks[item.id] !== false}
+                onChange={(e) => setChecks((prev) => ({ ...prev, [item.id]: e.target.checked }))}
+                style={{ width: 16, height: 16, cursor: 'pointer' }}
+              />
+              {item.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

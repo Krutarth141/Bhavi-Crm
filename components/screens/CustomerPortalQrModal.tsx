@@ -76,7 +76,7 @@ img{border:2px solid #bfdbfe;border-radius:10px;}
                         Customers can scan this QR to book services or purchase products from the shop. Display it at the shop counter.
                     </div>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <a href={PORTAL_URL} target="_blank" rel="noreferrer" style={{ padding: '6px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>🔗 Open Portal</a>
+                        <a href={PORTAL_URL} target="_blank" rel="noreferrer" style={{ padding: '6px 14px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>🔗 Open Portal</a>
                         <button onClick={handlePrint} style={{ padding: '6px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🖨️ Print QR</button>
                         <button onClick={handleCopy} style={{ padding: '6px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📋 Copy Link</button>
                     </div>

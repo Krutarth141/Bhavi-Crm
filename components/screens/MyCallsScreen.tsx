@@ -14,7 +14,8 @@ import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingSer
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
 import Modal from '@/components/Modal';
-import { getAllowedStatuses, isTicketActive } from '@/types/ticketStatus';
+import { getAllowedStatuses, isTicketActive, isTicketClosed } from '@/types/ticketStatus';
+import { ATT_EXCLUDED_IDS } from '@/types/attendance';
 import {
   updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
   needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, uploadCrmPhoto,
@@ -46,16 +47,33 @@ import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/
 
 // ─── Status badge helper ─────────────────────────────────────────────────────
 
+// Mirrors HTML's statusBadge() class map exactly (index.html:3098-3101 + the
+// .badge-* CSS at index.html:51-58, 263-264) — status text is matched
+// case-sensitively, same as the HTML lookup table, with the same
+// badge-open fallback for anything unlisted.
+const STATUS_BADGE_MAP: Record<string, React.CSSProperties> = {
+  'Pending Customer Arrival': styles.badgePending,
+  'Pending Allocation': styles.badgePending,
+  Assigned: styles.badgeOpen,
+  'In Progress': styles.badgeProgress,
+  Closed: styles.badgeClosed,
+  Delivered: styles.badgeClosed,
+  'Pending Customer Approval': styles.badgePending,
+  'Customer Approved': styles.badgeApprove,
+  'Customer Reject': styles.badgeReject,
+  'Call Cancel': styles.badgeCancel,
+  'Pending Parts': styles.badgePending,
+  'Pending Engineer Stock': styles.badgePending,
+  'Pending Repair Carry In': styles.badgeProgress,
+  'Pending Repair On Site': styles.badgeProgress,
+  Repaired: styles.badgeProgress,
+  'Sent to MSC': styles.badgeMsc,
+  'Pending for Delivery': styles.badgeDelivery,
+  'Resolved By Phone': styles.badgeClosed,
+};
+
 function getStatusBadgeStyle(status: string): React.CSSProperties {
-  const s = (status ?? '').toLowerCase();
-  if (s === 'closed') return { ...styles.badge, ...styles.badgeClosed };
-  if (s === 'open') return { ...styles.badge, ...styles.badgeOpen };
-  if (s === 'in progress' || s === 'inprogress') return { ...styles.badge, ...styles.badgeProgress };
-  if (s === 'repaired' || s === 'ready') return { ...styles.badge, ...styles.badgeApprove };
-  if (s === 'on hold' || s === 'hold') return { ...styles.badge, ...styles.badgeHold };
-  if (s.includes('cancel')) return { ...styles.badge, ...styles.badgeCancel };
-  if (s.includes('reject')) return { ...styles.badge, ...styles.badgeReject };
-  return { ...styles.badge, ...styles.badgeOpen };
+  return { ...styles.badge, ...(STATUS_BADGE_MAP[status] || styles.badgeOpen) };
 }
 
 function getPriorityBadgeStyle(priority: string): React.CSSProperties {
@@ -680,6 +698,8 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const [forcedDailyReport, setForcedDailyReport] = useState(false);
 
   const handlePunchIn = async () => {
+    // Office/reception logins never punch in/out (index.html:4038,4048).
+    if (ATT_EXCLUDED_IDS.includes(engId)) { alert('This account does not require Punch In.'); return; }
     const hasOpening = await hasKmEntryToday(engId, 'opening');
     if (!hasOpening) { setKmCaptureType('opening'); return; }
     setPunchModalMode('in');
@@ -691,6 +711,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     setForcedDailyReport(true);
   };
   const handlePunchOut = async () => {
+    if (ATT_EXCLUDED_IDS.includes(engId)) { alert('This account does not require Punch Out.'); return; }
     const today = new Date().toLocaleDateString('en-CA');
     const skipKey = `kmSkip_${engId}_${today}`;
     let skipTicket: string | null = null;
@@ -1199,8 +1220,9 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
               const tat = tatLabel(t.tat_date);
               const addr = [t.address, t.area, t.city, t.state, t.pin].filter(Boolean).join(', ');
               const routeBadge = routeSeqMap[t.id];
+              const isClosedCard = isTicketClosed(t.status);
               return (
-                <div key={t.id} style={{ border: `1.5px solid ${routeBadge ? '#1d4ed8' : colors.border}`, borderRadius: '12px', padding: '14px 16px', background: '#f0f7ff', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div key={t.id} style={{ border: `1.5px solid ${routeBadge ? '#1d4ed8' : (isClosedCard ? colors.border : '#bfdbfe')}`, borderRadius: '12px', padding: '14px 16px', background: isClosedCard ? colors.card : '#f0f7ff', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   {routeBadge && (
                     <div style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 19, background: '#1d4ed8', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800 }}>
                       {routeBadge}
@@ -1431,10 +1453,13 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
             {/* index.html:7264 — !isW && !warranty_claim_pending, where isW is
                 Warranty/Warranty Repeat/AMC. Broader than just Non-Warranty. */}
             {!['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && !updateTicket.warranty_claim_pending && (
-              <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
+              <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#e0f2fe', color: '#0369a1', border: '1.5px solid #7dd3fc', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🛡️ Customer Claims Warranty</button>
             )}
             {updateTicket.warranty_claim_pending && (
-              <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
+              <div style={{ background: '#fef3c7', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 700, color: '#b45309', fontSize: 13 }}>🛡️ Warranty Claim Pending Approval</div>
+                <div style={{ fontSize: 12, color: '#78716c', marginTop: 4 }}>Claimed by: {updateTicket.warranty_claim_by || ''} | Note: {updateTicket.warranty_claim_note || ''}</div>
+              </div>
             )}
             {/* index.html:7259 — `isW && !isOOC`: only a Warranty/Warranty
                 Repeat/AMC call that is not already Out of Coverage can be
@@ -1448,289 +1473,295 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
             {updateTicket.status === 'Pending Customer Approval' && roleType === 'engineer' && (
               <button onClick={openEstimateApproval} style={{ padding: '8px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>✅ Approve / Reject Estimate</button>
             )}
-            {!['Closed', 'Call Cancel', 'Customer Reject', 'Pending Customer Approval'].includes(updateTicket.status || '') && (
+            {!['Closed', 'Call Cancel', 'Customer Reject'].includes(updateTicket.status || '') && (
               <button onClick={() => setPartIndentOpen(true)} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, alignSelf: 'flex-start' }}>📦 Request Part</button>
             )}
 
-            {allowedForUpdate.length > 0 ? (
-              <>
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>New Status *</label>
+            <>
+              {/* index.html:7215-7224 — only the status-transition SELECT
+                    itself becomes unavailable when there's nothing to move to
+                    (e.g. Pending Customer Approval / Customer Approved);
+                    everything else below (spares, charges, attachments,
+                    Product Condition, SE Call ID, Page Count, Update Note)
+                    still renders regardless. */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>New Status *</label>
+                {allowedForUpdate.length > 0 ? (
                   <select value={updateForm.newStatus} onChange={(e) => setUpdateForm((f) => ({ ...f, newStatus: e.target.value }))} style={styles.formInput}>
                     <option value="">Select status...</option>
                     {allowedForUpdate.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
-                </div>
-                {/* Action Taken — required on any status-changing save, and it
+                ) : (
+                  <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, fontSize: 13, color: '#92400e' }}>
+                    ⏳ No status update available for: <strong>{updateTicket.status}</strong>
+                  </div>
+                )}
+              </div>
+              {/* Action Taken — required on any status-changing save, and it
                     doubles as the mandatory cancellation reason when the new
                     status is Call Cancel (index.html:7269, 7701, 7808). */}
-                <div style={styles.formGroup}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <label style={styles.formLabel}>
-                      Action Taken <span style={{ color: '#dc2626' }}>*</span>
-                      {updateForm.newStatus === 'Call Cancel' && <span style={{ fontWeight: 400, fontSize: 11, color: '#b45309' }}> — this is the cancellation reason</span>}
-                    </label>
-                    <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, workDone: text }))} />
-                  </div>
-                  <textarea
-                    value={updateForm.workDone}
-                    onChange={(e) => setUpdateForm((f) => ({ ...f, workDone: e.target.value }))}
-                    rows={2}
-                    placeholder="What was done?"
-                    style={{ ...styles.formInput, resize: 'vertical' }}
-                  />
+              <div style={styles.formGroup}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={styles.formLabel}>
+                    Action Taken <span style={{ color: '#dc2626' }}>*</span>
+                    {updateForm.newStatus === 'Call Cancel' && <span style={{ fontWeight: 400, fontSize: 11, color: '#b45309' }}> — this is the cancellation reason</span>}
+                  </label>
+                  <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, workDone: text }))} />
                 </div>
-                {/* 📦 Send to MSC — engineer side only names the centre; WC adds
+                <textarea
+                  value={updateForm.workDone}
+                  onChange={(e) => setUpdateForm((f) => ({ ...f, workDone: e.target.value }))}
+                  rows={2}
+                  placeholder="What was done?"
+                  style={{ ...styles.formInput, resize: 'vertical' }}
+                />
+              </div>
+              {/* 📦 Send to MSC — engineer side only names the centre; WC adds
                     courier + docket + dispatch date afterwards through the
                     MSC Dispatch panel (index.html:7207-7214). The suggestions
                     come from auto_msc_centers, same as loadMSCCentersDropdown. */}
-                {updateForm.newStatus === 'Sent to MSC' && (
-                  <div style={{ ...styles.formGroup, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
-                    <label style={styles.formLabel}>MSC Center (optional)</label>
-                    <input
-                      type="text" list="msc-centers-datalist" value={updateForm.mscCenter}
-                      onChange={(e) => setUpdateForm((f) => ({ ...f, mscCenter: e.target.value }))}
-                      style={styles.formInput} placeholder="Which MSC center?"
-                    />
-                    <datalist id="msc-centers-datalist">
-                      {mscCenters.map((m) => <option key={m.name} value={m.city ? `${m.name} — ${m.city}` : m.name} />)}
-                    </datalist>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>WC will add courier &amp; docket details after dispatch.</div>
+              {updateForm.newStatus === 'Sent to MSC' && (
+                <div style={{ ...styles.formGroup, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
+                  <label style={styles.formLabel}>MSC Center (optional)</label>
+                  <input
+                    type="text" list="msc-centers-datalist" value={updateForm.mscCenter}
+                    onChange={(e) => setUpdateForm((f) => ({ ...f, mscCenter: e.target.value }))}
+                    style={styles.formInput} placeholder="Which MSC center?"
+                  />
+                  <datalist id="msc-centers-datalist">
+                    {mscCenters.map((m) => <option key={m.name} value={m.city ? `${m.name} — ${m.city}` : m.name} />)}
+                  </datalist>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>WC will add courier &amp; docket details after dispatch.</div>
+                </div>
+              )}
+              {updateTicket.service_type === 'On Site' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Visit Date</label>
+                    <input type="date" value={updateForm.visitDate} onChange={(e) => setUpdateForm((f) => ({ ...f, visitDate: e.target.value }))} style={styles.formInput} />
                   </div>
-                )}
-                {updateTicket.service_type === 'On Site' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Visit Date</label>
-                      <input type="date" value={updateForm.visitDate} onChange={(e) => setUpdateForm((f) => ({ ...f, visitDate: e.target.value }))} style={styles.formInput} />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Time In</label>
-                      <input type="time" value={updateForm.visitIn} onChange={(e) => setUpdateForm((f) => ({ ...f, visitIn: e.target.value }))} style={styles.formInput} />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Time Out</label>
-                      <input type="time" value={updateForm.visitOut} onChange={(e) => setUpdateForm((f) => ({ ...f, visitOut: e.target.value }))} style={styles.formInput} />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Meter Start</label>
-                      <input type="text" value={updateForm.meterStart} onChange={(e) => setUpdateForm((f) => ({ ...f, meterStart: e.target.value }))} style={styles.formInput} />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Meter End</label>
-                      <input type="text" value={updateForm.meterEnd} onChange={(e) => setUpdateForm((f) => ({ ...f, meterEnd: e.target.value }))} style={styles.formInput} />
-                    </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Time In</label>
+                    <input type="time" value={updateForm.visitIn} onChange={(e) => setUpdateForm((f) => ({ ...f, visitIn: e.target.value }))} style={styles.formInput} />
                   </div>
-                )}
-                {/* Reason for manual time change — shown only once Time In or
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Time Out</label>
+                    <input type="time" value={updateForm.visitOut} onChange={(e) => setUpdateForm((f) => ({ ...f, visitOut: e.target.value }))} style={styles.formInput} />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Meter Start</label>
+                    <input type="text" value={updateForm.meterStart} onChange={(e) => setUpdateForm((f) => ({ ...f, meterStart: e.target.value }))} style={styles.formInput} />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Meter End</label>
+                    <input type="text" value={updateForm.meterEnd} onChange={(e) => setUpdateForm((f) => ({ ...f, meterEnd: e.target.value }))} style={styles.formInput} />
+                  </div>
+                </div>
+              )}
+              {/* Reason for manual time change — shown only once Time In or
                     Time Out is actually edited away from its auto-filled value,
                     and required to save (index.html:7249-7252, 7757-7766). */}
-                {isManualTimeEdit && (
-                  <div style={{ background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '10px 14px' }}>
-                    <label style={{ fontWeight: 700, color: '#b45309', fontSize: 12 }}>
-                      ⚠️ Reason for manual time change <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <textarea
-                      value={updateForm.manualTimeReason}
-                      onChange={(e) => setUpdateForm((f) => ({ ...f, manualTimeReason: e.target.value }))}
-                      rows={2}
-                      placeholder="e.g. Network issue — forgot to tap Work Start button"
-                      style={{ ...styles.formInput, marginTop: 6, borderColor: '#f59e0b', resize: 'vertical' }}
-                    />
-                  </div>
-                )}
-                {/* Spares / Part Request list — index.html:7281-7286 + spareRow()
+              {isManualTimeEdit && (
+                <div style={{ background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: '10px 14px' }}>
+                  <label style={{ fontWeight: 700, color: '#b45309', fontSize: 12 }}>
+                    ⚠️ Reason for manual time change <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <textarea
+                    value={updateForm.manualTimeReason}
+                    onChange={(e) => setUpdateForm((f) => ({ ...f, manualTimeReason: e.target.value }))}
+                    rows={2}
+                    placeholder="e.g. Network issue — forgot to tap Work Start button"
+                    style={{ ...styles.formInput, marginTop: 6, borderColor: '#f59e0b', resize: 'vertical' }}
+                  />
+                </div>
+              )}
+              {/* Spares / Part Request list — index.html:7281-7286 + spareRow()
                     at 7657. Editable here (✕ removes); removals persist to
                     tickets.spares when the whole form is saved. */}
-                <div>
-                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔩 Spares / Part Request</h3>
-                  {updateSpares.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>No parts added.</div>
-                  ) : updateSpares.map((s, i) => {
-                    const gp = s.gst_pct != null ? s.gst_pct : 18;
-                    const hidePrice = spareHidesPrice(s);
-                    const isCons = isChargeableSpare(s, consumableCodes);
-                    return (
-                      <div key={`${s.code || 'x'}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13, background: '#f9fafb', borderRadius: 8, padding: '6px 10px' }}>
-                        <span style={{ flex: 1, color: colors.primary, fontWeight: 600 }}>
-                          {s.code || '-'}
-                          {isCons && <span style={{ fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 4px', borderRadius: 4, marginLeft: 4 }}>CONS</span>}
-                        </span>
-                        <span style={{ flex: 2 }}>{s.name}</span>
-                        <span style={{ flex: 0.5 }}>×{s.qty}</span>
-                        <span style={{ flex: 0.7, textAlign: 'center', color: '#7c3aed', fontSize: 11 }}>GST {gp}%</span>
-                        <span style={{ flex: 1, textAlign: 'right', fontWeight: 700 }}>
-                          {hidePrice ? <span style={{ color: '#059669' }}>₹0 (W)</span> : `₹${((Number(s.qty) || 1) * (Number(s.price) || 0)).toFixed(2)}`}
-                        </span>
-                        <button onClick={() => removeUpdateSpare(i)} style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}>✕</button>
-                      </div>
-                    );
-                  })}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔩 Spares / Part Request</h3>
+                {updateSpares.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>No parts added.</div>
+                ) : updateSpares.map((s, i) => {
+                  const gp = s.gst_pct != null ? s.gst_pct : 18;
+                  const hidePrice = spareHidesPrice(s);
+                  const isCons = isChargeableSpare(s, consumableCodes);
+                  return (
+                    <div key={`${s.code || 'x'}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13, background: '#f9fafb', borderRadius: 8, padding: '6px 10px' }}>
+                      <span style={{ flex: 1, color: colors.primary, fontWeight: 600 }}>
+                        {s.code || '-'}
+                        {isCons && <span style={{ fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 4px', borderRadius: 4, marginLeft: 4 }}>CONS</span>}
+                      </span>
+                      <span style={{ flex: 2 }}>{s.name}</span>
+                      <span style={{ flex: 0.5 }}>×{s.qty}</span>
+                      <span style={{ flex: 0.7, textAlign: 'center', color: '#7c3aed', fontSize: 11 }}>GST {gp}%</span>
+                      <span style={{ flex: 1, textAlign: 'right', fontWeight: 700 }}>
+                        {hidePrice ? <span style={{ color: '#059669' }}>₹0 (W)</span> : `₹${((Number(s.qty) || 1) * (Number(s.price) || 0)).toFixed(2)}`}
+                      </span>
+                      <button onClick={() => removeUpdateSpare(i)} style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+              {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && updateTicket.warranty_coverage !== 'Out of Coverage' ? (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e3a8a' }}>Warranty — no charges</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Service / Labour ₹ (incl. GST)</label>
+                    <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Other ₹</label>
+                    <input type="number" value={updateForm.otherCharge} onChange={(e) => setUpdateForm((f) => ({ ...f, otherCharge: e.target.value }))} style={styles.formInput} placeholder="0" />
+                  </div>
                 </div>
-                {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && updateTicket.warranty_coverage !== 'Out of Coverage' ? (
-                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e3a8a' }}>Warranty — no charges</div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Service / Labour ₹ (incl. GST)</label>
-                      <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />
-                    </div>
-                    <div style={styles.formGroup}>
-                      <label style={styles.formLabel}>Other ₹</label>
-                      <input type="number" value={updateForm.otherCharge} onChange={(e) => setUpdateForm((f) => ({ ...f, otherCharge: e.target.value }))} style={styles.formInput} placeholder="0" />
-                    </div>
-                  </div>
-                )}
-                {estimateTotal > 0 && (
-                  <div style={{ background: '#f0fdf4', border: '1.5px solid #16a34a', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                    {sparesPartsTotal > 0 && <span>🔩 Parts: <b>₹{sparesPartsTotal.toFixed(0)}</b></span>}
-                    {Number(updateForm.labour) > 0 && <span>🔧 Service: <b>₹{Number(updateForm.labour).toFixed(0)}</b></span>}
-                    {Number(updateForm.otherCharge) > 0 && <span>📎 Other: <b>₹{Number(updateForm.otherCharge).toFixed(0)}</b></span>}
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#0d9488' }}>= TOTAL: ₹{estimateTotal.toFixed(0)}</span>
-                  </div>
-                )}
+              )}
+              {estimateTotal > 0 && (
+                <div style={{ background: '#f0fdf4', border: '1.5px solid #16a34a', borderRadius: 10, padding: '10px 14px', fontSize: 13, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  {sparesPartsTotal > 0 && <span>🔩 Parts: <b>₹{sparesPartsTotal.toFixed(0)}</b></span>}
+                  {Number(updateForm.labour) > 0 && <span>🔧 Service: <b>₹{Number(updateForm.labour).toFixed(0)}</b></span>}
+                  {Number(updateForm.otherCharge) > 0 && <span>📎 Other: <b>₹{Number(updateForm.otherCharge).toFixed(0)}</b></span>}
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#0d9488' }}>= TOTAL: ₹{estimateTotal.toFixed(0)}</span>
+                </div>
+              )}
 
-                {/* Attachments — Job Sheet (slot 0) + up to 2 extras. Mandatory
+              {/* Attachments — Job Sheet (slot 0) + up to 2 extras. Mandatory
                     to close a CSP call, On Site or Carry In (index.html:7293-7300,
                     7890-7893). Camera or gallery both work. */}
-                <div style={{ background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 10, padding: 12 }}>
-                  <label style={{ fontWeight: 700, color: '#0369a1', fontSize: 13 }}>
-                    📎 Attachments {updateTicket.wc_type === 'CSP' && <span style={{ color: '#dc2626' }}>*</span>}
-                    <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
-                      {' '}— Job Sheet photo{updateTicket.wc_type === 'CSP' ? ' is mandatory to Close (CSP call)' : ' (optional, ICP call)'}. Up to 2 extra photos (printer report etc.).
-                    </span>
-                  </label>
-                  {[0, 1, 2].map((slot) => (
-                    <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
-                      <span style={{ width: 92, fontWeight: 700, color: '#0369a1' }}>{slot === 0 ? '📄 Job Sheet' : `📎 Extra ${slot}`}</span>
-                      {updatePhotos[slot] ? (
-                        <>
-                          <a href={updatePhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 600 }}>
-                            {updatePhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
-                          </a>
-                          <button
-                            onClick={() => setUpdatePhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
-                            style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
-                          >✕</button>
-                        </>
-                      ) : (
-                        <>
-                          <label style={{ background: '#0369a1', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
-                            📷 Camera
-                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
-                          </label>
-                          <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
-                            📁 Gallery
-                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
-                          </label>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div style={{ background: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: 10, padding: 12 }}>
+                <label style={{ fontWeight: 700, color: '#0369a1', fontSize: 13 }}>
+                  📎 Attachments {updateTicket.wc_type === 'CSP' && <span style={{ color: '#dc2626' }}>*</span>}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
+                    {' '}— Job Sheet photo{updateTicket.wc_type === 'CSP' ? ' is mandatory to Close (CSP call)' : ' (optional, ICP call)'}. Up to 2 extra photos (printer report etc.).
+                  </span>
+                </label>
+                {[0, 1, 2].map((slot) => (
+                  <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
+                    <span style={{ width: 92, fontWeight: 700, color: '#0369a1' }}>{slot === 0 ? '📄 Job Sheet' : `📎 Extra ${slot}`}</span>
+                    {updatePhotos[slot] ? (
+                      <>
+                        <a href={updatePhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#0369a1', fontWeight: 600 }}>
+                          {updatePhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
+                        </a>
+                        <button
+                          onClick={() => setUpdatePhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
+                          style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
+                        >✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <label style={{ background: '#0369a1', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                          📷 Camera
+                          <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
+                        </label>
+                        <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                          📁 Gallery
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickPhoto(slot, e.target.files?.[0])} />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-                {/* 📦 Product Condition — optional condition type + up to 3
+              {/* 📦 Product Condition — optional condition type + up to 3
                     photo proofs, saved to condition_type / condition_photos
                     (index.html:7302-7316). */}
-                <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: 12 }}>
-                  <label style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>
-                    📦 Product Condition
-                    <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
-                      {' '}— Optional. Note the condition and attach photo proof if leakage / physical / liquid damage is found.
-                    </span>
-                  </label>
-                  <select
-                    value={updateForm.conditionType}
-                    onChange={(e) => setUpdateForm((f) => ({ ...f, conditionType: e.target.value }))}
-                    style={{ ...styles.formInput, marginTop: 8 }}
-                  >
-                    <option value="">-- Select (optional) --</option>
-                    <option value="Normal">Normal — no issue</option>
-                    <option value="Physical Damage">Physical Damage</option>
-                    <option value="Liquid/Leakage Damage">Liquid / Leakage Damage</option>
-                    <option value="Burnt/Electrical Damage">Burnt / Electrical Damage</option>
-                    <option value="Missing Parts">Missing Parts</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {[0, 1, 2].map((slot) => (
-                    <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
-                      <span style={{ width: 92, fontWeight: 700, color: '#991b1b' }}>📷 Photo {slot + 1}</span>
-                      {conditionPhotos[slot] ? (
-                        <>
-                          <a href={conditionPhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#991b1b', fontWeight: 600 }}>
-                            {conditionPhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
-                          </a>
-                          <button
-                            onClick={() => setConditionPhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
-                            style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
-                          >✕</button>
-                        </>
-                      ) : (
-                        <>
-                          <label style={{ background: '#b91c1c', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
-                            📷 Camera
-                            <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
-                          </label>
-                          <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
-                            📁 Gallery
-                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
-                          </label>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: 12 }}>
+                <label style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>
+                  📦 Product Condition
+                  <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
+                    {' '}— Optional. Note the condition and attach photo proof if leakage / physical / liquid damage is found.
+                  </span>
+                </label>
+                <select
+                  value={updateForm.conditionType}
+                  onChange={(e) => setUpdateForm((f) => ({ ...f, conditionType: e.target.value }))}
+                  style={{ ...styles.formInput, marginTop: 8 }}
+                >
+                  <option value="">-- Select (optional) --</option>
+                  <option value="Normal">Normal — no issue</option>
+                  <option value="Physical Damage">Physical Damage</option>
+                  <option value="Liquid/Leakage Damage">Liquid / Leakage Damage</option>
+                  <option value="Burnt/Electrical Damage">Burnt / Electrical Damage</option>
+                  <option value="Missing Parts">Missing Parts</option>
+                  <option value="Other">Other</option>
+                </select>
+                {[0, 1, 2].map((slot) => (
+                  <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
+                    <span style={{ width: 92, fontWeight: 700, color: '#991b1b' }}>📷 Photo {slot + 1}</span>
+                    {conditionPhotos[slot] ? (
+                      <>
+                        <a href={conditionPhotos[slot]!.url} target="_blank" rel="noreferrer" style={{ color: '#991b1b', fontWeight: 600 }}>
+                          {conditionPhotos[slot]!.isNew ? 'New photo ready' : 'View attached'}
+                        </a>
+                        <button
+                          onClick={() => setConditionPhotos((prev) => { const n = [...prev]; n[slot] = null; return n; })}
+                          style={{ background: 'none', border: 'none', color: colors.danger, cursor: 'pointer', fontSize: 14 }}
+                        >✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <label style={{ background: '#b91c1c', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                          📷 Camera
+                          <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
+                        </label>
+                        <label style={{ background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontWeight: 700 }}>
+                          📁 Gallery
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onPickConditionPhoto(slot, e.target.files?.[0])} />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-                <div style={styles.formGroup}>
-                  <label style={styles.formLabel}>Fault Code</label>
-                  <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
-                </div>
-                {/* index.html:7265-7269. The * is HTML's own label; the close is
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Fault Code</label>
+                <input type="text" value={updateForm.faultCode} onChange={(e) => setUpdateForm((f) => ({ ...f, faultCode: e.target.value }))} style={styles.formInput} />
+              </div>
+              {/* index.html:7265-7269. The * is HTML's own label; the close is
                     NOT blocked without it — HTML gates that on
                     isFieldRequired('call_close','se_call_id'), whose built-in
                     default is 'optional'. The digits after the last '/' become
                     the warranty tracking key (index.html:8003). */}
-                {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && (
-                  <div style={{ ...styles.formGroup, background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: 10 }}>
-                    <label style={{ ...styles.formLabel, color: '#b45309' }}>
-                      🔖 Canon SE Call ID <span style={{ color: '#ef4444' }}>*</span>
-                      <span style={{ fontSize: 11, fontWeight: 400, color: '#92400e' }}> (required for warranty part tracking)</span>
-                    </label>
-                    <input
-                      type="text" value={updateForm.seCallId}
-                      onChange={(e) => setUpdateForm((f) => ({ ...f, seCallId: e.target.value.toUpperCase() }))}
-                      placeholder="e.g. CSP/20260618/123456"
-                      style={{ ...styles.formInput, borderColor: '#f59e0b', fontWeight: 600 }}
-                    />
-                    <div style={{ fontSize: 11, color: '#78716c', marginTop: 3 }}>Only the digits after the last / will be used for tracking (e.g. 123456)</div>
-                  </div>
-                )}
-                {updateTicket.wc_type === 'CSP' && (
-                  <div style={{ ...styles.formGroup, background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: 10 }}>
-                    <label style={styles.formLabel}>Page Count {updateForm.newStatus === 'Closed' && !updateForm.pageCountSkip && <span style={{ color: '#dc2626' }}>*</span>}</label>
-                    <input type="number" value={updateForm.pageCount} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCount: e.target.value }))} style={styles.formInput} disabled={updateForm.pageCountSkip} />
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600 }}>
-                      <input type="checkbox" checked={updateForm.pageCountSkip} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkip: e.target.checked }))} />
-                      Skip Page Count
-                    </label>
-                    {updateForm.pageCountSkip && (
-                      <input type="text" value={updateForm.pageCountSkipReason} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkipReason: e.target.value }))} style={{ ...styles.formInput, marginTop: 6 }} placeholder="Reason for skipping *" />
-                    )}
-                  </div>
-                )}
-                <div style={styles.formGroup}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <label style={styles.formLabel}>Update Note</label>
-                    <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, note: text }))} />
-                  </div>
-                  <textarea value={updateForm.note} onChange={(e) => setUpdateForm((f) => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...styles.formInput, resize: 'vertical' }} />
+              {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && (
+                <div style={{ ...styles.formGroup, background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 8, padding: 10 }}>
+                  <label style={{ ...styles.formLabel, color: '#b45309' }}>
+                    🔖 Canon SE Call ID <span style={{ color: '#ef4444' }}>*</span>
+                    <span style={{ fontSize: 11, fontWeight: 400, color: '#92400e' }}> (required for warranty part tracking)</span>
+                  </label>
+                  <input
+                    type="text" value={updateForm.seCallId}
+                    onChange={(e) => setUpdateForm((f) => ({ ...f, seCallId: e.target.value.toUpperCase() }))}
+                    placeholder="e.g. CSP/20260618/123456"
+                    style={{ ...styles.formInput, borderColor: '#f59e0b', fontWeight: 600 }}
+                  />
+                  <div style={{ fontSize: 11, color: '#78716c', marginTop: 3 }}>Only the digits after the last / will be used for tracking (e.g. 123456)</div>
                 </div>
-              </>
-            ) : (
-              <div style={{ background: '#fef3c7', borderRadius: 8, padding: 12, fontSize: 13, color: '#92400e' }}>
-                ⏳ No status update available for: <strong>{updateTicket.status}</strong>
+              )}
+              {updateTicket.wc_type === 'CSP' && (
+                <div style={{ ...styles.formGroup, background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: 10 }}>
+                  <label style={styles.formLabel}>Page Count {updateForm.newStatus === 'Closed' && !updateForm.pageCountSkip && <span style={{ color: '#dc2626' }}>*</span>}</label>
+                  <input type="number" value={updateForm.pageCount} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCount: e.target.value }))} style={styles.formInput} disabled={updateForm.pageCountSkip} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600 }}>
+                    <input type="checkbox" checked={updateForm.pageCountSkip} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkip: e.target.checked }))} />
+                    Skip Page Count
+                  </label>
+                  {updateForm.pageCountSkip && (
+                    <input type="text" value={updateForm.pageCountSkipReason} onChange={(e) => setUpdateForm((f) => ({ ...f, pageCountSkipReason: e.target.value }))} style={{ ...styles.formInput, marginTop: 6 }} placeholder="Reason for skipping *" />
+                  )}
+                </div>
+              )}
+              <div style={styles.formGroup}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={styles.formLabel}>Update Note</label>
+                  <AIWriteButton type="update" onInsert={(text) => setUpdateForm((f) => ({ ...f, note: text }))} />
+                </div>
+                <textarea value={updateForm.note} onChange={(e) => setUpdateForm((f) => ({ ...f, note: e.target.value }))} rows={3} placeholder="Work done, observations..." style={{ ...styles.formInput, resize: 'vertical' }} />
               </div>
-            )}
+            </>
           </fieldset>
         </Modal>
       )}
@@ -2232,6 +2263,11 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Post-save confirmation (index.html:14801-14817, autoSendDailyReport's
+  // success panel). HTML auto-sends to Telegram there — this port has no
+  // Telegram integration, so WhatsApp share is offered as an optional manual
+  // button instead of firing automatically.
+  const [submittedShareText, setSubmittedShareText] = useState<string | null>(null);
 
   // Office Work: manually-added rows + today's already-logged Other Work items
   // shown read-only (index.html:14257 + 14235).
@@ -2281,27 +2317,46 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
     });
     setSaving(false);
     if (!r.success) { alert('❌ ' + r.error); return; }
-    // Auto-share the just-submitted report — HTML calls autoSendDailyReport()
-    // right after the insert (index.html:14629). HTML's own transport is
-    // Telegram; here the same formatDailyReportWA() text is handed to the
-    // WhatsApp share sheet, which is the channel this port already uses for
-    // report sharing (Past Reports list). Filtering matches the insert's:
-    // only rows with a work type / a name-or-amount / a name-and-stars count.
-    try {
-      const text = formatDailyReportWA({
-        eng_name: engName, report_date: date, call_summary: cs,
-        office_work: officeWork.filter((o) => o.work_type.trim()),
-        payments: payments.filter((p) => p.customer.trim() || p.amount > 0),
-        total_amount: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
-        petrol_km: parseFloat(petrolKm) || 0,
-        google_reviews: reviews.filter((g) => g.customer.trim() && g.stars),
-        remarks,
-      });
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-    } catch { /* share is best-effort — the report is already saved */ }
-    alert('✅ Daily Report submitted!');
-    onClose();
+    // HTML auto-sends the report to Telegram here (autoSendDailyReport,
+    // index.html:14629, 14784-14817) and shows a confirmation panel — no
+    // external app opens. This port has no Telegram integration, so instead
+    // of auto-opening the WhatsApp share sheet (disruptive), show the same
+    // confirmation with WhatsApp share offered as an optional manual button.
+    const text = formatDailyReportWA({
+      eng_name: engName, report_date: date, call_summary: cs,
+      office_work: officeWork.filter((o) => o.work_type.trim()),
+      payments: payments.filter((p) => p.customer.trim() || p.amount > 0),
+      total_amount: payments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
+      petrol_km: parseFloat(petrolKm) || 0,
+      google_reviews: reviews.filter((g) => g.customer.trim() && g.stars),
+      remarks,
+    });
+    setSubmittedShareText(text);
   };
+
+  // Confirmation panel shown after a successful save (index.html:14801-14817).
+  if (submittedShareText !== null) {
+    return (
+      <Modal isOpen onClose={onClose} title="✅ Report Submitted!">
+        <div style={{ textAlign: 'center', padding: '8px 4px 4px' }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#15803d', marginBottom: 4 }}>Report Submitted!</div>
+          <div style={{ fontSize: 13, color: '#65a30d', marginBottom: 16 }}>Saved — no further action needed. Sharing below is optional.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(submittedShareText)}`, '_blank')}
+              style={{ padding: '10px 16px', background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
+            >
+              📤 Share via WhatsApp (optional)
+            </button>
+            <button onClick={onClose} style={{ padding: '10px 16px', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+              ✅ Done
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -2367,7 +2422,7 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
             {engId === 'ENG002' && (
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>🏗️ Automation Site Visits completed today (auto-filled)</label>
-                <input type="number" min={0} value={cs.auto_site_visits} onChange={(e) => setField('auto_site_visits', e.target.value)} style={styles.formInput} />
+                <input type="number" min={0} value={cs.auto_site_visits} readOnly style={{ ...styles.formInput, background: colors.bg, color: colors.textMuted }} />
               </div>
             )}
 

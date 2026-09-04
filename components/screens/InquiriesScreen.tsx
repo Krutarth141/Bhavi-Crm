@@ -13,6 +13,23 @@ const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e
 const labelStyle = { fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 };
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
+// index.html:24191 — status filter dropdown: plain text except Converted/Lost.
+const STATUS_FILTER_LABELS: Record<string, string> = {
+    'Converted': 'Converted ✅',
+    'Lost': 'Lost ❌',
+};
+// index.html:24417-24425 — Update-modal status dropdown: fuller emoji set,
+// different wording from the filter dropdown above.
+const STATUS_UPDATE_LABELS: Record<string, string> = {
+    'Pending - Customer Call': '📞 Pending - Customer Call',
+    'Pending - Quotation': '📋 Pending - Quotation',
+    'Pending - Customer Side': '⏳ Pending - Customer Side',
+    'Site Visit Scheduled': '📅 Site Visit Scheduled',
+    'Demo Scheduled': '🎯 Demo Scheduled',
+    'Converted': '✅ Converted (Won)',
+    'Lost': '❌ Lost',
+};
+
 export default function InquiriesScreen() {
     const { data: session } = useSession();
     const myUserId = (session?.user as any)?.email ?? ''; // holds user_id, e.g. 'ENG002'
@@ -29,7 +46,6 @@ export default function InquiriesScreen() {
     const [addForm, setAddForm] = useState<InquiryFormData>(emptyInquiryForm);
     const [addOtherType, setAddOtherType] = useState('');
     const [addSaving, setAddSaving] = useState(false);
-    const [gpsLoading, setGpsLoading] = useState(false);
 
     const [editId, setEditId] = useState<number | null>(null);
     const [editForm, setEditForm] = useState<InquiryFormData>(emptyInquiryForm);
@@ -59,12 +75,14 @@ export default function InquiriesScreen() {
     // ---- Add ----
     const openAdd = () => { setAddForm(emptyInquiryForm); setAddOtherType(''); setAddOpen(true); };
 
+    // index.html:23224 — _getInqGPS shows "Getting..." IN the location input
+    // itself while fetching, and clears it to '' on failure.
     const handleGetGPS = () => {
         if (!navigator.geolocation) { alert('GPS not available'); return; }
-        setGpsLoading(true);
+        setAddForm(f => ({ ...f, location: 'Getting...' }));
         navigator.geolocation.getCurrentPosition(
-            (p) => { setAddForm(f => ({ ...f, location: `${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}` })); setGpsLoading(false); },
-            () => { alert('Could not get location'); setGpsLoading(false); }
+            (p) => { setAddForm(f => ({ ...f, location: `${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}` })); },
+            () => { setAddForm(f => ({ ...f, location: '' })); alert('Could not get location'); }
         );
     };
 
@@ -196,7 +214,7 @@ export default function InquiriesScreen() {
                 <input type="text" placeholder="Search name / mobile..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200, padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontFamily: 'inherit' }} />
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14 }}>
                     <option value="">All Status</option>
-                    {INQUIRY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {INQUIRY_STATUSES.map(s => <option key={s} value={s}>{STATUS_FILTER_LABELS[s] || s}</option>)}
                 </select>
             </div>
 
@@ -215,7 +233,9 @@ export default function InquiriesScreen() {
                             const isFollowup = inq.followup_date === today && inq.status !== 'Converted' && inq.status !== 'Lost';
                             const isPast = !!inq.followup_date && inq.followup_date < today && inq.status !== 'Converted' && inq.status !== 'Lost';
                             const color = INQUIRY_STATUS_COLORS[inq.status || ''] || '#6b7280';
-                            const noteLines = (inq.notes || '').split('\n').filter(Boolean);
+                            // index.html:24156 — unfiltered split (matches HTML's latent
+                            // behavior: blank trailing lines can count toward "+N more").
+                            const noteLines = (inq.notes || '').split('\n');
                             const lastNote = noteLines[noteLines.length - 1];
                             return (
                                 <div key={inq.id} style={{ background: isFollowup ? '#fffbeb' : isPast ? '#fff1f2' : 'white', border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}`, borderRadius: 8, padding: '14px 16px', marginBottom: 10 }}>
@@ -288,7 +308,7 @@ export default function InquiriesScreen() {
                         <label style={labelStyle}>📍 Location <small style={{ color: '#6b7280', fontWeight: 400 }}>(optional)</small></label>
                         <div style={{ display: 'flex', gap: 8 }}>
                             <input type="text" value={addForm.location} readOnly placeholder="Lat, Lng" style={{ ...fieldStyle, flex: 1 }} />
-                            <button type="button" onClick={handleGetGPS} disabled={gpsLoading} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>{gpsLoading ? '...' : '📍 Get GPS'}</button>
+                            <button type="button" onClick={handleGetGPS} style={{ padding: '8px 14px', border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>📍 Get GPS</button>
                         </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -374,7 +394,7 @@ export default function InquiriesScreen() {
                     <div>
                         <label style={labelStyle}>Status</label>
                         <select value={updateStatus} onChange={e => setUpdateStatus(e.target.value)} style={fieldStyle}>
-                            {INQUIRY_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            {INQUIRY_STATUSES.map(s => <option key={s} value={s}>{STATUS_UPDATE_LABELS[s] || s}</option>)}
                         </select>
                     </div>
                     <div><label style={labelStyle}>📅 Next Followup Date</label><input type="date" value={updateFollowup} onChange={e => setUpdateFollowup(e.target.value)} style={fieldStyle} /></div>
@@ -409,6 +429,15 @@ export default function InquiriesScreen() {
                                     <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: 3 }}>Type</div>
                                     <div style={{ fontSize: 13, fontWeight: 600 }}>🔖 {detailInq.inquiry_type || '—'}</div>
                                 </div>
+                                {detailInq.location && (
+                                    <div style={{ background: '#f8fafc', padding: 10, borderRadius: 8 }}>
+                                        <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: 3 }}>Location</div>
+                                        <a href={`https://maps.google.com/?q=${encodeURIComponent(detailInq.location)}`} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 600, color: '#2563eb' }}>📍 Open in Maps</a>
+                                    </div>
+                                )}
+                                {/* index.html:24260-24261 — openInquiryDetail() accidentally
+                                    renders this same Location block twice; reproducing that
+                                    latent bug per the ground-truth-match rule. */}
                                 {detailInq.location && (
                                     <div style={{ background: '#f8fafc', padding: 10, borderRadius: 8 }}>
                                         <div style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: 3 }}>Location</div>

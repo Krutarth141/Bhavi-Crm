@@ -23,7 +23,9 @@ export default function NavPermissionsTab() {
         fetchNavPermissions().then((perms) => {
             const userOverride = perms.users[String(selected.id)];
             const next: Record<string, boolean> = {};
-            items.forEach((item) => { next[item.id] = userOverride ? userOverride[item.id] !== false : true; });
+            // Stored keys carry HTML's "nav-" prefix (e.g. "nav-auto-sites") —
+            // strip it back off for this component's internal unprefixed state.
+            items.forEach((item) => { next[item.id] = userOverride ? userOverride[`nav-${item.id}`] !== false : true; });
             setChecks(next);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -35,7 +37,11 @@ export default function NavPermissionsTab() {
         if (!selected) { alert('Select an employee first'); return; }
         setSaving(true);
         try {
-            await saveNavPermissionsForUser(String(selected.id), checks);
+            // Write back with HTML's "nav-" prefixed key format so legacy
+            // production data (and the HTML app itself) stays compatible.
+            const prefixed: Record<string, boolean> = {};
+            Object.entries(checks).forEach(([id, v]) => { prefixed[`nav-${id}`] = v; });
+            await saveNavPermissionsForUser(String(selected.id), prefixed);
             showMsg(`✅ Saved for ${selected.name}! Changes apply on next login.`);
         } catch (e: any) {
             showMsg('❌ ' + e.message);

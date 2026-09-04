@@ -15,8 +15,12 @@ export function useNavVisibility(uid: string | undefined) {
 
     const isVisible = (navId: string, defaultVisible: boolean = true): boolean => {
         if (!overrides) return defaultVisible;
-        if (overrides[navId] === undefined) return defaultVisible;
-        return overrides[navId];
+        // HTML stores/reads these overrides with a "nav-" prefix (e.g.
+        // "nav-auto-sites") in company_info.nav_permissions — match that key
+        // format so legacy overrides set through the HTML app still apply.
+        const key = `nav-${navId}`;
+        if (overrides[key] === undefined) return defaultVisible;
+        return overrides[key];
     };
 
     return { isVisible, loaded };

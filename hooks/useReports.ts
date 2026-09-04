@@ -161,22 +161,24 @@ export function useReports() {
     const [importRunning, setImportRunning] = useState(false);
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
-    // ── Load tickets on mount ─────────────────────────────────────────────────
-    useEffect(() => {
-        (async () => {
-            try {
-                setTicketsLoading(true);
-                const data = await fetchAllTickets();
-                setAllTickets(data);
-            } catch (err) {
-                console.error('Failed to fetch tickets:', err);
-            } finally {
-                setTicketsLoading(false);
-            }
-        })();
+    // ── Load tickets (mount + retry) ──────────────────────────────────────────
+    const loadTickets = useCallback(async () => {
+        try {
+            setTicketsLoading(true);
+            const data = await fetchAllTickets();
+            setAllTickets(data);
+        } catch (err) {
+            console.error('Failed to fetch tickets:', err);
+        } finally {
+            setTicketsLoading(false);
+        }
     }, []);
 
-    // ── Lazy-load tab data ────────────────────────────────────────────────────
+    useEffect(() => {
+        loadTickets();
+    }, [loadTickets]);
+
+    // ── Lazy-load tab data (retryable via *Loaded reset) ──────────────────────
     useEffect(() => {
         if (activeTab === 'daily' && !dailyLoaded) {
             setDailyLoading(true);
@@ -192,7 +194,11 @@ export function useReports() {
                 .catch(console.error)
                 .finally(() => setWcLoading(false));
         }
-    }, [activeTab]);
+    }, [activeTab, dailyLoaded, wcLoaded]);
+
+    const retryTickets = useCallback(() => { loadTickets(); }, [loadTickets]);
+    const retryDaily = useCallback(() => { setDailyLoaded(false); }, []);
+    const retryWc = useCallback(() => { setWcLoaded(false); }, []);
 
     // ── Derived ticket data ───────────────────────────────────────────────────
     const filtered = useMemo(
@@ -425,5 +431,9 @@ export function useReports() {
         // actions
         handleDownload,
         handlePrint,
+        // retry (loading-timeout safeguard)
+        retryTickets,
+        retryDaily,
+        retryWc,
     };
 }

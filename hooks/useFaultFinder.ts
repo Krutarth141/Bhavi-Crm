@@ -24,8 +24,8 @@ export const useFaultFinder = () => {
 
     useEffect(() => { loadAll(); }, []);
 
-    const addFault = async (form: FaultKnowledgeForm) => {
-        const result = await createFaultKnowledge(form);
+    const addFault = async (form: FaultKnowledgeForm, byUser?: string) => {
+        const result = await createFaultKnowledge(form, byUser);
         if (result.success) await loadAll();
         return result;
     };

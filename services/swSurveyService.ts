@@ -15,9 +15,11 @@ export const saveSwSurvey = async (
 ): Promise<{ success: boolean; error?: string; id?: number }> => {
     try {
         if (id) {
+            // index.html:20408 swSaveNow() PATCH never touches site_id — an existing
+            // survey's site link is set once at creation and can't be changed later.
             const { error } = await supabase.from('sw_surveys').update({
                 client_name: clientName || '', site_name: siteName || '', survey_date: surveyDate || null,
-                site_id: siteId ?? null, data, updated_at: new Date().toISOString(),
+                data, updated_at: new Date().toISOString(),
             }).eq('id', id);
             if (error) throw error;
             return { success: true, id };

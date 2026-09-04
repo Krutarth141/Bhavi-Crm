@@ -51,6 +51,26 @@ export default function CustomersScreen() {
         input.click();
     };
 
+    // index.html:9183-9202 renderCustomers() — on fetch failure the ENTIRE page
+    // (header, buttons, search, table) is replaced with just the error alert.
+    if (error) {
+        return (
+            <div style={{ padding: '20px 24px' }}>
+                <div
+                    style={{
+                        padding: '12px 16px',
+                        background: '#fee2e2',
+                        color: '#dc2626',
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                    }}
+                >
+                    Error: {error}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ padding: '20px 24px' }}>
             {/* Header */}
@@ -122,22 +142,6 @@ export default function CustomersScreen() {
                     </button>
                 </div>
             </div>
-
-            {/* Error Alert */}
-            {error && (
-                <div
-                    style={{
-                        padding: '12px 16px',
-                        background: '#fee2e2',
-                        color: '#dc2626',
-                        borderRadius: '6px',
-                        marginBottom: '16px',
-                        fontSize: '14px'
-                    }}
-                >
-                    Error: {error}
-                </div>
-            )}
 
             {/* Search Bar */}
             <div

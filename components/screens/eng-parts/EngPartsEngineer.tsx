@@ -239,7 +239,17 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
                   </thead>
                   <tbody>
                     {myRequests.map(req => {
-                      const partsList = (req.parts || []).map(p => `${p.qty || 1}× ${p.part_name || p.part_id || '?'}`).join(', ');
+                      // index.html:11228,11230 — live lookup "CODE — Name × qty" from
+                      // current inventory by part_id, one part per line; falls back to
+                      // the stored snapshot if the part is no longer found.
+                      const getPartLabel = (partId?: string) => {
+                        const inv = partId ? inventory.find(i => i.id === partId) : undefined;
+                        return inv ? (inv.part_code ? `${inv.part_code} — ${inv.item_name}` : inv.item_name) : null;
+                      };
+                      const partsLines = (req.parts || []).map(p => {
+                        const label = getPartLabel(p.part_id) || p.part_name || p.part_id || '?';
+                        return `${label} × ${p.qty || 1}`;
+                      });
                       return (
                         <tr key={req.id} style={styles.tableRow}>
                           <td style={styles.tableCell}>
@@ -247,7 +257,11 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
                             {req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </td>
                           <td style={styles.tableCell}>{req.type || '—'}</td>
-                          <td style={styles.tableCell}>{partsList || '—'}</td>
+                          <td style={styles.tableCell}>
+                            {partsLines.length
+                              ? partsLines.map((line, i) => <div key={i}>{line}</div>)
+                              : '—'}
+                          </td>
                           <td style={styles.tableCell}>{req.notes ?? '—'}</td>
                           <td style={styles.tableCell}>
                             <span style={statusBadgeStyle(req.status)}>{req.status}</span>

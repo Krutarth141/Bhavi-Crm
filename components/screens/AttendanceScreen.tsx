@@ -65,7 +65,8 @@ export default function AttendanceScreen() {
         const remark = prompt(info);
         if (remark === null) return;
         const result = await verify(log.id, remark, adminName);
-        if (!result.success) alert('Error: ' + result.error);
+        if (result.success) alert('✅ Approved! Punch log verified.');
+        else alert('Error: ' + result.error);
     };
 
     const handleRejectPunch = async (log: PunchLog) => {

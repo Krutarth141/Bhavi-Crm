@@ -58,8 +58,14 @@ export const savePartIndent = async (
     ticket: IndentableTicket,
     part: { code: string; name: string; qty: number; note: string },
     byUser: string,
-    isEngineerOnSite: boolean
-): Promise<{ success: boolean; error?: string; newStatus?: string }> => {
+    isEngineerOnSite: boolean,
+    // When the part needs a Warranty/Chargeable decision (see below) and the
+    // caller hasn't supplied one yet, we bail out early with
+    // needsChargeableChoice so the caller can show the 2-button prompt
+    // (mirrors HTML's askWarrantyOrChargeable modal, index.html:7468-7484)
+    // and call this again with the chosen value. true = Chargeable, false = Free.
+    chargeableChoice?: boolean
+): Promise<{ success: boolean; error?: string; newStatus?: string; needsChargeableChoice?: boolean; partLabel?: string }> => {
     try {
         // Fetch price, GST and the Consumable flag from Inventory FRESH — never
         // from a cached copy. A stale is_consumable is exactly what made the
@@ -106,13 +112,10 @@ export const savePartIndent = async (
         const skipsApprovalHere = isW && !isOOC;
         let isChargeableHere = isConsumableHere;
         if (skipsApprovalHere && isConsumableHere) {
-            isChargeableHere = window.confirm(
-                `⚠️ ${part.name || part.code}\n\n`
-                + 'This part can be either free (genuine Canon defect) or chargeable '
-                + '(customer-caused damage). Which applies to THIS call?\n\n'
-                + 'OK  = 💰 Chargeable (Customer Pays)\n'
-                + 'Cancel = 🛡️ Under Warranty (Free)'
-            );
+            if (chargeableChoice === undefined) {
+                return { success: false, needsChargeableChoice: true, partLabel: part.name || part.code };
+            }
+            isChargeableHere = chargeableChoice;
         }
 
         // A Warranty call that just got a CHARGEABLE consumable added must go

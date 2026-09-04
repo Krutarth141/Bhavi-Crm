@@ -66,7 +66,7 @@ export default function FieldTasksScreen() {
 
     const today = new Date().toLocaleDateString('en-CA');
     const active = tasks.filter(t => t.status !== 'Done' && t.status !== 'Cancelled');
-    const done = tasks.filter(t => t.status === 'Done');
+    const done = tasks.filter(t => t.status === 'Done').sort((a, b) => (b.done_at || b.updated_at || '').localeCompare(a.done_at || a.updated_at || ''));
     const cancelled = tasks.filter(t => t.status === 'Cancelled');
     const doneToday = done.filter(t => t.done_date === today).length;
 
@@ -120,7 +120,8 @@ export default function FieldTasksScreen() {
             if (!hasOpening) { setKmTaskId(t.id); setKmStep('opening'); return; }
         }
         const r = await ftTravelStart(t.id, myId, myName, memberRole, t);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error);
+        else { alert('🚗 Travel Start — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })); await load(); }
     };
     const handleFtKmCatchupDone = async () => {
         if (!ftKmCatchup) return;
@@ -129,6 +130,9 @@ export default function FieldTasksScreen() {
         setFtKmCatchup(null);
         await handleTravelStart(pendingTravelStart);
     };
+    const alertReached = (skipped?: boolean) => {
+        alert('📍 Reached — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) + (skipped ? '\n\n⏭️ KM skip karyu — next travel start par levase.' : ''));
+    };
     const handleReached = async (t: FieldTask) => {
         if (isEng) {
             // index.html:23670-23674 — skip the modal entirely if today's
@@ -136,13 +140,13 @@ export default function FieldTasksScreen() {
             const already = await hasArrivalKmForTicket(myId, `FT${t.id}`);
             if (already) {
                 const r = await ftReached(t.id, myId, myName, memberRole, t);
-                if (!r.success) alert('Error: ' + r.error); else await load();
+                if (!r.success) alert('Error: ' + r.error); else { alertReached(false); await load(); }
                 return;
             }
             setKmTaskId(t.id); setKmStep('arrival'); return;
         }
         const r = await ftReached(t.id, myId, myName, memberRole, t);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alertReached(false); await load(); }
     };
     const handleKmDone = async (skipped?: boolean) => {
         if (kmTaskId == null || !kmStep) return;
@@ -153,12 +157,19 @@ export default function FieldTasksScreen() {
             try { window.localStorage.setItem(`kmSkip_${myId}_${new Date().toLocaleDateString('en-CA')}`, `FT${kmTaskId}`); } catch { /* localStorage unavailable */ }
         }
         const r = kmStep === 'opening' ? await ftTravelStart(kmTaskId, myId, myName, memberRole, t) : await ftReached(kmTaskId, myId, myName, memberRole, t);
+        const doneStep = kmStep;
         setKmTaskId(null); setKmStep(null);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error);
+        else {
+            if (doneStep === 'opening') alert('🚗 Travel Start — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+            else alertReached(skipped);
+            await load();
+        }
     };
     const handleDone = async (t: FieldTask) => {
         const r = await ftDone(t.id, myId, myName, memberRole, t);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error);
+        else { alert('✅ Task Done — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })); await load(); }
     };
     const handleCancel = async (t: FieldTask) => {
         if (!confirm(`Cancel this task?\n\n${t.customer_name} — ${t.task_type}`)) return;
@@ -201,6 +212,7 @@ export default function FieldTasksScreen() {
         const sm = FT_STATUS_META[t.status];
         const amt = t.amount != null ? Number(t.amount) : null;
         const fmtT = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+        const fmtD = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
         return (
             <div key={t.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderLeft: `4px solid ${sm.color}`, borderRadius: 8, padding: 14, marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
@@ -210,7 +222,11 @@ export default function FieldTasksScreen() {
                             {t.task_type}{amt != null && !isNaN(amt) ? ` • ₹${amt.toLocaleString('en-IN')}` : ''}
                             {t.from_time && t.to_time && <span style={{ color: '#7c3aed', fontWeight: 700 }}> • 🕐 {t.from_time} – {t.to_time}</span>}
                         </div>
-                        {t.address && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>📍 {t.address}{t.location && <> &nbsp;<a href={`https://maps.google.com/?q=${encodeURIComponent(t.location)}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Map</a></>}</div>}
+                        {t.address ? (
+                            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>📍 {t.address}{t.location && <> &nbsp;<a href={`https://maps.google.com/?q=${encodeURIComponent(t.location)}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Map</a></>}</div>
+                        ) : t.location ? (
+                            <div style={{ fontSize: 12, marginTop: 3 }}><a href={`https://maps.google.com/?q=${encodeURIComponent(t.location)}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>📍 Open in Maps</a></div>
+                        ) : null}
                         {t.notes && <div style={{ fontSize: 12, marginTop: 4, color: '#6b7280' }}>💬 {t.notes}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -228,9 +244,9 @@ export default function FieldTasksScreen() {
                 </div>
                 {(t.travel_start_at || t.reached_at || t.done_at) && (
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6, fontSize: 11, color: '#64748b', borderTop: '1px dashed #e5e7eb', paddingTop: 6 }}>
-                        {t.travel_start_at && <span>🚗 {fmtT(t.travel_start_at)}</span>}
+                        {t.travel_start_at && <span>🚗 {fmtD(t.travel_start_at)} {fmtT(t.travel_start_at)}</span>}
                         {t.reached_at && <span>📍 {fmtT(t.reached_at)}</span>}
-                        {t.done_at && <span style={{ color: '#059669', fontWeight: 700 }}>✅ {fmtT(t.done_at)}</span>}
+                        {t.done_at && <span style={{ color: '#059669', fontWeight: 700 }}>✅ {fmtD(t.done_at)} {fmtT(t.done_at)}</span>}
                     </div>
                 )}
             </div>

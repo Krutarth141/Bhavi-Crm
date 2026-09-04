@@ -9,6 +9,7 @@ export interface AutoSiteVisitReport {
     work_done?: string;
     material_delivered?: string;
     created_by_name?: string;
+    created_by?: string;
     material_total?: number;
     created_at?: string;
     /** Visit photo URLs (index.html:21668-21673) — jsonb, sometimes a JSON string. */

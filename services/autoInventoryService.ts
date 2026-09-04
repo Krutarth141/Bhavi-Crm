@@ -61,6 +61,17 @@ export const deleteAutoInventoryItem = async (id: number): Promise<{ success: bo
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
+// index.html:19719-19741 deleteAutoInvItem() — trashPush() lets an engineer
+// restore a deleted item during the same session; this re-inserts it.
+export const restoreAutoInventoryItem = async (data: AutoInventoryItem): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { id, ...rest } = data;
+        const { error } = await supabase.from('auto_inventory').insert([rest]);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) { return { success: false, error: (err as any).message }; }
+};
+
 // One dated IN/OUT/Sell transaction: adjusts stock_qty and writes the log row.
 export const recordStockTransaction = async (params: {
     item: AutoInventoryItem;

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AutoInventoryItem, AutoInventoryForm, ImportInventoryRow } from '@/types/autoInventory';
 import {
     fetchAutoInventory, createAutoInventoryItem, updateAutoInventoryItem, deleteAutoInventoryItem,
-    recordStockTransaction, bulkStockUpdate, bulkImportInventory,
+    restoreAutoInventoryItem, recordStockTransaction, bulkStockUpdate, bulkImportInventory,
 } from '@/services/autoInventoryService';
 
 export const useAutoInventory = () => {
@@ -37,6 +37,13 @@ export const useAutoInventory = () => {
         return r;
     };
 
+    // index.html:19719-19741 deleteAutoInvItem() — session Trash restore.
+    const restore = async (data: AutoInventoryItem) => {
+        const r = await restoreAutoInventoryItem(data);
+        if (r.success) await load();
+        return r;
+    };
+
     const stockTxn = async (params: Parameters<typeof recordStockTransaction>[0]) => {
         const r = await recordStockTransaction(params);
         if (r.success) await load();
@@ -60,5 +67,5 @@ export const useAutoInventory = () => {
     const lowStock = items.filter(i => (i.stock_qty || 0) <= 2).length;
     const totalValue = items.reduce((s, i) => s + ((i.stock_qty || 0) * (i.purchase_price || 0)), 0);
 
-    return { items, loading, error, brands, categories, lowStock, totalValue, add, update, remove, stockTxn, bulkStock, bulkImport, refetch: load };
+    return { items, loading, error, brands, categories, lowStock, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport, refetch: load };
 };

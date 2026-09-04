@@ -4,11 +4,18 @@ import { EngStock, EngMovement } from '@/types/engParts';
 import { InventoryItem } from '@/types/inventory';
 import { PartRequest } from '@/types/partRequest';
 
-export function useEngParts() {
+// index.html:11226 — "My Requests" (self-service) is scoped server-side to
+// the logged-in engineer via ?engineer_id=eq.<id>&limit=100, distinct from
+// the admin view's unfiltered `requests`/`pendingRequests`. Pass the current
+// user's engineer id (matches the `engineer_id` value used when a request is
+// submitted, i.e. session email) ONLY for the self-service "My Requests" tab
+// — omit it for admin/CSP-manager full-list views.
+export function useEngParts(engineerId?: string) {
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
     const [engStock, setEngStock] = useState<EngStock[]>([]);
     const [movements, setMovements] = useState<EngMovement[]>([]);
     const [requests, setRequests] = useState<PartRequest[]>([]);
+    const [myRequests, setMyRequests] = useState<PartRequest[]>([]);
     const [engineers, setEngineers] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -43,18 +50,24 @@ export function useEngParts() {
             const [
                 { data: movementsData, error: movementsError },
                 { data: requestsData, error: requestsError },
+                myRequestsResult,
             ] = await Promise.all([
                 supabase.from('eng_movements').select('*').order('created_at', { ascending: false }).limit(500),
                 supabase.from('eng_part_requests').select('*').order('created_at', { ascending: false }).limit(200),
+                engineerId
+                    ? supabase.from('eng_part_requests').select('*').eq('engineer_id', engineerId).order('created_at', { ascending: false }).limit(100)
+                    : Promise.resolve({ data: [] as PartRequest[], error: null }),
             ]);
 
             if (movementsError) throw movementsError;
             if (requestsError) throw requestsError;
+            if (myRequestsResult.error) throw myRequestsResult.error;
 
             setInventory(inv);
             setEngStock(stock);
             setMovements(movementsData ?? []);
             setRequests(requestsData ?? []);
+            setMyRequests(myRequestsResult.data ?? []);
 
             // Derive unique sorted engineer names from eng_stock.owner
             const uniqueEngineers = [...new Set(stock.map((s) => s.owner))].sort();
@@ -65,7 +78,7 @@ export function useEngParts() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [engineerId]);
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -79,6 +92,7 @@ export function useEngParts() {
         engStock,
         movements,
         requests,
+        myRequests,
         engineers,
         pendingRequests,
         loading,

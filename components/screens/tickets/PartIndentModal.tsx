@@ -36,6 +36,11 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
     const [note, setNote] = useState('');
     const [addedCount, setAddedCount] = useState(0);
     const [saving, setSaving] = useState(false);
+    // Warranty/Chargeable prompt (index.html:7468-7484, askWarrantyOrChargeable)
+    // — shown when a Consumable-flagged part is added on a Warranty call that
+    // isn't already Out of Coverage. Holds the in-flight save's args so the
+    // chosen answer can re-drive savePartIndent.
+    const [chargePrompt, setChargePrompt] = useState<{ addAnother: boolean; partLabel: string } | null>(null);
 
     const handleSearch = async (v: string) => {
         setQuery(v); setCode('');
@@ -47,12 +52,16 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
         setCode(p.code); setName(p.name); setStock(p.stock); setResults([]); setQuery(p.code || p.name);
     };
 
-    const save = async (addAnother: boolean) => {
+    const save = async (addAnother: boolean, chargeableChoice?: boolean) => {
         if (!code || !name) { alert('Please select a part'); return; }
         const q = parseInt(qty, 10) || 1;
         setSaving(true);
-        const r = await savePartIndent(ticket, { code, name, qty: q, note }, byUser, isEngineerOnSite);
+        const r = await savePartIndent(ticket, { code, name, qty: q, note }, byUser, isEngineerOnSite, chargeableChoice);
         setSaving(false);
+        if (r.needsChargeableChoice) {
+            setChargePrompt({ addAnother, partLabel: r.partLabel || name || code });
+            return;
+        }
         if (!r.success) { alert('Error: ' + r.error); return; }
         if (addAnother) {
             setAddedCount((c) => c + 1);
@@ -67,6 +76,13 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
             alert(statusMsg);
             onDone(r.newStatus || '');
         }
+    };
+
+    const resolveChargePrompt = (chargeable: boolean) => {
+        if (!chargePrompt) return;
+        const { addAnother } = chargePrompt;
+        setChargePrompt(null);
+        save(addAnother, chargeable);
     };
 
     return (
@@ -116,6 +132,21 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
                     <button onClick={() => save(false)} disabled={saving} style={{ flex: 1, padding: '8px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : '📦 Done'}</button>
                 </div>
             </div>
+            {/* Warranty/Chargeable prompt — index.html:7468-7484 askWarrantyOrChargeable */}
+            {chargePrompt && (
+                <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: 360, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                        <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ {chargePrompt.partLabel}</h3>
+                        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+                            This part can be either free (genuine Canon defect) or chargeable (customer-caused damage). Which applies to THIS call?
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <button onClick={() => resolveChargePrompt(false)} style={{ padding: 12, background: '#f0fdf4', border: '1.5px solid #059669', borderRadius: 10, color: '#059669', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>🛡️ Under Warranty (Free)</button>
+                            <button onClick={() => resolveChargePrompt(true)} style={{ padding: 12, background: '#fef2f2', border: '1.5px solid #dc2626', borderRadius: 10, color: '#dc2626', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>💰 Chargeable (Customer Pays)</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

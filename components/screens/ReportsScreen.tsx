@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useReports } from '@/hooks/useReports';
 import { REPORT_TABS } from '@/types/reports';
@@ -46,17 +47,47 @@ export default function ReportsScreen() {
     // actions
     handleDownload,
     handlePrint,
+    // retry (loading-timeout safeguard)
+    retryTickets,
+    retryDaily,
+    retryWc,
   } = useReports();
+
+  // ── Loading-timeout safeguard (index.html:9230-9236 switchReportTab) ───────
+  const isTicketTab = activeTab === 'filter' || activeTab === 'revenue';
+  const currentTabLoading =
+    (isTicketTab && ticketsLoading) ||
+    (activeTab === 'daily' && dailyLoading) ||
+    (activeTab === 'wcdaily' && wcLoading);
+
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+
+  useEffect(() => {
+    setLoadTimedOut(false);
+    const timer = setTimeout(() => setLoadTimedOut(true), 10000);
+    return () => clearTimeout(timer);
+  }, [activeTab, retryTick]);
+
+  const handleRetryLoad = () => {
+    setLoadTimedOut(false);
+    setRetryTick((t) => t + 1);
+    if (isTicketTab) retryTickets();
+    else if (activeTab === 'daily') retryDaily();
+    else if (activeTab === 'wcdaily') retryWc();
+  };
 
   return (
     <div className="content-section">
       {/* Header */}
       <div className="section-header">
         <h2>📈 Reports</h2>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-outline btn-sm" onClick={handleDownload}>📊 Excel</button>
-          <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ Print</button>
-        </div>
+        {activeTab === 'filter' && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-outline btn-sm" onClick={handleDownload}>📊 Excel</button>
+            <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ Print</button>
+          </div>
+        )}
       </div>
 
       {/* Tab Bar */}
@@ -84,8 +115,12 @@ export default function ReportsScreen() {
         ))}
       </div>
 
-      {/* Loading state for ticket-based tabs */}
-      {ticketsLoading && ['filter', 'revenue'].includes(activeTab) ? (
+      {/* Loading state for ticket-based tabs, with a 10s timeout + retry safeguard */}
+      {currentTabLoading && loadTimedOut ? (
+        <div className="alert alert-warning">
+          ⚠️ Loading timeout. <button className="btn btn-sm btn-primary" onClick={handleRetryLoad}>🔄 Retry</button>
+        </div>
+      ) : ticketsLoading && ['filter', 'revenue'].includes(activeTab) ? (
         <p className="loading">Loading report data...</p>
       ) : (
         <>

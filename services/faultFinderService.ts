@@ -6,7 +6,8 @@ export const fetchFaultKnowledge = async (): Promise<FaultKnowledge[]> => {
         const { data, error } = await supabase
             .from('fault_knowledge')
             .select('*')
-            .order('model_name');
+            .order('model_name')
+            .limit(2000);
         if (error) throw error;
         return data || [];
     } catch (err) {
@@ -16,7 +17,8 @@ export const fetchFaultKnowledge = async (): Promise<FaultKnowledge[]> => {
 };
 
 export const createFaultKnowledge = async (
-    form: FaultKnowledgeForm
+    form: FaultKnowledgeForm,
+    byUser?: string
 ): Promise<{ success: boolean; error?: string }> => {
     try {
         const { error } = await supabase.from('fault_knowledge').insert([{
@@ -26,6 +28,7 @@ export const createFaultKnowledge = async (
             solution: form.solution.trim() || null,
             part_required: form.part_required.trim() || null,
             severity: form.severity,
+            created_by: byUser || '',
         }]);
         if (error) throw error;
         return { success: true };
@@ -82,7 +85,8 @@ export const deleteFaultKnowledge = async (id: string): Promise<{ success: boole
 };
 
 export const bulkImportFaultKnowledge = async (
-    rows: { model_name: string; fault_type: string; description: string; solution: string; part_required: string; severity: string }[]
+    rows: { model_name: string; fault_type: string; description: string; solution: string; part_required: string; severity: string }[],
+    byUser?: string
 ): Promise<{ ok: number; fail: number }> => {
     let ok = 0, fail = 0;
     for (const row of rows) {
@@ -92,6 +96,7 @@ export const bulkImportFaultKnowledge = async (
                 model_name: row.model_name, fault_type: row.fault_type,
                 description: row.description || null, solution: row.solution || null,
                 part_required: row.part_required || null, severity: row.severity || 'Medium',
+                created_by: byUser || 'Import',
             }]);
             if (error) throw error;
             ok++;

@@ -46,8 +46,8 @@ type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'my-report' | 'reports
 const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
     { id: 'overview', label: '📊 Overview' },
     { id: 'my-calls', label: '📞 My Calls' },
-    { id: 'work-log', label: '🗒️ Work Log' },
-    { id: 'my-report', label: '📈 My Reports' },
+    { id: 'work-log', label: '🕐 Work Log' },
+    { id: 'my-report', label: '📊 My Report' },
     { id: 'attendance', label: '🗓️ Attendance' },
     { id: 'km-report', label: '🛣️ KM Tracking' },
     { id: 'payment-collection', label: '💰 Payment Collection' },
@@ -102,6 +102,7 @@ export default function EngineerDashboard() {
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
     const [pendingTicketId, setPendingTicketId] = useState<string | null>(null);
+    const [pendingSwSite, setPendingSwSite] = useState<{ siteId: number | null; siteName: string | null } | null>(null);
 
     const handleNavClick = (id: EngineerTab) => {
         setActiveTab(id);
@@ -110,11 +111,12 @@ export default function EngineerDashboard() {
 
     useEffect(() => {
         const onNavigate = (e: Event) => {
-            const detail = (e as CustomEvent<{ tab: EngineerTab; ticketId?: string }>).detail;
+            const detail = (e as CustomEvent<{ tab: EngineerTab; ticketId?: string; siteId?: number; siteName?: string }>).detail;
             const tab = detail?.tab;
             if (tab && (allNavItems.some((n) => n.id === tab) || tab === 'pending')) {
                 setActiveTab(tab);
                 if (tab === 'my-calls' && detail?.ticketId) setPendingTicketId(detail.ticketId);
+                if (tab === 'sw-survey' && detail?.siteId != null) setPendingSwSite({ siteId: detail.siteId, siteName: detail.siteName ?? null });
             }
         };
         window.addEventListener('bhavi:navigate-tab', onNavigate);
@@ -146,7 +148,7 @@ export default function EngineerDashboard() {
             case 'amc': return cspMgr ? <AMCScreen /> : null;
             case 'work-log-report': return cspMgr ? <WorkLogScreen /> : null;
             case 'auto-sites': return autoEng ? <AutoSitesScreen /> : null;
-            case 'sw-survey': return autoEng ? <SwSurveyScreen /> : null;
+            case 'sw-survey': return autoEng ? <SwSurveyScreen initialSiteId={pendingSwSite?.siteId ?? null} initialSiteName={pendingSwSite?.siteName ?? null} onConsumedInitialSite={() => setPendingSwSite(null)} /> : null;
             case 'auto-visits-report': return autoEng ? <AutoVisitsReportScreen /> : null;
             case 'auto-inventory': return autoEng ? <AutoInventoryScreen /> : null;
             default: return null;

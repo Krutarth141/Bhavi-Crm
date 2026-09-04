@@ -9,16 +9,30 @@ const todayStr = () => new Date().toLocaleDateString('en-CA');
 
 const badgeStyle = (bg: string, color: string): React.CSSProperties => ({ background: bg, color, padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700, display: 'inline-block' });
 
+// index.html:3102-3106 — Urgent/High are font-weight:700, the default Normal badge is font-weight:600.
 const priorityBadge = (p?: string) => {
     if (p === 'Urgent') return <span style={badgeStyle('#fef2f2', '#dc2626')}>🔴 Urgent</span>;
     if (p === 'High') return <span style={badgeStyle('#fef9c3', '#d97706')}>🟡 High</span>;
-    return <span style={badgeStyle('#f1f5f9', '#64748b')}>⚪ Normal</span>;
+    return <span style={{ ...badgeStyle('#f1f5f9', '#64748b'), fontWeight: 600 }}>⚪ Normal</span>;
 };
+
+// Matches HTML's shared `.badge` class (index.html:50): padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600.
+const statusBadgeStyle = (bg: string, color: string, border?: string): React.CSSProperties => ({
+    background: bg,
+    color,
+    padding: '3px 10px',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    display: 'inline-block',
+    ...(border ? { border } : {}),
+});
 
 const moveBtnStyle: React.CSSProperties = { background: '#f1f5f9', border: '1px solid #e5e7eb', borderRadius: 4, width: 26, height: 26, cursor: 'pointer', fontSize: 12, marginRight: 4 };
 
-// Mirrors HTML's statusBadge() color map (index.html:3098-3101).
-const STATUS_COLORS: Record<string, [string, string]> = {
+// Mirrors HTML's statusBadge() color map (index.html:3098-3101); badge-msc and
+// badge-delivery (index.html:263-264) additionally carry a 1px border.
+const STATUS_COLORS: Record<string, [string, string, string?]> = {
     'Pending Customer Arrival': ['#ffe4e6', '#be123c'],
     'Pending Allocation': ['#ffe4e6', '#be123c'],
     Assigned: ['#dbeafe', '#1d4ed8'],
@@ -34,22 +48,23 @@ const STATUS_COLORS: Record<string, [string, string]> = {
     'Pending Repair Carry In': ['#fef3c7', '#d97706'],
     'Pending Repair On Site': ['#fef3c7', '#d97706'],
     Repaired: ['#fef3c7', '#d97706'],
-    'Sent to MSC': ['#dbeafe', '#1e40af'],
-    'Pending for Delivery': ['#dcfce7', '#166534'],
+    'Sent to MSC': ['#dbeafe', '#1e40af', '1px solid #bfdbfe'],
+    'Pending for Delivery': ['#dcfce7', '#166534', '1px solid #86efac'],
     'Resolved By Phone': ['#d1fae5', '#065f46'],
 };
 const statusBadge = (s?: string) => {
-    const [bg, color] = STATUS_COLORS[s || ''] || ['#dbeafe', '#1d4ed8'];
-    return <span style={badgeStyle(bg, color)}>{s || 'Open'}</span>;
+    const [bg, color, border] = STATUS_COLORS[s || ''] || ['#dbeafe', '#1d4ed8'];
+    return <span style={statusBadgeStyle(bg, color, border)}>{s || 'Open'}</span>;
 };
 
 export default function RoutePlanningScreen() {
-    const { engineers } = useEngineers();
+    const { activeEngineers } = useEngineers();
     const [engId, setEngId] = useState('');
     const [date, setDate] = useState(todayStr());
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveFailed, setSaveFailed] = useState(false);
     const [loaded, setLoaded] = useState(false);
 
     const handleLoad = async () => {
@@ -62,6 +77,7 @@ export default function RoutePlanningScreen() {
         setTickets([...forDate, ...other]);
         setLoaded(true);
         setLoading(false);
+        setSaveFailed(false);
     };
 
     const move = (id: string, dir: number) => {
@@ -94,8 +110,16 @@ export default function RoutePlanningScreen() {
         setSaving(true);
         const r = await saveRoutePlan(tickets, date);
         setSaving(false);
-        if (r.success) alert('✅ Route saved!\nEngineer will see calls in this sequence.');
-        else alert('Error: ' + r.error);
+        if (r.success) {
+            setSaveFailed(false);
+            alert('✅ Route saved!\nEngineer will see calls in this sequence.');
+        } else {
+            // index.html:27130-27131 — on error the button label reverts to plain
+            // "💾 Save Route" (no date suffix), it only regains the suffix via a
+            // fresh render (i.e. the next successful load/save).
+            setSaveFailed(true);
+            alert('Error: ' + r.error);
+        }
     };
 
     const dateLabel = date ? new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -110,7 +134,7 @@ export default function RoutePlanningScreen() {
                         <label style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 4 }}>Engineer</label>
                         <select value={engId} onChange={(e) => setEngId(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, width: '100%' }}>
                             <option value="">-- Select Engineer --</option>
-                            {engineers.map((e) => (<option key={e.id} value={e.user_id}>{e.name}</option>))}
+                            {activeEngineers.map((e) => (<option key={e.id} value={e.user_id}>{e.name}</option>))}
                         </select>
                     </div>
                     <div style={{ minWidth: 160 }}>
@@ -134,7 +158,7 @@ export default function RoutePlanningScreen() {
                                 <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>▲▼ to set order → Save → Engineer will see calls in this sequence</div>
                             </div>
                             <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-                                {saving ? 'Saving...' : `💾 Save Route — ${dateLabel}`}
+                                {saving ? 'Saving...' : saveFailed ? '💾 Save Route' : `💾 Save Route — ${dateLabel}`}
                             </button>
                         </div>
                         <div style={{ overflowX: 'auto' }}>

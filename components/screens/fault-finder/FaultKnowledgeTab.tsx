@@ -8,24 +8,22 @@ import { bulkImportFaultKnowledge } from '@/services/faultFinderService';
 interface Props {
     faults: FaultKnowledge[];
     isAdmin: boolean;
-    onAdd: (form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
+    currentUserName?: string;
+    onAdd: (form: FaultKnowledgeForm, byUser?: string) => Promise<{ success: boolean; error?: string }>;
     onEdit: (id: string, form: FaultKnowledgeForm) => Promise<{ success: boolean; error?: string }>;
     onDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
     onRefetch: () => Promise<void>;
 }
 
+// index.html:28464,28477 — plain colored text, no background pill.
 const SeverityBadge = ({ s }: { s?: string }) => {
-    const map: Record<string, { bg: string; color: string }> = {
-        Low: { bg: '#d1fae5', color: '#065f46' }, Medium: { bg: '#fef3c7', color: '#92400e' },
-        High: { bg: '#fee2e2', color: '#991b1b' }, Critical: { bg: '#fce7f3', color: '#9d174d' },
-    };
-    const st = map[s || ''] || { bg: '#f3f4f6', color: '#374151' };
-    return s ? <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color }}>{s}</span> : null;
+    const map: Record<string, string> = { Low: '#059669', Medium: '#d97706', High: '#dc2626', Critical: '#7c3aed' };
+    return s ? <span style={{ fontSize: 12, fontWeight: 700, color: map[s] || '#374151' }}>{s}</span> : null;
 };
 
 const fieldStyle = { width: '100%', padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' as const, fontFamily: 'inherit' };
 
-export default function FaultKnowledgeTab({ faults, isAdmin, onAdd, onEdit, onDelete, onRefetch }: Props) {
+export default function FaultKnowledgeTab({ faults, isAdmin, currentUserName, onAdd, onEdit, onDelete, onRefetch }: Props) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState<FaultKnowledgeForm>(emptyFaultForm);
@@ -47,7 +45,7 @@ export default function FaultKnowledgeTab({ faults, isAdmin, onAdd, onEdit, onDe
     const handleSave = async () => {
         if (!form.model_name.trim() || !form.fault_type.trim()) { alert('Model name and fault type required'); return; }
         setSaving(true);
-        const result = editingId ? await onEdit(editingId, form) : await onAdd(form);
+        const result = editingId ? await onEdit(editingId, form) : await onAdd(form, currentUserName);
         if (result.success) cancelForm();
         else alert('Error: ' + result.error);
         setSaving(false);
@@ -88,7 +86,7 @@ export default function FaultKnowledgeTab({ faults, isAdmin, onAdd, onEdit, onDe
                 part_required: String(r.part_required || r['Part Required'] || '').trim(),
                 severity: String(r.severity || r['Severity'] || 'Medium').trim(),
             }));
-            const { ok, fail } = await bulkImportFaultKnowledge(rows);
+            const { ok, fail } = await bulkImportFaultKnowledge(rows, currentUserName);
             alert(`✅ Import complete!\nSuccess: ${ok}\nFailed: ${fail}`);
             if (importRef.current) importRef.current.value = '';
             await onRefetch();
@@ -107,6 +105,7 @@ export default function FaultKnowledgeTab({ faults, isAdmin, onAdd, onEdit, onDe
 
     return (
         <div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>📚 Knowledge Base ({faults.length} entries)</div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={downloadTemplate} style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>📄 Template</button>
                 {/* index.html:28314 — Import Excel is admin-only; Add Fault/Template
