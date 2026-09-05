@@ -8,6 +8,7 @@ import { WalkInEntry } from '@/types/walkin';
 import { useWalkIn } from '@/hooks/useWalkIn';
 import { updateWalkIn, deleteWalkIn } from '@/services/walkInService';
 import { colors, styles } from '@/styles/ticketsStyles';
+import CreateJobModal from './walkin/CreateJobModal';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA');
@@ -16,6 +17,16 @@ function getToday(): string {
 const PRODUCT_TYPE_COLORS: Record<string, string> = {
   Inward: '#1d4ed8', Outward: '#0e9f6e', Other: '#7c3aed', Purchase: '#d97706', 'For Checking Only': '#0369a1',
 };
+
+const hasServiceProduct = (entry: WalkInEntry) =>
+  (entry.products || []).some((p) => p.type === 'Inward' || p.type === 'For Checking Only');
+
+// Mirrors HTML's downloadWalkInExcel (index.html:17722-17771) — DD-MM-YYYY dates.
+function fmtExcelDate(d?: string | null): string {
+  if (!d) return '';
+  const parts = d.split('-');
+  return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : d;
+}
 
 export default function WalkInReportScreen() {
   const { data: session } = useSession();
@@ -53,20 +64,23 @@ export default function WalkInReportScreen() {
 
   const filteredResults = useMemo(() => (wcFilter ? results.filter((r) => r.wc_id === wcFilter) : results), [results, wcFilter]);
 
-  // Mirrors HTML's mkCard KPI breakdown (Inward/Outward/Other × Customers/Products + totals).
+  // Mirrors HTML's mkCard KPI breakdown (index.html:17550-17559) — only an
+  // exact type==='Inward' counts as Inward; everything that isn't Inward or
+  // Outward (Other, Purchase, *and* For Checking Only) counts as Other.
   const kpis = useMemo(() => {
     const k = { inwardCusts: 0, inwardProds: 0, outwardCusts: 0, outwardProds: 0, otherCusts: 0, otherProds: 0 };
     filteredResults.forEach((entry) => {
       const products = entry.products || [];
-      const hasIn = products.some((p) => p.type === 'Inward' || p.type === 'For Checking Only');
+      const hasIn = products.some((p) => (p.type || 'Inward') === 'Inward');
       const hasOut = products.some((p) => p.type === 'Outward');
-      const hasOther = products.some((p) => p.type === 'Other' || p.type === 'Purchase');
+      const hasOther = products.some((p) => p.type !== 'Inward' && p.type !== 'Outward');
       if (hasIn) k.inwardCusts++;
       if (hasOut) k.outwardCusts++;
       if (hasOther) k.otherCusts++;
       products.forEach((p) => {
-        if (p.type === 'Inward' || p.type === 'For Checking Only') k.inwardProds++;
-        else if (p.type === 'Outward') k.outwardProds++;
+        const t = p.type || 'Inward';
+        if (t === 'Inward') k.inwardProds++;
+        else if (t === 'Outward') k.outwardProds++;
         else k.otherProds++;
       });
     });
@@ -80,6 +94,11 @@ export default function WalkInReportScreen() {
   }, [filteredResults]);
 
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [jobEntry, setJobEntry] = useState<WalkInEntry | null>(null);
+  const [editCust, setEditCust] = useState<WalkInEntry | null>(null);
+  const [custForm, setCustForm] = useState({ name: '', mobile: '', address: '', city: '', state: '', pin: '' });
+  const [custSaving, setCustSaving] = useState(false);
+
   const handleDeparture = async (entry: WalkInEntry) => {
     setBusyId(entry.id);
     const r = await updateWalkIn(entry.id, { departure_time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
@@ -96,27 +115,82 @@ export default function WalkInReportScreen() {
     await handleSearch();
   };
 
+  // Click-to-edit customer name — mirrors HTML's viewWalkInCustomer /
+  // saveWalkInCustomer (index.html:17648-17707).
+  const openCustEdit = (entry: WalkInEntry) => {
+    setEditCust(entry);
+    setCustForm({
+      name: entry.customer_name || '', mobile: entry.mobile || '', address: entry.address || '',
+      city: entry.city || '', state: entry.state || '', pin: entry.pin || '',
+    });
+  };
+  const saveCustEdit = async () => {
+    if (!editCust) return;
+    if (!custForm.name.trim()) { alert('Customer name required'); return; }
+    setCustSaving(true);
+    const r = await updateWalkIn(editCust.id, {
+      customer_name: custForm.name.trim(), mobile: custForm.mobile.trim(), address: custForm.address.trim(),
+      city: custForm.city.trim(), state: custForm.state.trim(), pin: custForm.pin.trim(),
+    });
+    setCustSaving(false);
+    if (!r.success) { alert('Error saving: ' + r.error); return; }
+    setEditCust(null);
+    await handleSearch();
+  };
+
+  // Mirrors HTML's downloadWalkInExcel (index.html:17722-17771) — an "All
+  // Walk-ins" sheet plus one sheet per WC, one row per product.
   const handleExportExcel = () => {
     if (filteredResults.length === 0) {
       alert('No data to export');
       return;
     }
 
-    const rows = filteredResults.map((entry) => ({
-      'Token #': entry.token_no,
-      'Visit Date': entry.visit_date,
-      'Customer Name': entry.customer_name,
-      'Mobile': entry.mobile,
-      'Arrival Time': entry.arrival_time || '',
-      'Departure Time': entry.departure_time || '',
-      'Work Controller': entry.wc_name || '',
-      'Products Count': entry.products?.length ?? 0,
-    }));
+    const buildRows = (entries: WalkInEntry[]) => {
+      const rows: any[] = [];
+      entries.forEach((l) => {
+        const products = l.products || [];
+        if (!products.length) {
+          rows.push({
+            Date: fmtExcelDate(l.visit_date), Customer: l.customer_name, Mobile: l.mobile,
+            Arrival: l.arrival_time, Departure: l.departure_time || '', Brand: '', Model: '',
+            Type: '', 'Warranty/Sub-type': '', Remarks: '', WC: l.wc_name || '',
+          });
+        } else {
+          products.forEach((p) => {
+            const secVal = p.type === 'Purchase' ? (p.subtype || '') : p.type === 'For Checking Only' ? (p.subtype || p.warranty || '') : (p.warranty || '');
+            rows.push({
+              Date: fmtExcelDate(l.visit_date), Customer: l.customer_name, Mobile: l.mobile,
+              Arrival: l.arrival_time, Departure: l.departure_time || '', Brand: p.brand || '',
+              Model: p.model || '', Type: p.type || '', 'Warranty/Sub-type': secVal, Remarks: p.remarks || '', WC: l.wc_name || '',
+            });
+          });
+        }
+      });
+      return rows;
+    };
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Walk-in Report');
-    XLSX.writeFile(workbook, 'walk_in_report.xlsx');
+    const cols = [{ wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 30 }, { wch: 18 }];
+
+    const wb = XLSX.utils.book_new();
+
+    const wsAll = XLSX.utils.json_to_sheet(buildRows(filteredResults));
+    wsAll['!cols'] = cols;
+    XLSX.utils.book_append_sheet(wb, wsAll, 'All Walk-ins');
+
+    const byWC: Record<string, WalkInEntry[]> = {};
+    filteredResults.forEach((l) => {
+      const k = l.wc_name || l.wc_id || 'Unknown';
+      (byWC[k] ||= []).push(l);
+    });
+    Object.entries(byWC).forEach(([wcName, wcLogs]) => {
+      const ws = XLSX.utils.json_to_sheet(buildRows(wcLogs));
+      ws['!cols'] = cols;
+      const sheetName = wcName.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    XLSX.writeFile(wb, `walkin_log_${getToday()}.xlsx`);
   };
 
   return (
@@ -252,13 +326,22 @@ export default function WalkInReportScreen() {
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>
                         <span style={{ background: '#1d4ed8', color: '#fff', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 5, marginRight: 6 }}>#{entry.token_no}</span>
-                        {entry.customer_name} <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 400 }}>{entry.mobile}</span>
+                        <span onClick={() => openCustEdit(entry)} style={{ cursor: 'pointer', color: colors.primary, textDecoration: 'underline' }}>{entry.customer_name}</span>{' '}
+                        <span style={{ color: colors.textMuted, fontSize: 12, fontWeight: 400 }}>{entry.mobile}</span>
                       </div>
                       <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
                         🕐 In: <b>{entry.arrival_time}</b>{entry.departure_time ? <> {' | '}Out: <b>{entry.departure_time}</b></> : <> {' | '}<span style={{ color: '#f59e0b' }}>Still in office</span></>}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {hasServiceProduct(entry) && !entry.job_id && (
+                        <button onClick={() => setJobEntry(entry)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          🔧 Create Job
+                        </button>
+                      )}
+                      {entry.job_id && (
+                        <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>✅ {entry.job_id}</span>
+                      )}
                       {!entry.departure_time ? (
                         <button onClick={() => handleDeparture(entry)} disabled={busyId === entry.id} style={{ background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600, opacity: busyId === entry.id ? 0.6 : 1 }}>
                           ⏰ Departure
@@ -292,6 +375,55 @@ export default function WalkInReportScreen() {
           ))}
         </>
       ) : null}
+
+      {jobEntry && (
+        <CreateJobModal entry={jobEntry} onClose={() => setJobEntry(null)} onCreated={handleSearch} />
+      )}
+
+      {editCust && (
+        <div style={styles.modalOverlay} onClick={() => setEditCust(null)}>
+          <div style={{ ...styles.modal, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>👤 Customer Details</h2>
+              <button style={styles.closeBtn} onClick={() => setEditCust(null)}>✕</button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={styles.formLabel}>CUSTOMER NAME</label>
+                <input value={custForm.name} onChange={(e) => setCustForm((p) => ({ ...p, name: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div>
+                <label style={styles.formLabel}>MOBILE NO</label>
+                <input value={custForm.mobile} onChange={(e) => setCustForm((p) => ({ ...p, mobile: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div>
+                <label style={styles.formLabel}>ADDRESS</label>
+                <input value={custForm.address} onChange={(e) => setCustForm((p) => ({ ...p, address: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={styles.formLabel}>CITY</label>
+                  <input value={custForm.city} onChange={(e) => setCustForm((p) => ({ ...p, city: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>STATE</label>
+                  <input value={custForm.state} onChange={(e) => setCustForm((p) => ({ ...p, state: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>PIN CODE</label>
+                  <input value={custForm.pin} onChange={(e) => setCustForm((p) => ({ ...p, pin: e.target.value }))} style={styles.formInput} />
+                </div>
+              </div>
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={() => setEditCust(null)}>Cancel</button>
+              <button style={{ ...styles.btn, ...styles.btnPrimary, opacity: custSaving ? 0.7 : 1 }} onClick={saveCustEdit} disabled={custSaving}>
+                {custSaving ? 'Saving...' : '💾 Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

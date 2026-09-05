@@ -4,6 +4,7 @@ import {
     fetchDailyReports,
     fetchWCDailyReports,
     importTickets,
+    enrichTicketsWithKm,
     ImportResult,
 } from '@/services/reportsService';
 import {
@@ -12,15 +13,7 @@ import {
     WCDailyReport,
     ImportRow,
     TicketFinancials,
-    ReportFilters,
-    EngineerStat,
-    BarChartItem,
-    ReportType,
     ReportTab,
-    STATUS_OPTIONS,
-    CALL_TYPE_OPTIONS,
-    STATUS_COLORS,
-    CALL_TYPE_COLORS,
     VALID_IMPORT_CALL_TYPES,
     VALID_IMPORT_SERVICE_TYPES,
     VALID_IMPORT_STATUSES,
@@ -43,50 +36,110 @@ export function getTicketFinancials(t: Ticket): TicketFinancials {
     return { partsTotal, partsNames, svc, other, final, grand };
 }
 
-function getReportDates(period: string, customFrom: string, customTo: string) {
-    const now = new Date();
-    let from = new Date(0);
-    let to = new Date();
-    to.setHours(23, 59, 59, 999);
+// ─── Engineer's "closed" date (index.html:9467-9517 _engClosedDate) ───────────
+// The date a call is "closed" from the engineer's side: the timeline entry
+// where the engineer set a real completion status (Closed, Repaired, Pending
+// for Delivery, Resolved By Phone — never Delivered/Invoice, which happen
+// later) or, failing that, rejected the customer's estimate. A Back-Date
+// close carries its real close date in the note text.
+interface TlEntry { action?: string; at?: string; note?: string }
 
-    if (period === 'today') {
-        from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else if (period === 'week') {
-        from = new Date(now);
-        from.setDate(now.getDate() - now.getDay());
-        from.setHours(0, 0, 0, 0);
-    } else if (period === 'month') {
-        from = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (period === 'year') {
-        from = new Date(now.getFullYear(), 0, 1);
-    } else if (period === 'all') {
-        from = new Date('2020-01-01');
-    } else if (period === 'custom' && customFrom && customTo) {
-        from = new Date(customFrom);
-        to = new Date(customTo);
-        to.setHours(23, 59, 59, 999);
+const COMPLETION_ACTIONS = ['Closed', 'Repaired', 'Pending for Delivery', 'Resolved By Phone'];
+
+function tlEntryDate(e: TlEntry | null): string | null {
+    if (!e) return null;
+    if (e.action?.includes('Back-Date') && e.note) {
+        const m = String(e.note).match(/for\s+(\d{4}-\d{2}-\d{2})/);
+        if (m) return m[1];
     }
-    return { from, to };
+    return e.at ? new Date(e.at).toLocaleDateString('en-CA') : null;
 }
 
-function applyFilters(
-    tickets: Ticket[],
-    period: string,
-    customFrom: string,
-    customTo: string,
-    filters: ReportFilters
-): Ticket[] {
-    const { from, to } = getReportDates(period, customFrom, customTo);
-    return tickets.filter((t) => {
-        const d = t.created_at ? new Date(t.created_at) : null;
-        if (d && (d < from || d > to)) return false;
-        if (filters.status && t.status !== filters.status) return false;
-        if (filters.service && t.service_type !== filters.service) return false;
-        if (filters.calltype && t.call_type !== filters.calltype) return false;
-        if (filters.engineer && t.assigned_name !== filters.engineer) return false;
-        if (filters.city && !(t.city || '').toLowerCase().includes(filters.city.toLowerCase().trim())) return false;
-        return true;
+function engCompletionEntry(tl: TlEntry[]): TlEntry | null {
+    let last: TlEntry | null = null;
+    tl.forEach((e) => {
+        if (!e?.action || !e?.at) return;
+        if (e.action.includes('Delivered') || e.action.includes('Invoice')) return;
+        if (COMPLETION_ACTIONS.some((c) => e.action!.includes(c))) last = e;
     });
+    if (!last) {
+        tl.forEach((e) => { if (e?.action?.includes('Charges Set') && e?.at) last = e; });
+    }
+    return last;
+}
+
+function engRejectEntry(tl: TlEntry[]): TlEntry | null {
+    let last: TlEntry | null = null;
+    tl.forEach((e) => { if (e?.action?.includes('Reject') && e?.at) last = e; });
+    return last;
+}
+
+function engClosedDate(t: Ticket): string | null {
+    const tl = (t.timeline || []) as TlEntry[];
+    return tlEntryDate(engCompletionEntry(tl) || engRejectEntry(tl));
+}
+
+// ─── Filter tab (index.html:9379-9604 renderReportFilter/runFilteredReport) ──
+
+export interface FilterSearchFields {
+    dateType: 'created' | 'closed';
+    from: string;
+    to: string;
+    engineer: string;
+    model: string;
+    callType: string;
+    status: string;
+    customer: string;
+    city: string;
+    service: string;
+}
+
+export const DEFAULT_FILTER_FIELDS: FilterSearchFields = {
+    dateType: 'created',
+    from: '',
+    to: '',
+    engineer: '',
+    model: '',
+    callType: '',
+    status: '',
+    customer: '',
+    city: '',
+    service: '',
+};
+
+function computeFilteredResults(all: Ticket[], f: FilterSearchFields): Ticket[] {
+    let list = all.slice();
+
+    if (f.dateType === 'closed') {
+        // index.html:9553-9563 — keep only tickets whose ENGINEER COMPLETION
+        // date falls in range (never Delivered/Invoice dates).
+        list = list.filter((t) => {
+            const d = engClosedDate(t);
+            if (!d) return false;
+            return (!f.from || d >= f.from) && (!f.to || d <= f.to);
+        });
+    } else {
+        list = list.filter((t) => {
+            if (!t.created_at) return false;
+            if (f.from && new Date(t.created_at) < new Date(`${f.from}T00:00:00`)) return false;
+            if (f.to && new Date(t.created_at) > new Date(`${f.to}T23:59:59`)) return false;
+            return true;
+        });
+    }
+
+    if (f.engineer) list = list.filter((t) => t.assigned_name === f.engineer);
+    if (f.model) list = list.filter((t) => (t.model || '').toLowerCase().includes(f.model.toLowerCase().trim()));
+    if (f.callType) list = list.filter((t) => t.call_type === f.callType);
+    if (f.status) list = list.filter((t) => t.status === f.status);
+    if (f.service) list = list.filter((t) => t.service_type === f.service);
+    // index.html:9566 — customer text matches name OR mobile
+    if (f.customer) {
+        const q = f.customer.toLowerCase();
+        list = list.filter((t) => (t.cname || '').toLowerCase().includes(q) || (t.mobile || '').includes(f.customer));
+    }
+    if (f.city) list = list.filter((t) => (t.city || '').toLowerCase().includes(f.city.toLowerCase()));
+
+    return list;
 }
 
 // ─── Import validation (matches HTML source) ──────────────────────────────────
@@ -142,18 +195,10 @@ export function useReports() {
     const [wcLoading, setWcLoading] = useState(false);
     const [wcLoaded, setWcLoaded] = useState(false);
 
-    // ── Filter & Download state ───────────────────────────────────────────────
-    const [period, setPeriod] = useState('month');
-    const [customFrom, setCustomFrom] = useState('');
-    const [customTo, setCustomTo] = useState('');
-    const [filters, setFilters] = useState<ReportFilters>({
-        status: '',
-        service: '',
-        calltype: '',
-        engineer: '',
-        city: '',
-    });
-    const [reportType, setReportType] = useState<ReportType>('tickets');
+    // ── Filter & Download state (index.html:9379-9465 renderReportFilter) ────
+    const [filterFields, setFilterFields] = useState<FilterSearchFields>(DEFAULT_FILTER_FIELDS);
+    const [filterSearched, setFilterSearched] = useState(false);
+    const [filterResults, setFilterResults] = useState<Ticket[]>([]);
 
     // ── Import state ──────────────────────────────────────────────────────────
     const [importProgress, setImportProgress] = useState(0);
@@ -200,57 +245,29 @@ export function useReports() {
     const retryDaily = useCallback(() => { setDailyLoaded(false); }, []);
     const retryWc = useCallback(() => { setWcLoaded(false); }, []);
 
-    // ── Derived ticket data ───────────────────────────────────────────────────
-    const filtered = useMemo(
-        () => applyFilters(allTickets, period, customFrom, customTo, filters),
-        [allTickets, period, customFrom, customTo, filters]
+    // ── Engineers list (for Filter tab's Engineer dropdown) ───────────────────
+    const engineers = useMemo(
+        () => [...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean))] as string[],
+        [allTickets]
     );
 
-    const totalClosed = filtered.filter((t) => t.status === 'Closed').length;
-    const totalRevenue = filtered.reduce((a, t) => a + getTicketFinancials(t).grand, 0);
+    // ── Filter tab: Search (index.html:9518-9569 runFilteredReport) ──────────
+    // Gated behind an explicit Search click — results stay empty until then.
+    const runFilteredSearch = useCallback(() => {
+        const results = computeFilteredResults(allTickets, filterFields);
+        setFilterResults(results);
+        setFilterSearched(true);
+    }, [allTickets, filterFields]);
 
-    const statusChartData: BarChartItem[] = STATUS_OPTIONS.map((s) => ({
-        label: s,
-        value: filtered.filter((t) => t.status === s).length,
-        color: STATUS_COLORS[s] || '#ff9800',
-    }));
-
-    const callTypeChartData: BarChartItem[] = CALL_TYPE_OPTIONS.map((c) => ({
-        label: c,
-        value: filtered.filter((t) => t.call_type === c).length,
-        color: CALL_TYPE_COLORS[c] || '#ff9800',
-    }));
-
-    const engMap: Record<string, EngineerStat> = {};
-    filtered.forEach((t) => {
-        const name = t.assigned_name || 'Unassigned';
-        if (!engMap[name]) engMap[name] = { calls: 0, closed: 0, revenue: 0 };
-        engMap[name].calls++;
-        if (t.status === 'Closed') engMap[name].closed++;
-        engMap[name].revenue += getTicketFinancials(t).grand;
-    });
-    const engData = Object.entries(engMap).sort((a, b) => b[1].calls - a[1].calls);
-
-    const engineerChartData: BarChartItem[] = engData.map(([name, d]) => ({
-        label: name,
-        value: d.calls,
-        color: '#7c3aed',
-    }));
-
-    const monthlyRevenue: Record<string, number> = {};
-    filtered.forEach((t) => {
-        if (!t.created_at) return;
-        const d = new Date(t.created_at);
-        const key = d.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
-        monthlyRevenue[key] = (monthlyRevenue[key] || 0) + getTicketFinancials(t).grand;
-    });
-    const revenueChartData: BarChartItem[] = Object.entries(monthlyRevenue)
-        .slice(-6)
-        .map(([label, value]) => ({ label, value: Math.round(value), color: '#1a56db' }));
-
-    const engineers = [
-        ...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean)),
-    ] as string[];
+    // Auto-runs the search if it hasn't been run yet (index.html:9606-9609
+    // downloadFilteredReport: `if(!tickets){await runFilteredReport();...}`).
+    const getSearchResults = useCallback((): Ticket[] => {
+        if (filterSearched) return filterResults;
+        const results = computeFilteredResults(allTickets, filterFields);
+        setFilterResults(results);
+        setFilterSearched(true);
+        return results;
+    }, [allTickets, filterFields, filterSearched, filterResults]);
 
     // ── Import handler ────────────────────────────────────────────────────────
     const handleImport = useCallback(
@@ -276,129 +293,126 @@ export function useReports() {
         [allTickets]
     );
 
-    // ── Download Excel ────────────────────────────────────────────────────────
+    // ── Download Excel (index.html:9606-9699 downloadFilteredReport('excel')) ─
     const handleDownload = useCallback(async () => {
-        if (!filtered.length) { alert('No data for selected filters'); return; }
+        const tickets = getSearchResults();
+        if (!tickets.length) { alert('No data to download. Run search first.'); return; }
+
+        const getTimeline = (t: Ticket): TlEntry[] => {
+            let tl: unknown = t.timeline;
+            if (typeof tl === 'string') { try { tl = JSON.parse(tl); } catch { tl = []; } }
+            return Array.isArray(tl) ? (tl as TlEntry[]) : [];
+        };
+        const getVisitStartIso = (t: Ticket): string | null => {
+            const e = getTimeline(t).find((e) => e.action === 'Visit Start');
+            return e?.at || null;
+        };
+        const fmtTime = (iso: string | null): string => {
+            if (!iso) return '';
+            return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+        };
+        const durFromIso = (isoFrom: string | null, dateStr?: string, hhMM?: string): string => {
+            if (!isoFrom || !hhMM || !dateStr) return '';
+            try {
+                const from = new Date(isoFrom);
+                const to = new Date(`${dateStr}T${hhMM}:00`);
+                const m = Math.round((to.getTime() - from.getTime()) / 60000);
+                if (m <= 0) return '';
+                const h = Math.floor(m / 60), mn = m % 60;
+                return h > 0 ? `${h}h ${mn > 0 ? mn + 'm' : ''}` : `${mn}m`;
+            } catch { return ''; }
+        };
+        const durBetween = (dateStr?: string, h1?: string, h2?: string): string => {
+            if (!h1 || !h2 || !dateStr) return '';
+            try {
+                const from = new Date(`${dateStr}T${h1}:00`);
+                const to = new Date(`${dateStr}T${h2}:00`);
+                const m = Math.round((to.getTime() - from.getTime()) / 60000);
+                if (m <= 0) return '';
+                const h = Math.floor(m / 60), mn = m % 60;
+                return h > 0 ? `${h}h ${mn > 0 ? mn + 'm' : ''}` : `${mn}m`;
+            } catch { return ''; }
+        };
+
+        const kmMap = await enrichTicketsWithKm(tickets);
+
         const XLSX = await import('xlsx');
-        const data = filtered.map((t) => {
-            const { partsTotal, partsNames, svc, other, final, grand } = getTicketFinancials(t);
+        const data = tickets.map((t) => {
+            const tAny = t as any;
+            const sp = (t.spares || []).filter((s: any) => !s.requested);
+            const partsTotal = sp.reduce((a, s) => a + (s.qty || 0) * (s.price || 0), 0);
+            const grand = partsTotal + (parseFloat(String(t.labor)) || 0) + (parseFloat(String(t.other_charge)) || 0);
+            const vsIso = getVisitStartIso(t);
+            const km = kmMap[t.id];
+            const mStart = km && km.start != null ? km.start : (tAny.meter_start || '');
+            const mEnd = km && km.end != null ? km.end : (tAny.meter_end || '');
+            const callKm = km && km.has && km.km > 0 ? km.km : '';
             return {
-                'Ticket ID': t.id || '',
-                'Date': t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : '',
-                'Customer': t.cname || '',
-                'Mobile': t.mobile || '',
+                'Ticket No': t.id,
+                'Date': t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : '-',
+                'Customer': t.cname,
+                'Mobile': t.mobile,
                 'Alt Mobile': t.alt_mobile || '',
-                'City': t.city || '',
-                'State': t.state || '',
                 'Address': t.address || '',
+                'City': t.city || '',
+                'Pin': t.pin || '',
+                'Area': t.area || '',
+                'Model': t.model,
+                'Serial': t.serial,
                 'Brand': t.brand_name || '',
-                'Model': t.model || '',
-                'Serial No': t.serial || '',
-                'Call Type': t.call_type || '',
-                'Service Type': t.service_type || '',
+                'Call Type': t.call_type,
+                'Service Type': t.service_type,
                 'Coverage': t.warranty_coverage || '',
-                'Problem': t.problem || '',
-                'Action Taken': t.action || '',
-                'Fault Code': t.fault_code || '',
-                'Engineer': t.assigned_name || 'Unassigned',
-                'Status': t.status || '',
-                'Visit Date': t.visit_date || '',
+                'Problem': t.problem,
+                'Action Taken': tAny.work_done || '',
+                'Cause': tAny.cause || '',
+                'Engineer': t.assigned_name || '',
+                'Status': t.status,
                 'SE Call ID': t.se_call_id || '',
-                'Parts Used': partsNames,
-                'Parts ₹': partsTotal.toFixed(2),
-                'Service/Labour ₹': svc.toFixed(2),
-                'Other ₹': other.toFixed(2),
-                'Final Charges ₹': final.toFixed(2),
-                'Grand Total ₹': grand.toFixed(2),
-                'Remarks': t.remarks || '',
+                'Visit Date': t.visit_date || '',
+                'Visit Start': fmtTime(vsIso),
+                'Time In': tAny.visit_in || '',
+                'Travel Time': durFromIso(vsIso, t.visit_date, tAny.visit_in),
+                'Time Out': tAny.visit_out || '',
+                'Repair Time': durBetween(t.visit_date, tAny.visit_in, tAny.visit_out),
+                'Meter Start': mStart,
+                'Meter End': mEnd,
+                'Call KM': callKm,
+                'Parts Used': sp.map((s: any) => `${s.code || ''} ${s.name || ''} x${s.qty}`).join('; '),
+                'Parts Total': partsTotal.toFixed(2),
+                'Labor': t.labor || 0,
+                'Other': t.other_charge || 0,
+                'Grand Total': grand.toFixed(2),
             };
         });
         const ws = XLSX.utils.json_to_sheet(data);
-        ws['!cols'] = [
-            { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 25 },
-            { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 25 }, { wch: 25 },
-            { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 30 },
-            { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 20 },
-        ];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Report');
-        const dateStr = new Date().toLocaleDateString('en-CA');
-        XLSX.writeFile(wb, `BhaviCRM_Report_${period}_${dateStr}.xlsx`);
-    }, [filtered, period]);
+        XLSX.writeFile(wb, `bhavi_filtered_report_${new Date().toLocaleDateString('en-CA')}.xlsx`);
+    }, [getSearchResults]);
 
-    // ── Print ─────────────────────────────────────────────────────────────────
+    // ── Print (index.html:9700-9709 downloadFilteredReport('pdf')) ────────────
     const handlePrint = useCallback(() => {
-        if (!filtered.length) { alert('No data for selected filters'); return; }
-        const totalParts = filtered.reduce((a, t) => a + getTicketFinancials(t).partsTotal, 0);
-        const totalSvc = filtered.reduce((a, t) => a + getTicketFinancials(t).svc, 0);
-        const totalGrand = filtered.reduce((a, t) => a + getTicketFinancials(t).grand, 0);
+        const tickets = getSearchResults();
+        if (!tickets.length) { alert('No data to download. Run search first.'); return; }
 
-        const rows = filtered.map((t, i) => {
-            const { partsTotal, partsNames, svc, grand } = getTicketFinancials(t);
-            return `<tr>
-        <td style="text-align:center;">${i + 1}</td>
-        <td>${t.id}</td>
-        <td>${t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : ''}</td>
-        <td>${t.cname || ''}</td>
-        <td>${t.mobile || ''}</td>
-        <td>${t.city || ''}</td>
-        <td>${t.model || ''}</td>
-        <td>${t.serial || ''}</td>
-        <td>${t.call_type || ''}</td>
-        <td>${t.service_type || ''}</td>
-        <td>${t.problem || ''}</td>
-        <td>${t.assigned_name || '—'}</td>
-        <td><b>${t.status || ''}</b></td>
-        <td style="text-align:right;">${partsNames || '—'}</td>
-        <td style="text-align:right;">${partsTotal.toFixed(0)}</td>
-        <td style="text-align:right;">${svc.toFixed(0)}</td>
-        <td style="text-align:right;font-weight:700;">${grand.toFixed(0)}</td>
-      </tr>`;
+        const rowsHtml = tickets.map((t) => {
+            const rev = (t.spares || []).filter((s: any) => !s.requested).reduce((a, s) => a + (s.qty || 0) * (s.price || 0), 0)
+                + (parseFloat(String(t.labor)) || 0) + (parseFloat(String(t.other_charge)) || 0);
+            return `<tr><td>${t.id}</td><td>${t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : '-'}</td><td>${t.cname}</td><td>${t.mobile}</td><td>${t.city || '-'}</td><td>${t.model}</td><td>${t.call_type}</td><td>${t.assigned_name || '-'}</td><td>${t.status}</td><td>₹${rev.toFixed(0)}</td></tr>`;
         }).join('');
 
         const win = window.open('', '_blank');
         if (!win) { alert('Please allow popups for printing'); return; }
-        win.document.write(`<!DOCTYPE html><html><head><title>Bhavi CRM Report</title>
-      <style>
-        @page{size:A4 landscape;margin:10mm;}
-        body{font-family:Arial,sans-serif;font-size:10px;}
-        table{width:100%;border-collapse:collapse;}
-        th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;}
-        th{background:#e8efff;font-weight:700;font-size:10px;}
-        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;border-bottom:2px solid #1a56db;padding-bottom:6px;}
-        .co{font-size:16px;font-weight:900;color:#1a56db;}
-        .summary{display:flex;gap:20px;margin-bottom:8px;font-size:11px;}
-        .sum-item{background:#f0f4ff;padding:4px 10px;border-radius:4px;}
-        .tfoot td{background:#f0f4ff;font-weight:700;}
-      </style></head><body>
-      <div class="header">
-        <div><div class="co">Bhavi Electronics & Automation</div>
-        <div style="font-size:11px;color:#555;">Service CRM Report — Generated: ${new Date().toLocaleString('en-IN')}</div></div>
-        <div style="text-align:right;font-size:11px;">Period: ${period} | Total: ${filtered.length} records</div>
-      </div>
-      <div class="summary">
-        <div class="sum-item">Total Calls: <b>${filtered.length}</b></div>
-        <div class="sum-item">Closed: <b>${totalClosed}</b></div>
-        <div class="sum-item">Parts ₹: <b>${totalParts.toFixed(0)}</b></div>
-        <div class="sum-item">Service ₹: <b>${totalSvc.toFixed(0)}</b></div>
-        <div class="sum-item">Grand Total ₹: <b>${totalGrand.toFixed(0)}</b></div>
-      </div>
-      <table><thead><tr>
-        <th>#</th><th>Ticket</th><th>Date</th><th>Customer</th><th>Mobile</th><th>City</th>
-        <th>Model</th><th>Serial</th><th>Call Type</th><th>Service</th><th>Problem</th>
-        <th>Engineer</th><th>Status</th><th>Parts Used</th><th>Parts ₹</th><th>Service ₹</th><th>Total ₹</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr>
-        <td colspan="14" style="text-align:right;font-weight:700;">TOTAL</td>
-        <td style="text-align:right;">${totalParts.toFixed(0)}</td>
-        <td style="text-align:right;">${totalSvc.toFixed(0)}</td>
-        <td style="text-align:right;font-weight:900;color:#1a56db;">${totalGrand.toFixed(0)}</td>
-      </tr></tfoot>
-      </table>
-      <script>window.print();<\/script></body></html>`);
+        win.document.write(`<html><head><title>Report</title><style>body{font-family:Arial;padding:20px;font-size:11px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ccc;padding:4px 6px;}th{background:#f0f0f0;}</style></head><body>
+      <h2>BHAVI ELECTRONICS — Filtered Report | ${tickets.length} records</h2>
+      <p>Generated: ${new Date().toLocaleString('en-IN')}</p>
+      <table><thead><tr><th>Ticket</th><th>Date</th><th>Customer</th><th>Mobile</th><th>City</th><th>Model</th><th>Type</th><th>Engineer</th><th>Status</th><th>Revenue</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+      </table></body></html>`);
         win.document.close();
-    }, [filtered, period, totalClosed]);
+        setTimeout(() => win.print(), 400);
+    }, [getSearchResults]);
 
     return {
         // tab
@@ -412,22 +426,11 @@ export function useReports() {
         // import
         importProgress, importTotal, importRunning, importResult,
         handleImport,
-        // filter state
-        period, setPeriod,
-        customFrom, setCustomFrom,
-        customTo, setCustomTo,
-        filters, setFilters,
-        reportType, setReportType,
-        // derived
-        filtered,
+        // filter tab
+        filterFields, setFilterFields,
+        filterSearched, filterResults,
+        runFilteredSearch,
         engineers,
-        engData,
-        totalClosed,
-        totalRevenue,
-        statusChartData,
-        callTypeChartData,
-        engineerChartData,
-        revenueChartData,
         // actions
         handleDownload,
         handlePrint,

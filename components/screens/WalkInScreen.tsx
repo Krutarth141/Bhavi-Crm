@@ -4,7 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { WalkInEntry } from '@/types/walkin';
 import { useWalkIn } from '@/hooks/useWalkIn';
-import { insertWalkIn, updateWalkIn, deleteWalkIn, getNextToken } from '@/services/walkInService';
+import {
+  insertWalkIn,
+  updateWalkIn,
+  getNextToken,
+  findTodayWalkInByMobile,
+  mergeWalkInProducts,
+} from '@/services/walkInService';
 import { announceToken } from '@/utils/tokenVoice';
 import TokenBoard from './walkin/TokenBoard';
 import WalkInForm from './walkin/WalkInForm';
@@ -25,13 +31,41 @@ export default function WalkInScreen() {
   const currentUserId = (session?.user as any)?.email ?? '';
   const currentUserName = (session?.user as any)?.name ?? '';
 
-  const { todayLogs, loading, refetch } = useWalkIn(currentUserRole ?? '', currentUserId);
+  const { todayLogs, loading, refetch, fetchLogsForDate } = useWalkIn(currentUserRole ?? '', currentUserId, currentUserName);
 
   const [nowServing, setNowServing] = useState<number>(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<WalkInEntry | null>(null);
   const [nextToken, setNextToken] = useState(1);
   const [showQR, setShowQR] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Walk-in History date navigator — mirrors HTML's "📋 Walk-in History"
+  // card + loadWIDateView() (index.html:16615-16679). Defaults to today, in
+  // which case we just reuse todayLogs (already fetched for the token
+  // board); any other date is fetched on demand.
+  const [histDate, setHistDate] = useState(getToday());
+  const [histLogs, setHistLogs] = useState<WalkInEntry[] | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const isHistToday = histDate === getToday();
+
+  const loadHistView = useCallback(async () => {
+    if (histDate === getToday()) { setHistLogs(null); return; }
+    setHistLoading(true);
+    const logs = await fetchLogsForDate(histDate);
+    setHistLogs(logs);
+    setHistLoading(false);
+  }, [histDate, fetchLogsForDate]);
+
+  useEffect(() => { loadHistView(); }, [loadHistView]);
+
+  const displayLogs = isHistToday ? todayLogs : (histLogs ?? []);
+  const displayLoading = isHistToday ? loading : histLoading;
+
+  const refreshLists = useCallback(async () => {
+    await refetch();
+    if (!isHistToday) await loadHistView();
+  }, [refetch, isHistToday, loadHistView]);
 
   useEffect(() => {
     const stored = localStorage.getItem(getTodayKey());
@@ -96,6 +130,29 @@ export default function WalkInScreen() {
       }
       alert('✅ Updated!');
     } else {
+      // Duplicate check: same mobile today? — mirrors HTML's saveWalkIn
+      // (index.html:16926-16942). If found, ask whether to merge the new
+      // products into the existing entry or create a separate one.
+      const dup = await findTodayWalkInByMobile(data.mobile, today);
+      if (dup) {
+        const choice = confirm(
+          `⚠️ Aa customer aaj already registered chhe!\n\nCustomer: ${dup.customer_name}\nToken: #${dup.token_no || '—'} | Time: ${dup.arrival_time}\n\nOK = Existing entry ma products add karo\nCancel = New separate entry banavo`
+        );
+        if (choice) {
+          const mergedProds = [...(dup.products || []), ...data.products];
+          const mergeResult = await mergeWalkInProducts(dup.id, mergedProds);
+          if (!mergeResult.success) {
+            alert('❌ Failed to merge: ' + mergeResult.error);
+            return;
+          }
+          alert('✅ Products existing entry ma add kari didhaj!');
+          setModalOpen(false);
+          setEditEntry(null);
+          await refreshLists();
+          return;
+        }
+      }
+
       const result = await insertWalkIn({
         token_no: data.token_no,
         customer_name: data.customer_name,
@@ -122,21 +179,28 @@ export default function WalkInScreen() {
 
     setModalOpen(false);
     setEditEntry(null);
-    await refetch();
+    await refreshLists();
   };
 
-  const handleDelete = async (id: string) => {
-    const result = await deleteWalkIn(id);
+  // "⏰ Set Departure" — mirrors HTML's updateWIDeparture (index.html:16973-16982).
+  const handleDeparture = async (entry: WalkInEntry) => {
+    const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    if (!confirm(`Set departure time to: ${now}?`)) return;
+    setBusyId(entry.id);
+    const result = await updateWalkIn(entry.id, { departure_time: now });
+    setBusyId(null);
     if (!result.success) {
-      alert('❌ Failed to delete: ' + result.error);
+      alert('❌ Error: ' + result.error);
       return;
     }
-    await refetch();
+    await refreshLists();
   };
 
   const queue = todayLogs.map((e) => ({ token: e.token_no, name: e.customer_name }));
   const canManage = currentUserRole === 'admin' || currentUserRole === 'work_controller';
   const checkinUrl = typeof window !== 'undefined' ? `${window.location.origin}/walk-in` : '';
+
+  const histDateLabel = new Date(`${histDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div style={{ padding: '20px' }}>
@@ -175,19 +239,41 @@ export default function WalkInScreen() {
         onCallAgain={handleCallAgain}
       />
 
-      {/* Today's List */}
-      <div style={{ marginTop: '8px' }}>
-        <h3 style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '12px' }}>
-          📋 Today's Entries
-        </h3>
-        {loading ? (
+      {/* Walk-in History — date-navigable list, defaults to today */}
+      <div style={{ ...styles.card, marginTop: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          <h3 style={{ ...styles.sectionTitle, fontSize: '15px', margin: 0 }}>
+            📋 Walk-in History
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              value={histDate}
+              onChange={(e) => setHistDate(e.target.value)}
+              style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, outline: 'none', cursor: 'pointer' }}
+            />
+            <button
+              style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}
+              onClick={() => loadHistView()}
+              onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)}
+            >
+              🔄
+            </button>
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
+          <b>{displayLogs.length}</b> entries for <b>{histDateLabel}</b>{isHistToday ? ' (Today)' : ''}
+        </div>
+        {displayLoading ? (
           <div style={styles.loadingText}>Loading...</div>
         ) : (
           <WalkInList
-            entries={todayLogs}
+            entries={displayLogs}
             onEdit={handleEditEntry}
-            onDelete={handleDelete}
-            onJobCreated={refetch}
+            onDeparture={handleDeparture}
+            onJobCreated={refreshLists}
+            busyId={busyId}
           />
         )}
       </div>

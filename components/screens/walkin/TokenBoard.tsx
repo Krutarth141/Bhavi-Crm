@@ -81,20 +81,21 @@ export default function TokenBoard({ nowServing, queue, onCallNext, onCallAgain 
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          {!allServed && (
-            <button
-              onClick={onCallNext}
-              style={{
-                flex: 1, padding: '10px', background: '#1d4ed8', color: '#fff', border: 'none',
-                borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#1e40af')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#1d4ed8')}
-            >
-              ▶ Call Next
-            </button>
-          )}
+          {/* Always rendered (index.html:16493,17314-17318) — clicking after
+              the last token has been called triggers the reset-confirm flow
+              inside onCallNext rather than hiding the button. */}
+          <button
+            onClick={onCallNext}
+            style={{
+              flex: 1, padding: '10px', background: '#1d4ed8', color: '#fff', border: 'none',
+              borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#1e40af')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#1d4ed8')}
+          >
+            ▶ Call Next
+          </button>
           {nowServing > 0 && (
             <button
               onClick={onCallAgain}

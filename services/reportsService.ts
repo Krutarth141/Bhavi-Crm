@@ -96,6 +96,24 @@ export async function importTickets(
                 ? new Date(row.created_at).toISOString()
                 : new Date().toISOString();
 
+            // index.html:1584 — TAT Time (HH:MM) sets the ticket's tat_date to
+            // the day AFTER the call date, at that time, in IST (blank = no TAT).
+            const tatTime = String((row as unknown as Record<string, string>).tat_time || '').trim();
+            const tatDate = (() => {
+                if (!tatTime) return null;
+                try {
+                    const base = new Date(createdAt);
+                    base.setDate(base.getDate() + 1);
+                    const yyyy = base.getFullYear();
+                    const mm = String(base.getMonth() + 1).padStart(2, '0');
+                    const dd = String(base.getDate()).padStart(2, '0');
+                    const d = new Date(`${yyyy}-${mm}-${dd}T${tatTime}:00+05:30`);
+                    return isNaN(d.getTime()) ? null : d.toISOString();
+                } catch {
+                    return null;
+                }
+            })();
+
             const ticketData = {
                 id,
                 job_sheet: id,
@@ -127,6 +145,7 @@ export async function importTickets(
                 rerepair: row.rerepair || 'No',
                 rerepair_foc: row.rerepair_foc === 'TRUE' || row.rerepair_foc === 'true',
                 remarks: row.remarks || '',
+                tat_date: tatDate,
                 visit_date: row.visit_date || '',
                 spares: [],
                 timeline: [
@@ -157,6 +176,108 @@ export async function importTickets(
     }
 
     return { success, fail, errors };
+}
+
+// ─── KM enrichment for the Filter tab's Excel export ──────────────────────────
+// Mirrors HTML's downloadFilteredReport('excel') KM enrichment (index.html:
+// 9617-9666): for each ticket's "arrival" km_log, the arrival reading is the
+// Meter End; the previous valid reading by the same engineer on the same day
+// is the Meter Start; the difference is the Call KM. Fully guarded — any
+// failure here silently yields an empty map and the export falls back to the
+// ticket's own meter_start/meter_end fields.
+export interface KmEnrichment {
+    start: number | null;
+    end: number | null;
+    km: number;
+    has: boolean;
+}
+
+export async function enrichTicketsWithKm(tickets: { id: string }[]): Promise<Record<string, KmEnrichment>> {
+    const kmMap: Record<string, KmEnrichment & { firstAt: string | null; lastAt: string | null }> = {};
+    try {
+        const tids = Array.from(new Set(tickets.map((t) => t.id).filter(Boolean)));
+        if (!tids.length) return {};
+
+        let arrivals: any[] = [];
+        for (let i = 0; i < tids.length; i += 150) {
+            const chunk = tids.slice(i, i + 150);
+            const { data, error } = await supabase
+                .from('km_logs')
+                .select('id, ticket_id, eng_id, log_date, captured_at, odometer_km')
+                .eq('entry_type', 'arrival')
+                .in('ticket_id', chunk);
+            if (error) throw error;
+            if (data?.length) arrivals = arrivals.concat(data);
+        }
+        if (!arrivals.length) return {};
+
+        const engSet = new Set<string>();
+        let minD: string | null = null;
+        let maxD: string | null = null;
+        arrivals.forEach((a) => {
+            if (a.eng_id) engSet.add(a.eng_id);
+            if (a.log_date) {
+                if (!minD || a.log_date < minD) minD = a.log_date;
+                if (!maxD || a.log_date > maxD) maxD = a.log_date;
+            }
+        });
+
+        let allLogs: any[] = [];
+        if (engSet.size && minD && maxD) {
+            const { data, error } = await supabase
+                .from('km_logs')
+                .select('id, ticket_id, eng_id, log_date, captured_at, odometer_km')
+                .in('eng_id', Array.from(engSet))
+                .gte('log_date', minD)
+                .lte('log_date', maxD)
+                .not('odometer_km', 'is', null)
+                .order('captured_at', { ascending: true });
+            if (error) throw error;
+            allLogs = data || [];
+        }
+
+        const grp: Record<string, any[]> = {};
+        allLogs.forEach((l) => {
+            const k = `${l.eng_id}|${l.log_date}`;
+            (grp[k] = grp[k] || []).push(l);
+        });
+        Object.keys(grp).forEach((k) => grp[k].sort((a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime()));
+
+        // per-arrival segment: previous valid reading → this arrival reading
+        const segById: Record<string, { start: number | null; end: number | null; at: string; km: number | null }> = {};
+        arrivals.forEach((a) => {
+            const seq = grp[`${a.eng_id}|${a.log_date}`] || [];
+            const end = parseFloat(a.odometer_km);
+            let start: number | null = null;
+            const idx = seq.findIndex((s) => s.id === a.id);
+            for (let p = idx - 1; p >= 0; p--) {
+                const pv = parseFloat(seq[p].odometer_km);
+                if (!isNaN(pv)) { start = pv; break; }
+            }
+            segById[a.id] = {
+                start,
+                end: isNaN(end) ? null : end,
+                at: a.captured_at,
+                km: (start !== null && !isNaN(end) && end >= start) ? end - start : null,
+            };
+        });
+
+        // aggregate per ticket (a ticket may have multiple visits/arrivals)
+        arrivals.forEach((a) => {
+            const s = segById[a.id];
+            if (!s) return;
+            let m = kmMap[a.ticket_id];
+            if (!m) { m = { start: null, end: null, km: 0, has: false, firstAt: null, lastAt: null }; kmMap[a.ticket_id] = m; }
+            if (m.firstAt === null || (s.at && new Date(s.at) < new Date(m.firstAt))) { m.firstAt = s.at; m.start = s.start; }
+            if (m.lastAt === null || (s.at && new Date(s.at) > new Date(m.lastAt))) { m.lastAt = s.at; m.end = s.end; }
+            if (s.km !== null) m.km += s.km;
+            m.has = true;
+        });
+    } catch (e) {
+        console.log('KM export enrich skipped:', e instanceof Error ? e.message : e);
+        return {};
+    }
+    return kmMap;
 }
 
 export async function saveWCDailyReport(payload: {

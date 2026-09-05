@@ -76,7 +76,7 @@ export default function BulkActionsBar({ inventory, brands, selectedIds, addedBy
             return {
                 'Part Code': i.part_code || '', 'Part Name': i.item_name || '', 'Brand': i.brand_id ? (brandMap[i.brand_id] || '') : '',
                 'Model No': i.category || '', 'Stock': i.qty_in_stock || 0, 'Min Stock': i.min_stock || 0,
-                'Purchase Stock': Math.max(0, (i.qty_in_stock || 0) - wQty), 'Warranty Stock': wQty,
+                'Purchase Stock': i.qty_in_stock || 0, 'Warranty Stock': wQty,
                 'DTP Price ₹': dtp, 'MRP Price ₹': mrp, 'GST%': gst,
                 'Stock Value ₹ (DTP+GST)': dtp > 0 ? Math.round(val) : Math.round((i.qty_in_stock || 0) * mrp),
             };

@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { CourierEntry, CourierReceiver } from '@/types/courier';
 import { colors, styles } from '@/styles/ticketsStyles';
+import CourierList from './courier/CourierList';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 
@@ -13,8 +14,12 @@ const inputStyle: React.CSSProperties = {
   color: colors.text, backgroundColor: colors.card, outline: 'none',
 };
 
-const warrantyBadge = (w: string): React.CSSProperties =>
-  w === 'In Warranty' ? { backgroundColor: '#D1FAE5', color: '#065f46' } : { backgroundColor: '#FEE2E2', color: '#991B1B' };
+// Mirrors HTML's fmtExcelDate (index.html:18537) — YYYY-MM-DD -> DD-MM-YYYY.
+function fmtExcelDate(d?: string | null): string {
+  if (!d) return '';
+  const p = d.split('-');
+  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
+}
 
 export default function CourierReportScreen() {
   const [fromDate, setFromDate] = useState(todayStr());
@@ -76,32 +81,45 @@ export default function CourierReportScreen() {
     }
   };
 
+  // Mirrors HTML's downloadCourierExcel (index.html:18524-18583) — "All
+  // Entries" + separate "Inward"/"Outward" sheets, DD-MM-YYYY dates.
   const handleExport = () => {
     try {
-      const rows: any[] = [];
-      results.forEach((e) => {
-        const products = e.products || [];
-        if (!products.length) {
-          rows.push({
-            Date: e.entry_date, Direction: e.direction, 'AWB No': e.awb_no, Agency: e.agency,
-            Person: e.person_name ?? '', Mobile: e.sender_mobile ?? '', Place: e.place ?? '', 'Weight(kg)': e.weight ?? '',
-            'Call ID': '', Model: '', 'Serial No': '', Warranty: '', 'Faulty Part': '', Invoice: '', 'Invoice Amt': '', Accessories: '', WC: e.wc_name,
-          });
-        } else {
-          products.forEach((p) => {
-            rows.push({
-              Date: e.entry_date, Direction: e.direction, 'AWB No': e.awb_no, Agency: e.agency,
-              Person: e.person_name ?? '', Mobile: e.sender_mobile ?? '', Place: e.place ?? '', 'Weight(kg)': e.weight ?? '',
-              'Call ID': p.call_id ?? '', Model: p.model ?? '', 'Serial No': p.serial ?? '', Warranty: p.warranty ?? '',
-              'Faulty Part': p.faulty_part ?? '', Invoice: p.invoice_avail ?? '', 'Invoice Amt': p.invoice_amount ?? '',
-              Accessories: (p.accessories || []).join(', '), WC: e.wc_name,
-            });
-          });
-        }
-      });
-      const ws = XLSX.utils.json_to_sheet(rows);
+      const safeStr = (v: any) => (v === null || v === undefined ? '' : String(v));
+      const safeAcc = (acc?: string[]) => (acc && acc.length ? acc.join(', ') : '');
+
+      const buildRows = (list: CourierEntry[]) =>
+        list.flatMap((e) => {
+          const products = e.products || [];
+          if (!products.length) {
+            return [[
+              fmtExcelDate(e.entry_date), safeStr(e.direction), safeStr(e.awb_no), safeStr(e.agency),
+              safeStr(e.person_name), safeStr(e.sender_mobile), safeStr(e.place), safeStr(e.weight),
+              '', '', '', '', '', '', '', '', safeStr(e.wc_name),
+            ]];
+          }
+          return products.map((p) => [
+            fmtExcelDate(e.entry_date), safeStr(e.direction), safeStr(e.awb_no), safeStr(e.agency),
+            safeStr(e.person_name), safeStr(e.sender_mobile), safeStr(e.place), safeStr(e.weight),
+            safeStr(p.call_id), safeStr(p.model), safeStr(p.serial), safeStr(p.warranty), safeStr(p.faulty_part),
+            safeStr(p.invoice_avail), safeStr(p.invoice_amount), safeAcc(p.accessories), safeStr(e.wc_name),
+          ]);
+        });
+
+      const headers = ['Date', 'Direction', 'AWB No', 'Agency', 'Person', 'Mobile', 'Place', 'Weight(kg)', 'Call ID', 'Model', 'Serial No', 'Warranty', 'Faulty Part', 'Invoice', 'Invoice Amt', 'Accessories', 'WC'];
+      const makeSheet = (rows: any[][]) => {
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 35 }, { wch: 18 }];
+        return ws;
+      };
+
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Courier Report');
+      XLSX.utils.book_append_sheet(wb, makeSheet(buildRows(results)), 'All Entries');
+      const inRows = buildRows(results.filter((e) => e.direction === 'Inward'));
+      if (inRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(inRows), 'Inward');
+      const outRows = buildRows(results.filter((e) => e.direction === 'Outward'));
+      if (outRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(outRows), 'Outward');
+
       XLSX.writeFile(wb, 'courier_register_' + todayStr() + '.xlsx');
     } catch (err: any) {
       alert('❌ Export failed: ' + (err.message ?? String(err)));
@@ -175,48 +193,14 @@ export default function CourierReportScreen() {
               </div>
             </div>
 
-            <div style={{ ...styles.card, overflowX: 'auto' }}>
-              <div style={{ marginBottom: '10px', fontSize: '13px', color: colors.textMuted }}>
-                {results.length} record{results.length !== 1 ? 's' : ''} found
-              </div>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    {['Date', 'Direction', 'AWB No', 'Agency', 'Person', 'Place', 'Weight', 'Products', 'WC Name'].map(h => (
-                      <th key={h} style={styles.tableHeader}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((entry) => (
-                    <tr key={entry.id} style={styles.tableRow}>
-                      <td style={{ ...styles.tableCell, fontSize: '12px', whiteSpace: 'nowrap' }}>{entry.entry_date}</td>
-                      <td style={styles.tableCell}>
-                        <span style={{ ...styles.badge, ...(entry.direction === 'Inward' ? { backgroundColor: '#dbeafe', color: '#1d4ed8' } : { backgroundColor: '#dcfce7', color: '#15803d' }) }}>
-                          {entry.direction === 'Inward' ? '📥 Inward' : '📤 Outward'}
-                        </span>
-                      </td>
-                      <td style={{ ...styles.tableCell, fontWeight: 600 }}>{entry.awb_no || '—'}</td>
-                      <td style={styles.tableCell}>{entry.agency}</td>
-                      <td style={styles.tableCell}>{entry.person_name ?? '—'}</td>
-                      <td style={styles.tableCell}>{entry.place ?? '—'}</td>
-                      <td style={styles.tableCell}>{entry.weight != null ? `${entry.weight} kg` : '—'}</td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>
-                        {(entry.products || []).length
-                          ? entry.products.map((p, i) => (
-                            <div key={i}>
-                              <b>{p.model || '—'}</b>{p.serial ? ` / ${p.serial}` : ''}{' '}
-                              <span style={{ ...styles.badge, ...warrantyBadge(p.warranty) }}>{p.warranty === 'In Warranty' ? 'IW' : 'OW'}</span>
-                            </div>
-                          ))
-                          : '—'}
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: '12px' }}>{entry.wc_name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ marginBottom: '10px', fontSize: '13px', color: colors.textMuted }}>
+              {results.length} record{results.length !== 1 ? 's' : ''} found
             </div>
+
+            {/* Reuses the same rich card list (with Edit / DC-print actions
+                and per-product sub-table) as the main Courier screen —
+                mirrors HTML reusing renderCourierList (index.html:18519). */}
+            <CourierList entries={results} receivers={receivers} onRefresh={handleSearch} />
           </>
         )
       )}

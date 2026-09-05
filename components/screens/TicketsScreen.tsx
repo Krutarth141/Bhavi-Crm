@@ -9,7 +9,7 @@ import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
 import { createTicket, updateTicket, closeTicket, ensureGroupId } from '@/services/ticketService';
-import { printTicket, getBadgeStyle } from '@/utils/printTicket';
+import { printTicket, getBadgeStyle, printJobSheet } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
 import { approveWarrantyClaim, rejectWarrantyClaim } from '@/services/warrantyClaimService';
@@ -24,8 +24,20 @@ import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
 import { approveTicket, rejectTicket } from '@/services/customerApprovalService';
 import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
+import { fetchProblemTypes } from '@/services/masterService';
+import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
+import Modal from '@/components/Modal';
 
-export default function TicketsScreen() {
+interface Props {
+  // "+ New Call" fired from elsewhere (e.g. the Dashboard's Recent Tickets
+  // card, index.html:3857) via a 'bhavi:navigate-tab' CustomEvent — the
+  // parent dashboard switches to this tab and sets this flag; consumed once.
+  autoOpenAdd?: boolean;
+  onConsumedAutoOpenAdd?: () => void;
+}
+
+export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Props = {}) {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
   const currentUserId = (session?.user as any)?.email;
@@ -135,6 +147,11 @@ export default function TicketsScreen() {
     }
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (autoOpenAdd) { handleAddClick(); onConsumedAutoOpenAdd?.(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenAdd]);
 
   // Mirrors HTML's addProductForSameCustomer(): links the new call to the
   // anchor ticket's group_id and pre-fills customer/address/brand so only
@@ -286,8 +303,28 @@ export default function TicketsScreen() {
     }
   };
 
+  // index.html:4828-4838 — WC Type / Brand / Engineer / Problem filters.
+  // Brand is a fixed 2-option dropdown (not free text/master-data driven) in
+  // HTML — same as PendingListScreen's brand filter — matched via includes().
+  const [wcTypeFilter, setWcTypeFilter] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [engineerFilter, setEngineerFilter] = useState('');
+  const [problemFilter, setProblemFilter] = useState('');
+  // Problem autocomplete suggestions — union of Master Data's Problem Types
+  // AND every distinct value actually typed into tickets' problem field
+  // (index.html:4792-4802 ticketProblemFilterOptions()), since the New Call
+  // form's Problem field is free-text with autocomplete, not a locked list.
+  const [masterProblems, setMasterProblems] = useState<string[]>([]);
+  useEffect(() => { fetchProblemTypes().then((rows) => setMasterProblems(rows.map((r) => r.problem).filter(Boolean))).catch(() => undefined); }, []);
+  const problemOptions = useMemo(() => {
+    const set = new Set<string>();
+    masterProblems.forEach((p) => set.add(p.trim()));
+    tickets.forEach((t) => { if (t.problem) set.add(t.problem.trim()); });
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [masterProblems, tickets]);
+
   const filteredTickets = useMemo(() => {
-    const showAll = !!searchTerm || invoiceFilter !== 'all';
+    const showAll = !!searchTerm || invoiceFilter !== 'all' || !!problemFilter;
     return tickets.filter((ticket) => {
       const matchesStatus = filterStatus === 'all' ? (showAll || isTicketActive(ticket.status)) : ticket.status === filterStatus;
       const matchesSearch = ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -297,13 +334,17 @@ export default function TicketsScreen() {
       const matchesInvoice = invoiceFilter === 'all'
         || (invoiceFilter === 'pending' && isInvoiceable(ticket) && !ticket.invoice_done)
         || (invoiceFilter === 'done' && isInvoiceable(ticket) && ticket.invoice_done);
-      return matchesStatus && matchesSearch && matchesInvoice;
+      const matchesWc = !wcTypeFilter || ticket.wc_type === wcTypeFilter;
+      const matchesBrand = !brandFilter || (ticket.brand_name || '').toLowerCase().includes(brandFilter.toLowerCase());
+      const matchesEng = !engineerFilter || ticket.assigned_to === engineerFilter;
+      const matchesProblem = !problemFilter || (ticket.problem || '').toLowerCase().includes(problemFilter.toLowerCase());
+      return matchesStatus && matchesSearch && matchesInvoice && matchesWc && matchesBrand && matchesEng && matchesProblem;
     });
-  }, [tickets, filterStatus, searchTerm, invoiceFilter]);
+  }, [tickets, filterStatus, searchTerm, invoiceFilter, wcTypeFilter, brandFilter, engineerFilter, problemFilter]);
 
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [filterStatus, searchTerm, invoiceFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [filterStatus, searchTerm, invoiceFilter, wcTypeFilter, brandFilter, engineerFilter, problemFilter, pageSize]);
   const totalPages = Math.max(1, Math.ceil(filteredTickets.length / pageSize));
   const pagedTickets = useMemo(() => filteredTickets.slice((page - 1) * pageSize, page * pageSize), [filteredTickets, page, pageSize]);
 
@@ -394,6 +435,113 @@ export default function TicketsScreen() {
     if (selectedTicket) printLabel(selectedTicket);
   };
 
+  // "📥 Excel Export" (index.html:4842, exportFilteredTickets()) — dumps the
+  // currently filtered ticket list, including per-call timeline-derived visit/
+  // work/close timestamps and durations.
+  const handleExcelExport = () => {
+    const filtered = filteredTickets;
+    if (!filtered.length) { alert('No records to export.'); return; }
+
+    const durHrs = (from?: string | null, to?: string | null): string | null => {
+      if (!from || !to) return null;
+      const m = (new Date(to).getTime() - new Date(from).getTime()) / 60000;
+      if (m < 0) return null;
+      if (m < 60) return `${Math.round(m)}m`;
+      const h = Math.floor(m / 60), mn = Math.round(m % 60);
+      return `${h}h${mn ? ` ${mn}m` : ''}`;
+    };
+    const getTL = (t: Ticket): any[] => {
+      let tl: any = (t as any).timeline || [];
+      if (typeof tl === 'string') { try { tl = JSON.parse(tl); } catch { tl = []; } }
+      return Array.isArray(tl) ? tl : [];
+    };
+    const getWorkStartAt = (t: Ticket) => { const e = [...getTL(t)].reverse().find((x) => x.action && String(x.action).includes('Work Start')); return e?.at || null; };
+    const getClosedAt = (t: Ticket) => { const e = [...getTL(t)].reverse().find((x) => x.action && (String(x.action).toLowerCase().includes('closed') || String(x.action).toLowerCase().includes('close'))); return e?.at || null; };
+    const getTotalRepairHrs = (t: Ticket): string | null => {
+      const tl = getTL(t);
+      const sessions = tl.filter((e) => e.action === 'Work Session End');
+      const done = sessions.reduce((s, e) => s + (e.duration_min || 0), 0);
+      const closedAt = getClosedAt(t);
+      const lastWs = [...tl].reverse().find((e) => e.action && String(e.action).includes('Work Start'));
+      const lastSessEnd = sessions.length ? sessions[sessions.length - 1] : null;
+      let extra = 0;
+      if (lastWs && closedAt) {
+        const wsTime = new Date(lastWs.at).getTime();
+        const clTime = new Date(closedAt).getTime();
+        if (lastSessEnd) {
+          const sessEndTime = new Date(lastSessEnd.at).getTime();
+          if (wsTime > sessEndTime) { const m = Math.round((clTime - wsTime) / 60000); if (m > 0) extra = m; }
+        } else {
+          const m = Math.round((clTime - wsTime) / 60000); if (m > 0) extra = m;
+        }
+      }
+      const total = done + extra;
+      if (!total) return null;
+      const h = Math.floor(total / 60), m = total % 60;
+      return h > 0 ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`;
+    };
+    const getVisitStartAt = (t: Ticket) => { const e = getTL(t).find((x) => x.action === 'Visit Start'); return e?.at || null; };
+    const getManualTimeRemark = (t: Ticket) => { const e = getTL(t).find((x) => x.action === 'Manual Time Update'); return e ? (e.note || 'Yes') : ''; };
+
+    const engMap: Record<string, Ticket[]> = {};
+    filtered.forEach((t) => { const e = t.assigned_name || 'UNASSIGNED'; (engMap[e] = engMap[e] || []).push(t); });
+    Object.values(engMap).forEach((arr) => arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()));
+    const visitGap: Record<string, string | null> = {};
+    Object.values(engMap).forEach((arr) => {
+      for (let i = 1; i < arr.length; i++) {
+        const prevClosed = getClosedAt(arr[i - 1]);
+        if (prevClosed && arr[i].created_at) visitGap[arr[i].id] = durHrs(prevClosed, arr[i].created_at);
+      }
+    });
+
+    const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-');
+    const fmtTime = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-');
+
+    const headers = ['Ticket ID', 'Customer', 'Mobile', 'City', 'Brand', 'Model', 'Serial', 'Call Type', 'Service Type', 'WC Type', 'Engineer', 'Status',
+      'Open Date', 'Open Time', 'Visit Start (Travel) Date', 'Visit Start Time', 'Work Start Date', 'Work Start Time', 'Close Date', 'Close Time',
+      'Travel Time (Visit→Work Start)', 'Repair Time (Work Start→Close)', 'Resolution Time (Open→Close)', 'Visit Gap (from prev close)',
+      'Manual Time?', 'Manual Time Remark', 'Remarks'];
+    const data = filtered.map((t) => {
+      const closedAt = getClosedAt(t);
+      const workStartAt = getWorkStartAt(t);
+      const visitStartAt = getVisitStartAt(t);
+      const manualRemark = getManualTimeRemark(t);
+      return [
+        t.id, t.cname, t.mobile, t.city, t.brand_name, t.model, t.serial,
+        t.call_type, t.service_type, t.wc_type || '-', t.assigned_name || '-', t.status,
+        fmtDate(t.created_at), fmtTime(t.created_at),
+        fmtDate(visitStartAt), fmtTime(visitStartAt),
+        fmtDate(workStartAt), fmtTime(workStartAt),
+        fmtDate(closedAt), fmtTime(closedAt),
+        durHrs(visitStartAt, workStartAt) || '-',
+        getTotalRepairHrs(t) || durHrs(workStartAt, closedAt) || '-',
+        durHrs(t.created_at, closedAt) || '-',
+        visitGap[t.id] || '-',
+        manualRemark ? 'YES ⚠️' : '-',
+        manualRemark || '-',
+        t.remarks || '-',
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    ws['!cols'] = [{ wch: 13 }, { wch: 18 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 13 }, { wch: 15 }, { wch: 14 }, { wch: 13 }, { wch: 10 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 11 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 11 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 22 }, { wch: 10 }, { wch: 35 }, { wch: 30 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
+    XLSX.writeFile(wb, `BhaviCRM_Tickets_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // "📷 View Call Photos" (index.html:4890, viewCallPhotos()) — Job Sheet +
+  // extra attachment photos plus every KM/odometer photo logged for the call.
+  const [callPhotosTicket, setCallPhotosTicket] = useState<Ticket | null>(null);
+  const [callPhotosKm, setCallPhotosKm] = useState<any[]>([]);
+  const [callPhotosLoading, setCallPhotosLoading] = useState(false);
+  const openCallPhotos = async (t: Ticket) => {
+    setCallPhotosTicket(t);
+    setCallPhotosLoading(true);
+    const { data } = await supabase.from('km_logs').select('*').eq('ticket_id', t.id).order('captured_at', { ascending: true });
+    setCallPhotosKm(data || []);
+    setCallPhotosLoading(false);
+  };
+
   // View-mode charges breakdown — Customer Reject: parts were only
   // requested/estimated, never fitted, so they must not be billed; only the
   // final inspection/visit charge (already in labor/final_charges) applies.
@@ -402,7 +550,13 @@ export default function TicketsScreen() {
   const ticketLaborCharge = Number(selectedTicket?.labor) || Number(selectedTicket?.service_charges) || 0;
   const ticketFinalCharge = Number(selectedTicket?.final_charges) || 0;
   const ticketGrandTotal = ticketFinalCharge > 0 ? ticketFinalCharge : (ticketLaborCharge + fittedPartsTotal + (Number(selectedTicket?.other_charge) || 0));
-  const canApproveOwnEstimate = !!selectedTicket && selectedTicket.status === 'Pending Customer Approval' && currentUserRole === 'engineer' && selectedTicket.assigned_to === currentUserId;
+  // index.html:6220-6222 — admin/WC/CSP manager get the "Approve / Reject
+  // Estimate" button on ANY Pending Customer Approval ticket, in addition to
+  // the engineer's own-assigned-call case.
+  const canApproveEstimate = !!selectedTicket && selectedTicket.status === 'Pending Customer Approval' && (
+    (currentUserRole === 'engineer' && selectedTicket.assigned_to === currentUserId)
+    || currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr
+  );
 
   return (
     <div style={{ padding: '20px' }}>
@@ -419,11 +573,35 @@ export default function TicketsScreen() {
           <option value="all">All</option>
           {statusOptions.map((s) => (<option key={s} value={s}>{s}</option>))}
         </select>
+        <select value={wcTypeFilter} onChange={(e) => setWcTypeFilter(e.target.value)} style={styles.filterSelect}>
+          <option value="">All WC Type</option>
+          <option value="ICP">ICP</option>
+          <option value="CSP">CSP</option>
+        </select>
+        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} style={styles.filterSelect}>
+          <option value="">All Brands</option>
+          <option value="Printer">Printer</option>
+          <option value="Scanner">Scanner</option>
+        </select>
+        <select value={engineerFilter} onChange={(e) => setEngineerFilter(e.target.value)} style={styles.filterSelect}>
+          <option value="">All Engineers</option>
+          {engineers.map((e) => (<option key={e.user_id} value={e.user_id}>{e.name}</option>))}
+        </select>
+        <input
+          type="text" list="ticket-problem-list" placeholder="All Problems" value={problemFilter}
+          onChange={(e) => setProblemFilter(e.target.value)} style={{ ...styles.filterInput, minWidth: 160 }}
+        />
+        <datalist id="ticket-problem-list">
+          {problemOptions.map((p) => (<option key={p} value={p} />))}
+        </datalist>
         <select value={invoiceFilter} onChange={(e) => setInvoiceFilter(e.target.value as any)} style={styles.filterSelect}>
           <option value="all">All Invoice</option>
           <option value="pending">🧾 Invoice Pending</option>
           <option value="done">✅ Invoice Done</option>
         </select>
+        <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={handleExcelExport}>
+          📥 Excel Export
+        </button>
         <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={styles.filterSelect}>
           <option value={30}>30 / page</option>
           <option value={50}>50 / page</option>
@@ -491,6 +669,8 @@ export default function TicketsScreen() {
                             ➕ Add Product
                           </button>
                         )}
+                        <button title="View Call Photos" style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, padding: '6px 8px' }} onClick={() => openCallPhotos(t)}>📷</button>
+                        <button title="Print Job Sheet" style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, padding: '6px 8px' }} onClick={() => printJobSheet(t)}>🖨️</button>
                       </div>
                     </td>
                   </tr>
@@ -771,7 +951,7 @@ export default function TicketsScreen() {
               </button>
               {modalMode === 'view' ? (
                 <>
-                  {canApproveOwnEstimate && (
+                  {canApproveEstimate && (
                     <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => openEstimateModal(selectedTicket!)}>
                       ✅ Approve / Reject Estimate
                     </button>
@@ -837,6 +1017,61 @@ export default function TicketsScreen() {
             </div>
           </div>
         </div>
+      )}
+      {callPhotosTicket && (
+        <Modal isOpen onClose={() => setCallPhotosTicket(null)} title={`📷 Call Photos — ${callPhotosTicket.id}${callPhotosTicket.cname ? ' — ' + callPhotosTicket.cname : ''}`}>
+          {(() => {
+            const t: any = callPhotosTicket;
+            let extras = t.attachments;
+            if (typeof extras === 'string') { try { extras = JSON.parse(extras); } catch { extras = []; } }
+            if (!Array.isArray(extras)) extras = [];
+            const jsPhotos: string[] = [t.jobsheet_photo, ...extras].filter(Boolean);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>📄 Job Sheet Photo</h3>
+                  {jsPhotos.length === 0 ? (
+                    <div style={{ color: '#b45309', fontSize: 13 }}>No job sheet photo attached yet</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
+                      {jsPhotos.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noreferrer">
+                          <img src={u} style={{ maxWidth: 150, maxHeight: 150, borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb' }} />
+                <div>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🛣️ KM / Odometer Photos</h3>
+                  {callPhotosLoading ? (
+                    <div style={{ color: colors.textMuted, fontSize: 13 }}>Loading...</div>
+                  ) : callPhotosKm.length === 0 ? (
+                    <div style={{ color: colors.textMuted, fontSize: 13 }}>No KM photos for this call</div>
+                  ) : callPhotosKm.map((l: any) => {
+                    const typeLabel: Record<string, string> = { opening: '🏢 Opening', arrival: '📍 Arrival at Customer', closing: '🏁 Closing' };
+                    const tm = l.captured_at ? new Date(l.captured_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                    return (
+                      <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${colors.border}`, borderRadius: 10, padding: 8, marginBottom: 8 }}>
+                        {l.photo_url ? (
+                          <a href={l.photo_url} target="_blank" rel="noreferrer"><img src={l.photo_url} style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 8 }} /></a>
+                        ) : (
+                          <div style={{ width: 70, height: 52, background: '#f1f5f9', borderRadius: 8 }} />
+                        )}
+                        <div style={{ flex: 1, fontSize: 12 }}>
+                          <b>{typeLabel[l.entry_type] || l.entry_type}</b><br />
+                          🕐 {tm} &nbsp; 🛣️ {l.odometer_km != null ? `${l.odometer_km} km` : '—'}
+                          {l.lat && l.lng && <> &nbsp; <a href={`https://maps.google.com/?q=${l.lat},${l.lng}`} target="_blank" rel="noreferrer">📍 Map</a></>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
       )}
       {invoiceModalTicket && (
         <InvoiceModal

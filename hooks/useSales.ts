@@ -62,7 +62,5 @@ export const useSales = () => {
         return r;
     };
 
-    const totalRevenue = orders.filter(o => o.status !== 'inquiry').reduce((s, o) => s + (o.total_amount || 0), 0);
-
-    return { orders, products, upiQrUrl, companyPhone, loading, error, totalRevenue, addOrder, markStatus, recordPayment, recordDispatch, recordDelivery, refetch: load };
+    return { orders, products, upiQrUrl, companyPhone, loading, error, addOrder, markStatus, recordPayment, recordDispatch, recordDelivery, refetch: load };
 };

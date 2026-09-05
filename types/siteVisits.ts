@@ -11,12 +11,15 @@ export const SV_TYPE_META: Record<string, { emoji: string; color: string }> = {
 
 export type SvStatus = 'Assigned' | 'Traveling' | 'Reached' | 'Working' | 'Done' | 'Cancelled';
 
+// Colors match HTML's per-status stColor map used for site-visit cards
+// (index.html:23856,23869): Assigned/Traveling/Working/Done use these exact
+// hex values, not the generic amber/blue/green palette used elsewhere.
 export const SV_STATUS_META: Record<SvStatus, { emoji: string; color: string }> = {
-    Assigned: { emoji: '📋', color: '#d97706' },
-    Traveling: { emoji: '🚗', color: '#f59e0b' },
+    Assigned: { emoji: '📋', color: '#1d4ed8' },
+    Traveling: { emoji: '🚗', color: '#ea580c' },
     Reached: { emoji: '📍', color: '#0d9488' },
-    Working: { emoji: '🔧', color: '#2563eb' },
-    Done: { emoji: '✅', color: '#059669' },
+    Working: { emoji: '🔧', color: '#b45309' },
+    Done: { emoji: '✅', color: '#15803d' },
     Cancelled: { emoji: '🚫', color: '#6b7280' },
 };
 

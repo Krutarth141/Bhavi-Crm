@@ -9,7 +9,6 @@ import ModelsTab from './masters/ModelsTab';
 import ProblemTypesTab from './masters/ProblemTypesTab';
 import PincodesTab from './masters/PincodesTab';
 import ServiceGalleryTab from './masters/ServiceGalleryTab';
-import InventoryMasterTab from './masters/InventoryMasterTab';
 
 const tabs: { id: MasterTabId; label: string }[] = [
     { id: 'brands', label: '🏷️ Brands' },
@@ -18,7 +17,6 @@ const tabs: { id: MasterTabId; label: string }[] = [
     { id: 'problems', label: '🔧 Problem Types' },
     { id: 'pincodes', label: '📍 Pincodes' },
     { id: 'gallery', label: '📸 Service Gallery' },
-    { id: 'inventory', label: '📦 Inventory' },
 ];
 
 export default function MasterDataScreen() {
@@ -34,7 +32,7 @@ export default function MasterDataScreen() {
     } = useMasters();
 
     const renderTab = () => {
-        if (loading && activeTab !== 'inventory' && activeTab !== 'pincodes' && activeTab !== 'gallery') {
+        if (loading && activeTab !== 'pincodes' && activeTab !== 'gallery') {
             return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 30 }}>Loading...</p>;
         }
 
@@ -92,9 +90,6 @@ export default function MasterDataScreen() {
 
             case 'gallery':
                 return <ServiceGalleryTab />;
-
-            case 'inventory':
-                return <InventoryMasterTab />;
 
             default:
                 return null;

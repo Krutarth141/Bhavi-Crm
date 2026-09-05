@@ -1,3 +1,4 @@
+// components/screens/worklogs/WorkLogEngineerCard.tsx
 import React from 'react';
 import { WorkLog, PeonTaskLog } from '@/types/workLogs';
 
@@ -148,9 +149,12 @@ function WorkLogEntry({ log, onOpenTicket }: { log: WorkLog; onOpenTicket: (id: 
     const isStatus = log.log_type === 'status' || (log.log_type === 'work' && log.from_time === log.to_time && !!log.from_time && log.to_time !== 'OPEN');
     const isToday = log.log_date === new Date().toLocaleDateString('en-CA');
 
-    const borderColor = isStatus ? '#10b981' : isTravel ? '#f59e0b' : isOpen ? '#10b981' : 'var(--primary)';
-    const timeBg = isStatus ? '#d1fae5' : isTravel ? '#fef3c7' : isOpen ? '#d1fae5' : '#ede9fe';
-    const timeColor = isStatus ? '#065f46' : isTravel ? '#92400e' : isOpen ? '#065f46' : '#4c1d95';
+    // Matches HTML's all-engineers Work Log report (index.html:21859-21861),
+    // which colors only by isTravel/isStatus — no separate green-for-open
+    // treatment here (that only exists in the personal Work Log screen).
+    const borderColor = isTravel ? '#f59e0b' : isStatus ? '#10b981' : 'var(--primary)';
+    const timeBg = isTravel ? '#fef3c7' : isStatus ? '#d1fae5' : '#ede9fe';
+    const timeColor = isTravel ? '#92400e' : isStatus ? '#065f46' : '#4c1d95';
     const timeLabel = isStatus
         ? log.from_time
         : isOpen

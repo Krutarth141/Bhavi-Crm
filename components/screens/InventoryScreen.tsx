@@ -1,8 +1,10 @@
+// components/screens/InventoryScreen.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useInventory } from '@/hooks/useInventory';
+import * as XLSX from 'xlsx';
+import { useInventory, TallyReportRow } from '@/hooks/useInventory';
 import { InventoryItem, TransactionData } from '@/types/inventory';
 import { InventoryTable } from '@/components/inventory/InventoryTable';
 import { InventoryStats } from '@/components/inventory/InventoryStats';
@@ -24,12 +26,15 @@ export default function InventoryScreen() {
     const [activeTab, setActiveTab] = useState<InvTab>('stock');
 
     // Data fetching
-    const { inventory, loading, categories, saveInventoryItem, saveStockTransaction, deleteInventoryItem, fetchInventory } = useInventory();
+    const {
+        inventory, loading, saveInventoryItem, saveStockTransaction, deleteInventoryItem, fetchInventory,
+        engStockByPart, tallyDraft, tallyLoading, loadTallyData, setTallyPhysical, clearTallyDraft, saveStockTally,
+    } = useInventory();
     const { brands } = useMasters();
 
-    // Stock Tally — physical stock-count reconciliation
+    // Stock Tally — physical stock-count reconciliation (index.html:8406-8587)
     const [tallyConsumablesOnly, setTallyConsumablesOnly] = useState(false);
-    const [tallyCounts, setTallyCounts] = useState<Record<string, string>>({});
+    const [tallySearch, setTallySearch] = useState('');
     const [tallySaving, setTallySaving] = useState(false);
 
     // UI State
@@ -55,7 +60,6 @@ export default function InventoryScreen() {
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
     const [stockFilter, setStockFilter] = useState<'' | 'low' | 'out'>('');
 
     // Filtered Data
@@ -67,45 +71,61 @@ export default function InventoryScreen() {
                 item.item_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.part_code?.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesCategory = !selectedCategory || item.category === selectedCategory;
-
             const matchesStock =
                 !stockFilter ||
                 (stockFilter === 'low' && item.qty_in_stock > 0 && item.qty_in_stock <= item.min_stock) ||
                 (stockFilter === 'out' && item.qty_in_stock <= 0);
 
-            return matchesSearch && matchesCategory && matchesStock;
+            return matchesSearch && matchesStock;
         });
-    }, [inventory, searchTerm, selectedCategory, stockFilter]);
+    }, [inventory, searchTerm, stockFilter]);
 
+    // Rows sorted by part code, filtered by search + consumables-only
+    // (index.html:8460-8464).
     const tallyItems = useMemo(() => {
-        return inventory.filter((item) => !tallyConsumablesOnly || item.is_consumable);
-    }, [inventory, tallyConsumablesOnly]);
+        const q = tallySearch.toLowerCase();
+        return inventory
+            .filter((item) => (!tallyConsumablesOnly || item.is_consumable) && (!q || (item.part_code || '').toLowerCase().includes(q) || (item.item_name || '').toLowerCase().includes(q)))
+            .sort((a, b) => (a.part_code || '').localeCompare(b.part_code || ''));
+    }, [inventory, tallyConsumablesOnly, tallySearch]);
 
+    const tallyCountedCount = useMemo(
+        () => Object.keys(tallyDraft).filter((k) => tallyDraft[k] !== '' && tallyDraft[k] !== undefined).length,
+        [tallyDraft]
+    );
+
+    // "Save Tally & Generate Report" always proceeds once ≥1 count is
+    // entered — even with zero mismatches — matching HTML's saveStockTally()
+    // (index.html:8539-8580), which never gates on mismatches existing.
     const handleSaveTally = async () => {
-        const mismatches = tallyItems
-            .map((item) => ({ item, counted: tallyCounts[item.id] !== undefined ? parseFloat(tallyCounts[item.id]) : item.qty_in_stock }))
-            .filter(({ item, counted }) => !isNaN(counted) && counted !== item.qty_in_stock);
-
-        if (!mismatches.length) { alert('No mismatches — nothing to save.'); return; }
-        if (!confirm(`${mismatches.length} item(s) have a count mismatch. Save tally and correct stock levels?`)) return;
-
         setTallySaving(true);
-        let done = 0;
-        for (const { item, counted } of mismatches) {
-            const delta = counted - item.qty_in_stock;
-            const r = await saveStockTransaction(
-                item,
-                { quantity: Math.abs(delta), date: new Date().toISOString().split('T')[0], note: `Stock Tally: system ${item.qty_in_stock} → counted ${counted}`, supplier: '', invoice: '', customer: '', sell_price: 0 },
-                delta > 0 ? 'in' : 'out',
-                userName,
-            );
-            if (r.success) done++;
-        }
+        const r = await saveStockTally(inventory, userName);
         setTallySaving(false);
-        setTallyCounts({});
-        alert(`✅ Tally saved — ${done}/${mismatches.length} item(s) corrected.`);
+        if (!r.success) { alert(r.error === 'Enter at least one physical count before saving.' ? `⚠️ ${r.error}` : `Error saving tally: ${r.error}`); return; }
+        alert(`✅ Tally saved! ${r.countedCount} part(s) counted, ${r.mismatches} corrected. Report downloading...`);
+        downloadTallyReportExcel(r.reportRows || [], new Date().toLocaleDateString('en-CA'));
     };
+
+    const downloadTallyReportExcel = (rows: TallyReportRow[], date: string) => {
+        if (!rows.length) return;
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Stock Tally');
+        XLSX.writeFile(wb, `Stock_Tally_${date}.xlsx`);
+    };
+
+    const handleClearTallyCounts = async () => {
+        if (!confirm('Clear ALL entered counts (including saved progress)? This cannot be undone.')) return;
+        await clearTallyDraft();
+    };
+
+    // Loads "With Engineers" totals + restores any saved draft counts when the
+    // Stock Tally tab is opened — mirrors HTML's renderInvTallyTab() being
+    // invoked on tab switch (index.html:8414), not on every screen mount.
+    useEffect(() => {
+        if (activeTab === 'tally' && canTally) loadTallyData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, canTally]);
 
     const toggleSelectOne = (id: string) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -276,52 +296,83 @@ export default function InventoryScreen() {
 
                 {activeTab === 'tally' && canTally && (
                     <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
-                                <input type="checkbox" checked={tallyConsumablesOnly} onChange={(e) => setTallyConsumablesOnly(e.target.checked)} />
-                                Consumables only
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                            <h3 style={{ margin: 0, fontSize: 15 }}>🧮 Stock Tally</h3>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button onClick={handleClearTallyCounts} style={{ padding: '8px 14px', border: '1px solid #e2e8f0', background: '#fff', borderRadius: 6, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>↺ Clear Counts</button>
+                                <button
+                                    onClick={handleSaveTally}
+                                    disabled={tallySaving}
+                                    style={{ padding: '10px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: tallySaving ? 0.6 : 1 }}
+                                >
+                                    {tallySaving ? 'Saving...' : '💾 Save Tally & Generate Report'}
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, color: '#1e40af' }}>
+                            📋 <b>How to use:</b> Physically count each part in the office and type the counted qty in the &quot;Physical Count&quot; column. Your counts auto-save as you type — close this and come back anytime (even a different device) and they&apos;ll still be here. &quot;With Engineers&quot; is shown for reference only (that stock is out with engineers, not counted here). When fully done, click <b>Save Tally &amp; Generate Report</b> — any part where Physical ≠ System gets corrected (logged in Movement Log) and a report downloads.
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                            <input
+                                type="text"
+                                placeholder="🔍 Search part code or name..."
+                                value={tallySearch}
+                                onChange={(e) => setTallySearch(e.target.value)}
+                                style={{ flex: 1, minWidth: 220, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, outline: 'none' }}
+                            />
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '7px 12px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                <input type="checkbox" checked={tallyConsumablesOnly} onChange={(e) => setTallyConsumablesOnly(e.target.checked)} /> 🧴 Consumables only (for weekly tally)
                             </label>
-                            <button
-                                onClick={handleSaveTally}
-                                disabled={tallySaving}
-                                style={{ padding: '10px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: tallySaving ? 0.6 : 1 }}
-                            >
-                                {tallySaving ? 'Saving...' : '💾 Save Tally & Generate Report'}
-                            </button>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>
+                            {tallyLoading ? 'Loading tally data…' : `${tallyCountedCount} of ${inventory.length} parts counted so far${tallyConsumablesOnly ? ` (showing Consumables only — ${tallyItems.length} items)` : ''}`}
                         </div>
                         <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                 <thead>
                                     <tr style={{ background: '#f8fafc' }}>
-                                        {['Item', 'Part Code', 'System Qty', 'Counted Qty', 'Mismatch'].map((h) => (
-                                            <th key={h} style={{ padding: 8, textAlign: 'left', fontWeight: 600 }}>{h}</th>
-                                        ))}
+                                        <th style={{ padding: 8, textAlign: 'left', fontWeight: 600 }}>Part Code</th>
+                                        <th style={{ padding: 8, textAlign: 'left', fontWeight: 600 }}>Item Name</th>
+                                        <th style={{ padding: 8, fontWeight: 600 }}>🏢 System (Office)</th>
+                                        <th style={{ padding: 8, fontWeight: 600 }}>👷 With Engineers</th>
+                                        <th style={{ padding: 8, fontWeight: 600 }}>✏️ Physical Count</th>
+                                        <th style={{ padding: 8, fontWeight: 600 }}>Variance</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {tallyItems.map((item) => {
-                                        const countedStr = tallyCounts[item.id] ?? String(item.qty_in_stock);
-                                        const counted = parseFloat(countedStr);
-                                        const mismatch = !isNaN(counted) && counted !== item.qty_in_stock;
+                                    {tallyItems.length === 0 ? (
+                                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20, color: '#9ca3af' }}>No items found</td></tr>
+                                    ) : tallyItems.map((item) => {
+                                        const officeQty = item.qty_in_stock || 0;
+                                        const withEng = engStockByPart[item.id] || 0;
+                                        const phys = tallyDraft[item.id];
+                                        const hasPhys = phys !== undefined && phys !== '';
+                                        const variance = hasPhys ? (parseInt(phys) || 0) - officeQty : null;
                                         return (
-                                            <tr key={item.id} style={{ borderTop: '1px solid #f1f5f9', background: mismatch ? '#fffbeb' : undefined }}>
-                                                <td style={{ padding: 8, fontWeight: 600 }}>{item.item_name}</td>
-                                                <td style={{ padding: 8, color: '#64748b' }}>{item.part_code || '—'}</td>
-                                                <td style={{ padding: 8 }}>{item.qty_in_stock}</td>
-                                                <td style={{ padding: 8 }}>
+                                            <tr key={item.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: 8, fontWeight: 700, color: '#185FA5' }}>
+                                                    {item.part_code || '—'}
+                                                    {item.is_consumable && <span style={{ fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4, marginLeft: 4 }}>CONS</span>}
+                                                </td>
+                                                <td style={{ padding: 8 }}>{item.item_name}</td>
+                                                <td style={{ padding: 8, textAlign: 'center' }}>{officeQty}</td>
+                                                <td style={{ padding: 8, textAlign: 'center', color: '#0891b2', fontWeight: 600 }}>{withEng}</td>
+                                                <td style={{ padding: 8, textAlign: 'center' }}>
                                                     <input
                                                         type="number"
-                                                        value={countedStr}
-                                                        onChange={(e) => setTallyCounts((c) => ({ ...c, [item.id]: e.target.value }))}
-                                                        style={{ width: 90, padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
+                                                        min={0}
+                                                        placeholder="Count"
+                                                        value={phys ?? ''}
+                                                        onChange={(e) => setTallyPhysical(item.id, e.target.value, userName)}
+                                                        style={{ width: 90, textAlign: 'center', padding: '5px 8px', border: '1.5px solid #e2e8f0', borderRadius: 6, fontSize: 13 }}
                                                     />
                                                 </td>
-                                                <td style={{ padding: 8 }}>
-                                                    {mismatch && (
-                                                        <span style={{ color: counted > item.qty_in_stock ? '#059669' : '#dc2626', fontWeight: 700 }}>
-                                                            {counted > item.qty_in_stock ? '+' : ''}{counted - item.qty_in_stock}
-                                                        </span>
-                                                    )}
+                                                <td style={{ padding: 8, textAlign: 'center' }}>
+                                                    {variance === null
+                                                        ? <span style={{ color: '#94a3b8' }}>—</span>
+                                                        : variance === 0
+                                                            ? <span style={{ color: '#059669', fontWeight: 700 }}>0 ✓</span>
+                                                            : <span style={{ color: variance > 0 ? '#0891b2' : '#dc2626', fontWeight: 700 }}>{variance > 0 ? '+' : ''}{variance}</span>}
                                                 </td>
                                             </tr>
                                         );
@@ -346,7 +397,7 @@ export default function InventoryScreen() {
                         <div
                             style={{
                                 display: 'grid',
-                                gridTemplateColumns: '1fr 200px 200px auto',
+                                gridTemplateColumns: '1fr 200px auto',
                                 gap: '12px',
                                 marginBottom: '16px',
                             }}
@@ -363,21 +414,6 @@ export default function InventoryScreen() {
                                     fontSize: '14px',
                                 }}
                             />
-                            <select
-                                value={selectedCategory}
-                                onChange={(e) => setSelectedCategory(e.target.value)}
-                                style={{
-                                    padding: '10px 12px',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: '6px',
-                                    fontSize: '14px',
-                                }}
-                            >
-                                <option value="">All Categories</option>
-                                {categories.map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
-                                ))}
-                            </select>
                             <select
                                 value={stockFilter}
                                 onChange={(e) => setStockFilter(e.target.value as '' | 'low' | 'out')}

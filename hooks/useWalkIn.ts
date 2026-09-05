@@ -1,12 +1,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { WalkInEntry } from '@/types/walkin';
+import { WalkInEntry, SELF_CHECKIN_WC_IDS } from '@/types/walkin';
 
-export function useWalkIn(roleType: string, userId: string) {
+// Mirrors HTML's inline WC-type sniff used to pick which self-checkin bucket
+// a WC should also see (index.html:16449-16454, 16660-16665) — a real ICP/CSP
+// user has no separate "wc_type" field, so the WC's own name/user_id is
+// pattern-matched instead.
+function selfCheckinIdsFor(userName: string, userId: string): [string, string] {
+    const n = (userName || '').toUpperCase();
+    const u = (userId || '').toUpperCase();
+    const isCSP = n.includes('CSP') || u.includes('CSP');
+    return [isCSP ? SELF_CHECKIN_WC_IDS.CSP : SELF_CHECKIN_WC_IDS.ICP, SELF_CHECKIN_WC_IDS.OTHER];
+}
+
+export function useWalkIn(roleType: string, userId: string, userName: string = '') {
     const [todayLogs, setTodayLogs] = useState<WalkInEntry[]>([]);
     const [allLogs, setAllLogs] = useState<WalkInEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // Mirrors HTML's today-list query (index.html:16446-16459) — ORs in the
+    // WC's own wc_id alongside the relevant SELF_CHECKIN_* rows (QR kiosk
+    // check-ins), newest first by created_at/arrival_time.
+    const fetchLogsForDate = useCallback(
+        async (date: string): Promise<WalkInEntry[]> => {
+            try {
+                let query = supabase.from('walkin_log').select('*').eq('visit_date', date);
+
+                if (roleType !== 'admin') {
+                    const [selfId, otherId] = selfCheckinIdsFor(userName, userId);
+                    query = query.or(`wc_id.eq.${userId},wc_id.eq.${selfId},wc_id.eq.${otherId}`);
+                }
+
+                query = query
+                    .order('created_at', { ascending: false, nullsFirst: false })
+                    .order('arrival_time', { ascending: false });
+
+                const { data, error: fetchError } = await query;
+                if (fetchError) throw fetchError;
+                return data || [];
+            } catch (err) {
+                console.error('Failed to fetch walk-in logs for date:', err);
+                return [];
+            }
+        },
+        [roleType, userId, userName]
+    );
 
     const fetchTodayLogs = useCallback(async () => {
         try {
@@ -14,28 +53,15 @@ export function useWalkIn(roleType: string, userId: string) {
             setError(null);
 
             const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-
-            let query = supabase
-                .from('walkin_log')
-                .select('*')
-                .eq('visit_date', today)
-                .order('token_no', { ascending: true });
-
-            if (roleType !== 'admin') {
-                query = query.eq('wc_id', userId);
-            }
-
-            const { data, error: fetchError } = await query;
-
-            if (fetchError) throw fetchError;
-            setTodayLogs(data || []);
+            const data = await fetchLogsForDate(today);
+            setTodayLogs(data);
         } catch (err: any) {
             console.error('Failed to fetch today walk-in logs:', err);
             setError(err.message ?? String(err));
         } finally {
             setLoading(false);
         }
-    }, [roleType, userId]);
+    }, [fetchLogsForDate]);
 
     const fetchByDateRange = useCallback(
         async (from: string, to: string, search: string): Promise<WalkInEntry[]> => {
@@ -85,5 +111,6 @@ export function useWalkIn(roleType: string, userId: string) {
         error,
         refetch: fetchTodayLogs,
         fetchByDateRange,
+        fetchLogsForDate,
     };
 }

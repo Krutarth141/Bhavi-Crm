@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useNavVisibility } from '@/hooks/useNavVisibility';
 
@@ -92,16 +92,33 @@ export default function WorkControllerDashboard() {
     const [showWCReport, setShowWCReport] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
+    // "+ New Call" fired from the Dashboard's Recent Tickets card
+    // (index.html:3857) — same 'bhavi:navigate-tab' CustomEvent pattern
+    // EngineerDashboard already uses to cross-navigate + hand off a pending
+    // action.
+    const [pendingNewCall, setPendingNewCall] = useState(false);
 
     const handleNavClick = (id: WorkControllerTab) => {
         setActiveTab(id);
         setSidebarOpen(false);
     };
 
+    useEffect(() => {
+        const onNavigate = (e: Event) => {
+            const detail = (e as CustomEvent<{ tab: WorkControllerTab; openNewCall?: boolean }>).detail;
+            if (detail?.tab === 'tickets') {
+                setActiveTab('tickets');
+                if (detail.openNewCall) setPendingNewCall(true);
+            }
+        };
+        window.addEventListener('bhavi:navigate-tab', onNavigate);
+        return () => window.removeEventListener('bhavi:navigate-tab', onNavigate);
+    }, []);
+
     const renderContent = () => {
         switch (activeTab) {
             case 'overview': return <DashboardOverview role="work_controller" />;
-            case 'tickets': return <TicketsScreen />;
+            case 'tickets': return <TicketsScreen autoOpenAdd={pendingNewCall} onConsumedAutoOpenAdd={() => setPendingNewCall(false)} />;
             case 'pending': return <PendingListScreen />;
             case 'customers': return <CustomersScreen />;
             case 'walkin': return <WalkInScreen />;

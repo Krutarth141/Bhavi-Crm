@@ -28,22 +28,13 @@ export default function ReportsScreen() {
     wcReports, wcLoading,
     // import
     importProgress, importTotal, importRunning, importResult, handleImport,
-    // filter state
-    period, setPeriod,
-    customFrom, setCustomFrom,
-    customTo, setCustomTo,
-    filters, setFilters,
-    reportType, setReportType,
-    // derived
-    filtered,
+    // filter tab
+    filterFields, setFilterFields,
+    filterSearched, filterResults,
+    runFilteredSearch,
     engineers,
-    engData,
-    totalClosed,
-    totalRevenue,
-    statusChartData,
-    callTypeChartData,
-    engineerChartData,
-    revenueChartData,
+    // tickets
+    allTickets,
     // actions
     handleDownload,
     handlePrint,
@@ -126,37 +117,19 @@ export default function ReportsScreen() {
         <>
           {activeTab === 'filter' && (
             <FilterDownloadTab
-              period={period}
-              setPeriod={setPeriod}
-              customFrom={customFrom}
-              setCustomFrom={setCustomFrom}
-              customTo={customTo}
-              setCustomTo={setCustomTo}
-              filters={filters}
-              setFilters={setFilters}
+              fields={filterFields}
+              setFields={setFilterFields}
               engineers={engineers}
-              filtered={filtered}
-              totalClosed={totalClosed}
-              totalRevenue={totalRevenue}
-              reportType={reportType}
-              setReportType={setReportType}
-              callTypeChartData={callTypeChartData}
-              statusChartData={statusChartData}
-              engineerChartData={engineerChartData}
-              revenueChartData={revenueChartData}
-              engData={engData}
+              searched={filterSearched}
+              results={filterResults}
+              runSearch={runFilteredSearch}
               handleDownload={handleDownload}
               handlePrint={handlePrint}
             />
           )}
 
           {activeTab === 'revenue' && (
-            <RevenueTab
-              filtered={filtered}
-              totalRevenue={totalRevenue}
-              revenueChartData={revenueChartData}
-              engData={engData}
-            />
+            <RevenueTab tickets={allTickets} />
           )}
 
           {activeTab === 'daily' && (

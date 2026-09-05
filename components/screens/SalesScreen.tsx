@@ -12,6 +12,7 @@ import DispatchModal from '@/components/screens/sales/DispatchModal';
 import DeliveryModal from '@/components/screens/sales/DeliveryModal';
 import SalesSetupTab from '@/components/screens/sales/SalesSetupTab';
 import ProductsTab from '@/components/screens/sales/ProductsTab';
+import CustomerPortalQrModal from '@/components/screens/CustomerPortalQrModal';
 
 type Tab = 'orders' | 'products' | 'setup';
 
@@ -19,7 +20,7 @@ export default function SalesScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name || 'Admin';
 
-    const { orders, products, upiQrUrl, companyPhone, loading, totalRevenue, addOrder, markStatus, recordPayment, recordDispatch, recordDelivery, refetch } = useSales();
+    const { orders, products, upiQrUrl, companyPhone, loading, addOrder, markStatus, recordPayment, recordDispatch, recordDelivery, refetch } = useSales();
 
     const [tab, setTab] = useState<Tab>('orders');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -28,6 +29,9 @@ export default function SalesScreen() {
     const [paymentOrder, setPaymentOrder] = useState<SalesOrder | null>(null);
     const [dispatchOrder, setDispatchOrder] = useState<SalesOrder | null>(null);
     const [deliveryOrder, setDeliveryOrder] = useState<SalesOrder | null>(null);
+    // In-toolbar shortcut to the same Customer Portal QR the sidebar nav
+    // already opens — matches HTML's Sales tab bar button (index.html:27145).
+    const [showPortalQR, setShowPortalQR] = useState(false);
 
     const filtered = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter);
 
@@ -46,16 +50,14 @@ export default function SalesScreen() {
         <div style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>💼 Sales</h1>
-                <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#059669' }}>₹{totalRevenue.toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>Total Revenue</div>
-                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={() => setTab('orders')} style={{ background: tab === 'orders' ? '#1d4ed8' : '#f1f5f9', color: tab === 'orders' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>📋 Orders</button>
                 <button onClick={() => setTab('products')} style={{ background: tab === 'products' ? '#1d4ed8' : '#f1f5f9', color: tab === 'products' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>🛍️ Products</button>
                 <button onClick={() => setTab('setup')} style={{ background: tab === 'setup' ? '#1d4ed8' : '#f1f5f9', color: tab === 'setup' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>⚙️ Setup</button>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => setShowPortalQR(true)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📱 Customer Portal</button>
             </div>
 
             {tab === 'products' ? (
@@ -177,6 +179,7 @@ export default function SalesScreen() {
                     }}
                 />
             )}
+            {showPortalQR && <CustomerPortalQrModal onClose={() => setShowPortalQR(false)} />}
         </div>
     );
 }

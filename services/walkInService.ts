@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { WalkInEntry } from '@/types/walkin';
+import { WalkInEntry, WalkInProduct } from '@/types/walkin';
 
 export const getNextToken = async (date: string): Promise<number> => {
     try {
@@ -49,6 +49,49 @@ export const updateWalkIn = async (
             .update(data)
             .eq('id', id);
 
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};
+
+// Mirrors HTML's duplicate check in saveWalkIn (index.html:16927-16942) — finds
+// an existing walkin_log entry for the same mobile number on the given date.
+export const findTodayWalkInByMobile = async (
+    mobile: string,
+    visitDate: string
+): Promise<WalkInEntry | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('walkin_log')
+            .select('*')
+            .eq('visit_date', visitDate)
+            .eq('mobile', mobile)
+            .limit(1);
+        if (error) throw error;
+        return data && data.length ? (data[0] as WalkInEntry) : null;
+    } catch (err) {
+        console.error('Failed duplicate walk-in check:', err);
+        return null;
+    }
+};
+
+// Mirrors HTML's merge branch of saveWalkIn (index.html:16933-16939) — appends
+// new products onto an existing entry instead of creating a separate one.
+export const mergeWalkInProducts = async (
+    id: string,
+    mergedProducts: WalkInProduct[]
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { error } = await supabase
+            .from('walkin_log')
+            .update({
+                products: mergedProducts,
+                product_count: mergedProducts.length,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', id);
         if (error) throw error;
         return { success: true };
     } catch (err) {

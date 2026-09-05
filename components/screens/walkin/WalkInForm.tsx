@@ -25,6 +25,9 @@ function getCurrentTime(): string {
 export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkInFormProps) {
   const { data: session } = useSession();
   const isAdmin = (session?.user as any)?.roleType === 'admin';
+  const currentUserName = (session?.user as any)?.name ?? '';
+  const currentUserId = (session?.user as any)?.email ?? '';
+  const showRouteSelect = isAdmin && !entry;
 
   const [mobile, setMobile] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -38,9 +41,25 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
   const [area, setArea] = useState('');
   const [route, setRoute] = useState<'ICP' | 'CSP' | 'self'>('self');
   const [products, setProducts] = useState<WalkInProduct[]>([emptyWalkInProduct()]);
-  const [errors, setErrors] = useState<{ customerName?: string; mobile?: string }>({});
+  const [errors, setErrors] = useState<{ customerName?: string; mobile?: string; arrivalTime?: string; products?: string }>({});
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
+
+  // Mirrors HTML's _getWCType (index.html:16690-16698) — when the admin route
+  // selector is showing, use its value; otherwise fall back to sniffing the
+  // logged-in WC's own name/user_id for a CSP/ICP hint.
+  const wcType: 'ICP' | 'CSP' | 'OTHER' = (() => {
+    if (showRouteSelect) {
+      if (route === 'ICP') return 'ICP';
+      if (route === 'CSP') return 'CSP';
+      return 'OTHER';
+    }
+    const n = currentUserName.toUpperCase();
+    const u = currentUserId.toUpperCase();
+    if (n.includes('CSP') || u.includes('CSP')) return 'CSP';
+    if (n.includes('ICP') || u.includes('ICP')) return 'ICP';
+    return 'OTHER';
+  })();
 
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
   const [models, setModels] = useState<{ id: string; brand_id: string | null; model_no: string; model_name: string | null }[]>([]);
@@ -127,6 +146,11 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
     const newErrors: typeof errors = {};
     if (!customerName.trim()) newErrors.customerName = 'Customer name is required';
     if (!mobile.trim()) newErrors.mobile = 'Mobile number is required';
+    // Mirrors HTML's create/edit validation (index.html:16880-16884, 17265-17268).
+    if (!arrivalTime.trim()) newErrors.arrivalTime = 'Arrival Time is required';
+    // Mirrors HTML's product filter — a row only counts if it has a brand or model
+    // (index.html:16892-16907, 17270-17287).
+    if (!products.some((p) => p.brand.trim() || p.model.trim())) newErrors.products = 'Please add at least one product.';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -165,7 +189,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
         </div>
 
         <div style={{ padding: '20px' }}>
-          {isAdmin && !entry && (
+          {showRouteSelect && (
             <div style={{ ...styles.formGroup, marginBottom: 14 }}>
               <label style={styles.formLabel}>Route To Work Center</label>
               <select value={route} onChange={(e) => setRoute(e.target.value as any)} style={{ ...styles.formInput, maxWidth: 320 }}>
@@ -207,7 +231,11 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
 
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Arrival Time *</label>
-                <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} style={styles.formInput} />
+                <input
+                  type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)}
+                  style={{ ...styles.formInput, borderColor: errors.arrivalTime ? colors.danger : undefined }}
+                />
+                {errors.arrivalTime && <span style={{ color: colors.danger, fontSize: '11px' }}>{errors.arrivalTime}</span>}
               </div>
 
               <div style={styles.formGroup}>
@@ -282,6 +310,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
                 product={product}
                 brands={brands}
                 models={models}
+                wcType={wcType}
                 onChange={(np) => setProducts((prev) => prev.map((x, i) => i === index ? np : x))}
                 onRemove={products.length > 1 ? () => removeProduct(index) : undefined}
               />
@@ -294,6 +323,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
             >
               ➕ Add Product
             </button>
+            {errors.products && <div style={{ color: colors.danger, fontSize: '11px', marginTop: '6px' }}>{errors.products}</div>}
           </div>
         </div>
 

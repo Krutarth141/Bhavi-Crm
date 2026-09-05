@@ -29,6 +29,10 @@ const errorStyle: React.CSSProperties = {
   marginTop: '3px',
 };
 
+function getToday(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
 export default function CourierInwardForm({ onSave, loading }: CourierInwardFormProps) {
   const [form, setForm] = useState({
     awb_no: '',
@@ -37,6 +41,7 @@ export default function CourierInwardForm({ onSave, loading }: CourierInwardForm
     sender_mobile: '',
     place: '',
     weight: '',
+    entry_date: getToday(),
   });
   const [products, setProducts] = useState<CourierProduct[]>([emptyCourierProduct()]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -79,11 +84,12 @@ export default function CourierInwardForm({ onSave, loading }: CourierInwardForm
       receiver_id: null,
       receiver_data: null,
       weight: form.weight ? parseFloat(form.weight) : null,
+      entry_date: form.entry_date || getToday(),
       products: cleanProducts,
       product_count: cleanProducts.length,
     });
 
-    setForm({ awb_no: '', agency: '', person_name: '', sender_mobile: '', place: '', weight: '' });
+    setForm({ awb_no: '', agency: '', person_name: '', sender_mobile: '', place: '', weight: '', entry_date: getToday() });
     setProducts([emptyCourierProduct()]);
     setSubmitted(false);
   };
@@ -136,6 +142,10 @@ export default function CourierInwardForm({ onSave, loading }: CourierInwardForm
             <label style={styles.formLabel}>Weight (kg)</label>
             <input type="number" name="weight" value={form.weight} onChange={handleChange} step="0.1" min="0"
               style={inputStyle} placeholder="e.g. 1.5" />
+          </div>
+          <div>
+            <label style={styles.formLabel}>Entry Date <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 400 }}>(backdate if entering yesterday's parcel today)</span></label>
+            <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} max={getToday()} style={inputStyle} />
           </div>
         </div>
 

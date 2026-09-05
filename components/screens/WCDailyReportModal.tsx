@@ -46,7 +46,7 @@ export default function WCDailyReportModal({ wcId, wcName, onClose, onSaved }: P
             wc_id: wcId, wc_name: wcName, report_date: date,
             inward: { warranty: n(inW), non_warranty: n(inNW), other: n(inO) },
             outward: { warranty: n(outW), non_warranty: n(outNW), other: n(outO) },
-            reviews: reviews.filter((rv) => rv.customer.trim()),
+            reviews: reviews,
             remarks,
         });
         setSaving(false);
@@ -120,7 +120,7 @@ export default function WCDailyReportModal({ wcId, wcName, onClose, onSaved }: P
                         <button onClick={addReview} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>+ Add Review</button>
                         <div style={{ marginTop: 10, background: '#fff', borderRadius: 8, padding: 10, display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ fontWeight: 700 }}>Total Reviews:</span>
-                            <span style={{ fontWeight: 700, color: '#065f46' }}>{reviews.filter((r) => r.customer.trim()).length}</span>
+                            <span style={{ fontWeight: 700, color: '#065f46' }}>{reviews.length}</span>
                         </div>
                     </div>
 

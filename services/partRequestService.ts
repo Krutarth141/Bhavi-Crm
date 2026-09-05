@@ -1,8 +1,13 @@
 import { supabase } from '@/lib/supabase';
-import { PartItem, PartRequest, PartRequestFilter } from '@/types/partRequest';
+import { PartItem, PartRequest } from '@/types/partRequest';
 import { advancePendingEngineerStockTickets } from './engPartsService';
 
-export const fetchPartRequests = async (filter: PartRequestFilter): Promise<PartRequest[]> => {
+// Mirrors HTML's renderEPPending(typeFilter) (index.html:11255-11262): always
+// PENDING-only, oldest first — WC passes typeFilter='RETURN' (it may only
+// approve engineer returns), Admin/CSP manager pass none (both RECEIVE and
+// RETURN show). There is no way to browse Approved/Rejected/All here — that
+// matches HTML exactly, which never offers one on this view.
+export const fetchPartRequests = async (typeFilter?: 'RETURN'): Promise<PartRequest[]> => {
     try {
         let all: PartRequest[] = [];
         let from = 0;
@@ -11,8 +16,9 @@ export const fetchPartRequests = async (filter: PartRequestFilter): Promise<Part
             let query = supabase
                 .from('eng_part_requests')
                 .select('*')
-                .order('created_at', { ascending: false });
-            if (filter !== 'all') query = query.eq('status', filter);
+                .eq('status', 'PENDING')
+                .order('created_at', { ascending: true });
+            if (typeFilter) query = query.eq('type', typeFilter);
             const { data: page, error } = await query.range(from, from + PAGE - 1);
             if (error) throw error;
             all = all.concat(page || []);
@@ -125,10 +131,11 @@ export const approvePartRequest = async (
     }
 };
 
+// Mirrors HTML's rejectEngReq() exactly (index.html:11563-11569) — just a
+// status flip, leaving the engineer's original `notes` untouched.
 export const rejectPartRequest = async (
     id: string,
-    approvedBy: string,
-    reason?: string
+    approvedBy: string
 ): Promise<{ success: boolean; error?: string }> => {
     try {
         const { error } = await supabase
@@ -137,7 +144,6 @@ export const rejectPartRequest = async (
                 status: 'REJECTED',
                 approved_by: approvedBy,
                 approved_at: new Date().toISOString(),
-                notes: reason || undefined,
             })
             .eq('id', id);
         if (error) throw error;

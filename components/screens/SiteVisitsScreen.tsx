@@ -79,6 +79,7 @@ export default function SiteVisitsScreen() {
     };
 
     const engineerName = (uid: string) => engineers.find(e => e.user_id === uid)?.name || '';
+    const fmtNow = () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
     const filtered = (arr: SiteVisit[]) => arr.filter(v => {
         const q = search.toLowerCase();
@@ -113,40 +114,47 @@ export default function SiteVisitsScreen() {
     const handleTravelStart = async (v: SiteVisit) => {
         if (isEng) { setKmVisitId(v.id); setKmStep('opening'); return; }
         const r = await svTravelStart(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`🚗 Travel Start — ${fmtNow()}`); await load(); }
     };
     const handleReached = async (v: SiteVisit) => {
         if (isEng) { setKmVisitId(v.id); setKmStep('arrival'); return; }
         const r = await svReached(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`📍 Reached — ${fmtNow()}`); await load(); }
     };
-    const handleKmDone = async () => {
+    const handleKmDone = async (skipped?: boolean) => {
         if (kmVisitId == null || !kmStep) return;
-        const r = kmStep === 'opening' ? await svTravelStart(kmVisitId) : await svReached(kmVisitId);
+        const step = kmStep;
+        const r = step === 'opening' ? await svTravelStart(kmVisitId) : await svReached(kmVisitId);
         setKmVisitId(null); setKmStep(null);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        if (step === 'opening') {
+            alert(`🚗 Travel Start — ${fmtNow()}`);
+        } else {
+            alert(`📍 Reached — ${fmtNow()}${skipped ? '\n\n⏭️ KM skip karyu — next travel start par levase.' : ''}`);
+        }
+        await load();
     };
     const handleWorkStart = async (v: SiteVisit) => {
         const r = await svWorkStart(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`⚙️ Work Start — ${fmtNow()}`); await load(); }
     };
     const handleWorkEnd = async (v: SiteVisit) => {
         const r = await svWorkEnd(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`⏹️ Work End — ${fmtNow()}`); await load(); }
     };
     const handleStopTravel = async (v: SiteVisit) => {
-        if (!confirm('Stop travel and revert to Assigned?')) return;
+        if (!confirm('🛑 Stop travel?\n\nThis visit will go back to "Assigned" — you can start travel again later.')) return;
         const r = await svStopTravel(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`🛑 Travel stopped — ${fmtNow()}`); await load(); }
     };
     const handleStopWork = async (v: SiteVisit) => {
-        if (!confirm('Stop work and revert to Reached?')) return;
+        if (!confirm('⏸️ Stop work?\n\nThis visit will go back to "Reached" — you can resume work later.')) return;
         const r = await svStopWork(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`⏸️ Work stopped — ${fmtNow()}`); await load(); }
     };
     const handleDone = async (v: SiteVisit) => {
         const r = await svDone(v.id);
-        if (!r.success) alert('Error: ' + r.error); else await load();
+        if (!r.success) alert('Error: ' + r.error); else { alert(`✅ Visit Done — ${fmtNow()}`); await load(); }
     };
     const handleCancel = async (v: SiteVisit) => {
         if (!confirm(`Cancel this visit?\n\n${v.client_name} — ${v.visit_type}`)) return;
@@ -201,7 +209,7 @@ export default function SiteVisitsScreen() {
                         {v.notes && <div style={{ fontSize: 12, marginTop: 2, color: '#6b7280' }}>💬 {v.notes}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
-                        <span style={{ fontSize: 11, background: `${sm.color}22`, color: sm.color, padding: '3px 10px', borderRadius: 99, fontWeight: 700 }}>{sm.emoji} {v.status}</span>
+                        <span style={{ fontSize: 11, background: `${sm.color}22`, color: sm.color, padding: '3px 10px', borderRadius: 99, fontWeight: 700 }}>{v.status}</span>
                         {v.assigned_name && <span style={{ fontSize: 11, background: '#ede9fe', color: '#6d28d9', padding: '3px 9px', borderRadius: 99, fontWeight: 600 }}>👷 {v.assigned_name}</span>}
                         {v.visit_date && <span style={{ fontSize: 11, color: '#9ca3af' }}>📅 {v.visit_date}</span>}
                     </div>
@@ -218,13 +226,10 @@ export default function SiteVisitsScreen() {
                     {canAct(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
                     {canManage(v) && <button onClick={() => handleDelete(v)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
                 </div>
-                {(v.travel_start_at || v.reached_at || v.work_start_at || v.work_end_at || v.done_at) && (
+                {(v.travel_start_at || v.work_start_at) && (
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6, fontSize: 11, color: '#64748b', borderTop: '1px dashed #e5e7eb', paddingTop: 6 }}>
                         {v.travel_start_at && <span>🚗 {fmtT(v.travel_start_at)}</span>}
-                        {v.reached_at && <span>📍 {fmtT(v.reached_at)}</span>}
                         {v.work_start_at && <span>🔧 {fmtT(v.work_start_at)}</span>}
-                        {v.work_end_at && <span>🏁 {fmtT(v.work_end_at)}</span>}
-                        {v.done_at && <span style={{ color: '#059669', fontWeight: 700 }}>✅ {fmtT(v.done_at)}</span>}
                     </div>
                 )}
             </div>
@@ -250,7 +255,6 @@ export default function SiteVisitsScreen() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <input type="text" placeholder="Search client / site / address..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...fieldStyle, flex: 1, minWidth: 160 }} />
                 <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ ...fieldStyle, width: 'auto' }}>
                     <option value="">All Types</option>
                     {SV_TYPES.map(t => <option key={t} value={t}>{SV_TYPE_META[t].emoji} {t}</option>)}
@@ -284,6 +288,13 @@ export default function SiteVisitsScreen() {
                             })}
                         </>
                     )}
+
+            {/* Search box sits below the results list, matching HTML's layout (index.html:23860) */}
+            {!loading && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                    <input type="text" placeholder="🔍 Search by client/site/address..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 12px', fontSize: 13, boxSizing: 'border-box' as const }} />
+                </div>
+            )}
 
             {modalOpen && (
                 <div onClick={() => setModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -370,6 +381,7 @@ export default function SiteVisitsScreen() {
                     engId={myId}
                     engName={myName}
                     ticketId={`SV${kmVisitId}`}
+                    allowSkip
                     onClose={() => { setKmVisitId(null); setKmStep(null); }}
                     onDone={handleKmDone}
                 />

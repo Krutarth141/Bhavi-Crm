@@ -42,14 +42,24 @@ export function getAllowedStatuses(
     const isCarryIn = (serviceType || '').toLowerCase().includes('carry');
 
     if (['Closed', 'Customer Reject', 'Call Cancel', 'Delivered Not Approved', 'Delivered'].includes(current || '')) {
-        return isAdminOrWC ? ['Assigned'] : [];
+        if (isAdminOrWC) {
+            // Special case (index.html:6229-6234): a Carry-In device that the
+            // customer rejected the estimate on is still sitting in the office —
+            // admin/WC need a path to mark it collected once the customer picks
+            // it up, in addition to the normal reopen-to-Assigned path.
+            if (current === 'Customer Reject' && isCarryIn) return ['Assigned', 'Delivered'];
+            return ['Assigned'];
+        }
+        return [];
     }
 
     if (isAdminOrWC) {
         switch (current) {
             case 'Pending Customer Arrival': return ['Pending Allocation', 'Call Cancel'];
             case 'Pending Allocation': return ['Assigned', 'Pending Repair Carry In', 'Pending Repair On Site', 'Call Cancel'];
-            case 'Pending Customer Approval': return ['Customer Approved', 'Customer Reject'];
+            // index.html:3127 — the generic dropdown offers nothing here; only the
+            // dedicated "✅ Approve / Reject Estimate" button handles this state.
+            case 'Pending Customer Approval': return [];
             case 'Pending Engineer Stock': return ['In Progress', 'Assigned'];
             case 'Pending Parts': return ['In Progress', 'Assigned'];
             case 'Repaired': return ['Delivered', 'Sent to MSC'];

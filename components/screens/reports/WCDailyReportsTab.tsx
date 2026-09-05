@@ -1,3 +1,4 @@
+// components/screens/reports/WCDailyReportsTab.tsx
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
@@ -89,9 +90,7 @@ export default function WCDailyReportsTab({ reports, loading }: WCDailyReportsTa
                 <button className="btn btn-outline btn-sm" onClick={() => setDateRange('today')}>Today</button>
                 <button className="btn btn-outline btn-sm" onClick={() => setDateRange('week')}>Week</button>
                 <button className="btn btn-outline btn-sm" onClick={() => setDateRange('month')}>Month</button>
-                {(fromDate || toDate || filterWC) && (
-                    <button className="btn btn-outline btn-sm" onClick={() => { setFromDate(''); setToDate(''); setFilterWC(''); }}>Clear</button>
-                )}
+                {/* index.html:1739-1757 filterWCDailyReports has no reset button — removed to match. */}
                 <button className="btn btn-success btn-sm" onClick={handleExcel}>📊 Excel</button>
             </div>
 

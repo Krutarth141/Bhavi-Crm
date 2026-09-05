@@ -22,10 +22,13 @@ export async function GET(_request: NextRequest) {
             return NextResponse.json({ error: engErr.message }, { status: 400 });
         }
 
+        // Matches HTML's ?or=(role_type.eq.work_controller,role.eq.work_controller)
+        // — some legacy accounts carry role='work_controller' literally instead
+        // of role_type, so the OR fallback catches those too.
         const { data: wcs, error: wcErr } = await supabaseAdmin
             .from('users')
             .select('user_id, name, role_type')
-            .eq('role_type', 'work_controller')
+            .or('role_type.eq.work_controller,role.eq.work_controller')
             .eq('is_active', true)
             .order('name', { ascending: true });
 

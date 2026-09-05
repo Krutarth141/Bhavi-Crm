@@ -13,7 +13,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const isAdmin = (session.user as any).role === 'admin';
+        // Matches HTML's engineers loaders (loadMasterData, _ftLoadEngs), which
+        // always filter is_active=eq.true regardless of viewer role. The one
+        // exception is the admin-only Engineers management screen, which needs
+        // to see inactive engineers in order to reactivate them — but that
+        // screen is for TRUE admins only, not Work Controller accounts (which
+        // are stored with DB role='admin' but role_type='work_controller'), so
+        // the bypass must key off role_type, not role.
+        const isAdminPure = (session.user as any).roleType === 'admin';
 
         let query = supabaseAdmin
             .from('users')
@@ -21,7 +28,7 @@ export async function GET(request: NextRequest) {
             .eq('role_type', 'engineer')
             .order('name', { ascending: true });
 
-        if (!isAdmin) query = query.eq('is_active', true);
+        if (!isAdminPure) query = query.eq('is_active', true);
 
         const { data: engineers, error } = await query;
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });

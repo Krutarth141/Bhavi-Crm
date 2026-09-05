@@ -30,8 +30,12 @@ const errorStyle: React.CSSProperties = {
   marginTop: '3px',
 };
 
+function getToday(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
 export default function CourierOutwardForm({ receivers, onSave, loading }: CourierOutwardFormProps) {
-  const [form, setForm] = useState({ awb_no: '', agency: '', weight: '' });
+  const [form, setForm] = useState({ awb_no: '', agency: '', weight: '', entry_date: getToday() });
   const [search, setSearch] = useState('');
   const [ddOpen, setDdOpen] = useState(false);
   const [selectedReceiver, setSelectedReceiver] = useState<CourierReceiver | null>(null);
@@ -89,11 +93,12 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
         state: selectedReceiver!.state, pin: selectedReceiver!.pin, phone: selectedReceiver!.phone,
       },
       weight: form.weight ? parseFloat(form.weight) : null,
+      entry_date: form.entry_date || getToday(),
       products: cleanProducts,
       product_count: cleanProducts.length,
     });
 
-    setForm({ awb_no: '', agency: '', weight: '' });
+    setForm({ awb_no: '', agency: '', weight: '', entry_date: getToday() });
     setSelectedReceiver(null);
     setSearch('');
     setProducts([emptyCourierProduct()]);
@@ -159,6 +164,10 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
           <div>
             <label style={styles.formLabel}>Weight (kg)</label>
             <input type="number" name="weight" value={form.weight} onChange={handleChange} step="0.1" min="0" style={inputStyle} placeholder="e.g. 1.5" />
+          </div>
+          <div>
+            <label style={styles.formLabel}>Entry Date <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 400 }}>(backdate if entering the next day's dispatch)</span></label>
+            <input type="date" name="entry_date" value={form.entry_date} onChange={handleChange} max={getToday()} style={inputStyle} />
           </div>
         </div>
 

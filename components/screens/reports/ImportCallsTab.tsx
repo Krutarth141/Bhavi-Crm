@@ -28,11 +28,13 @@ export default function ImportCallsTab({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const downloadTemplate = useCallback(() => {
+        // index.html:1442-1445 downloadImportTemplate — exactly 3 rows (header,
+        // field descriptions, sample). handleFile's `slice(3)` below depends on
+        // there being exactly 3 non-data rows here.
         const rows = [
-            ['ticket_id', 'call_type', 'service_type', 'status', 'brand_name', 'model', 'serial', 'cname', 'mobile', 'alt_mobile', 'city', 'state', 'address', 'pin', 'area', 'problem', 'description', 'action', 'assigned_name', 'assigned_to', 'se_call_id', 'service_charges', 'final_charges', 'warranty_coverage', 'wc_type', 'rerepair', 'rerepair_foc', 'remarks', 'visit_date', 'created_at'],
-            ['blank=auto generate', 'Warranty/Non-Warranty/AMC/Warranty Repeat/Non-Warranty Repeat/Other', 'Carry In / On Site', 'Pending Allocation/Assigned/In Progress/...', 'Canon/Panasonic/Fujifilm/Casio', 'Model number', 'Serial number', 'Customer full name', '10 digit mobile', 'Alternate (optional)', 'City', 'State (optional)', 'Address (optional)', 'PIN code', 'Area/locality', 'Problem description', 'Detailed notes (optional)', 'Action taken - closed only', 'Engineer exact name as in CRM', 'Engineer ID e.g. ENG001', 'Canon/SE call ID (optional)', 'Service charges Rs (number)', 'Final charges Rs (number)', 'Under Coverage/Out of Coverage/NA', 'ICP/CSP', 'No/Yes', 'FALSE/TRUE', 'Remarks (optional)', 'YYYY-MM-DD (optional)', 'YYYY-MM-DD blank=today'],
-            ['blank=auto', 'Mandatory', 'Mandatory', 'Mandatory', 'Mandatory', 'Mandatory', 'Mandatory', 'Mandatory', 'Mandatory', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Mandatory', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional', 'Optional'],
-            ['SAMPLE DELETE THIS ROW', 'Non-Warranty', 'Carry In', 'Pending Allocation', 'Canon', 'EOS R50', 'SN1234567', 'Ramesh Shah', '9898989898', '', 'Ahmedabad', 'Gujarat', 'Nr. SBI Bank Maninagar', '380008', 'Maninagar', 'Camera not turning on', '', '', '', '', 'CD2026001', '500', '', 'NA', 'ICP', 'No', 'FALSE', '', '2026-04-15', '2026-04-15'],
+            ['ticket_id', 'call_type', 'service_type', 'status', 'brand_name', 'model', 'serial', 'cname', 'mobile', 'alt_mobile', 'city', 'state', 'address', 'pin', 'area', 'problem', 'description', 'action', 'assigned_name', 'assigned_to', 'se_call_id', 'service_charges', 'final_charges', 'warranty_coverage', 'wc_type', 'rerepair', 'rerepair_foc', 'remarks', 'tat_time', 'visit_date', 'created_at'],
+            ['blank=auto generate', 'Warranty/Non-Warranty/AMC/Warranty Repeat/Non-Warranty Repeat/Other', 'Carry In / On Site', 'Pending Allocation/Assigned/In Progress/Pending Parts/Pending Repair Carry In/Pending Repair On Site/Pending Customer Approval/Closed/Call Cancel/Customer Reject', 'Canon/Panasonic/Fujifilm/Casio', 'Model number', 'Serial number', 'Customer full name', '10 digit mobile', 'Alternate (optional)', 'City', 'State (optional)', 'Address (optional)', 'PIN code', 'Area/locality', 'Problem description', 'Detailed notes (optional)', 'Action taken - closed only', 'Engineer exact name as in CRM', 'Engineer ID e.g. ENG001', 'Canon/SE call ID (optional)', 'Service charges Rs (number)', 'Final charges Rs (number)', 'Under Coverage/Out of Coverage/NA', 'ICP/CSP', 'No/Yes', 'FALSE/TRUE', 'Remarks (optional)', 'TAT Time HH:MM e.g. 16:55 — auto sets call date+1 day at this time (blank=no TAT)', 'YYYY-MM-DD (optional)', 'YYYY-MM-DD blank=today'],
+            ['SAMPLE DELETE THIS ROW', 'Non-Warranty', 'Carry In', 'Pending Allocation', 'Canon', 'EOS R50', 'SN1234567', 'Ramesh Shah', '9898989898', '', 'Ahmedabad', 'Gujarat', 'Nr. SBI Bank Maninagar', '380008', 'Maninagar', 'Camera not turning on', '', '', '', '', 'CD2026001', '500', '', 'NA', 'ICP', 'No', 'FALSE', '', '16:55', '2026-04-15', '2026-04-15'],
         ];
         const csvEsc = (v: unknown) => {
             const s = String(v == null ? '' : v);
@@ -70,7 +72,8 @@ export default function ImportCallsTab({
             }
 
             const headers = allRows[0].map((h) => String(h).trim().toLowerCase());
-            // Data starts row 4 (index 3), skip header/notes rows
+            // index.html:1475-1476 — skip rows 1-3 (header, description, sample);
+            // data starts row 4 (index 3). Matches the 3-row template above.
             const dataRows = allRows.slice(3).filter((r) => r.some((c) => c !== ''));
 
             if (!dataRows.length) {
@@ -116,23 +119,23 @@ export default function ImportCallsTab({
                         📄 Download Template
                     </button>
                     <div style={{ marginTop: '8px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                        Row 1 = headers, Row 2 = field descriptions, Row 3 = required/optional notes. Row 4 is a sample row (delete it). Enter data from Row 5 onwards.
+                        Dropdown options are pre-filled to avoid spelling errors. Row 4 is a sample row (delete it). Enter data from Row 5 onwards.
                     </div>
                 </div>
 
-                {/* File drop zone */}
+                {/* File drop zone — index.html:1429-1434 */}
                 {!importRunning && !importResult && (
                     <div
                         style={{ border: '2px dashed var(--border)', borderRadius: '10px', padding: '24px', textAlign: 'center', marginBottom: '16px', cursor: 'pointer' }}
                         onClick={() => fileInputRef.current?.click()}
                     >
                         <div style={{ fontSize: '32px', marginBottom: '8px' }}>📂</div>
-                        <div style={{ fontWeight: 600, fontSize: '14px' }}>Select Excel or CSV File</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>.xlsx, .xls, or .csv — max 200 rows</div>
+                        <div style={{ fontWeight: 600, fontSize: '14px' }}>Select Excel File</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>.xlsx or .xls file — max 200 rows</div>
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept=".xlsx,.xls,.csv"
+                            accept=".xlsx,.xls"
                             style={{ display: 'none' }}
                             onChange={handleFile}
                         />

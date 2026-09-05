@@ -3,7 +3,9 @@ import { SiteVisit, SiteVisitFormData } from '@/types/siteVisits';
 
 export const fetchSiteVisits = async (userId: string, isAdminList: boolean): Promise<SiteVisit[]> => {
     try {
-        let q = supabase.from('site_visits').select('*').order('created_at', { ascending: false });
+        let q = supabase.from('site_visits').select('*')
+            .order('visit_date', { ascending: false })
+            .order('created_at', { ascending: false });
         // Matches HTML's renderSiteVisits(): non-admin/WC scoping is
         // assigned_to only — a visit's creator doesn't see it unless it's
         // also assigned to them.

@@ -26,6 +26,7 @@ import { isCspManager, isAccountant } from '@/lib/permissions';
 import PunchModal from '@/components/screens/PunchModal';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import Modal from '@/components/Modal';
+import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 interface Props {
@@ -65,6 +66,13 @@ export default function DashboardOverview({ role }: Props) {
     const userName = (session?.user as any)?.name ?? '';
     const cspMgr = isCspManager(session);
     const isAcct = isAccountant(session);
+    // DB `role` column — 'admin' for BOTH a true admin and a Work Controller
+    // account (WC accounts have role_type='work_controller' but role='admin'),
+    // unlike the normalized `role` prop this component receives. HTML's
+    // "+ New Call" gate on the Recent Tickets card (index.html:3857) checks
+    // this DB field, so it must too — mirrors AttendanceScreen's `dbRole`.
+    const dbRole = (session?.user as any)?.role;
+    const isAdminOrWC = role === 'admin' || role === 'work_controller';
 
     const { tickets: allTickets, loading } = useTickets({ userRole: role, userId, userName, isAccountant: isAcct });
 
@@ -157,6 +165,12 @@ export default function DashboardOverview({ role }: Props) {
     const [updatePhotos, setUpdatePhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
     const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
     const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
+    // "📬 Received?" (Recent Tickets, Sent to MSC row) — reuses the same
+    // MSC dispatch/receive panel TicketsScreen's view modal shows, rather than
+    // the plain status modal (whose New Status dropdown is empty for "Sent to
+    // MSC" — index.html:3131 — because that status is really driven by the
+    // MSC Dispatch panel's own "Mark Received" action, index.html:7201-7204).
+    const [mscTicket, setMscTicket] = useState<Ticket | null>(null);
 
     const openTicketUpdate = (t: Ticket) => {
         if (role === 'engineer' && (isTicketClosed(t.status) || isTicketCancelled(t.status))) {
@@ -164,7 +178,11 @@ export default function DashboardOverview({ role }: Props) {
             return;
         }
         setUpdateTicket(t);
-        const allowed = getAllowedStatuses(t.status, 'engineer', (t as any).service_type, (t as any).call_type, (t as any).warranty_coverage);
+        // Role-aware, matching HTML's openEngUpdate/saveEngUpdate (index.html:7219,
+        // 7705): admin/WC get the 'admin' transition table (e.g. Repaired →
+        // Delivered/Sent to MSC), not the engineer one.
+        const statusRole = isAdminOrWC ? 'admin' : 'engineer';
+        const allowed = getAllowedStatuses(t.status, statusRole, (t as any).service_type, (t as any).call_type, (t as any).warranty_coverage);
         setUpdateForm({ newStatus: allowed[0] || '', note: '', labour: String((t as any).labor || (t as any).service_charges || ''), faultCode: (t as any).fault_code || '' });
         const spares: TicketSpare[] = (t as any).spares || [];
         setUpdateSpares(spares);
@@ -177,7 +195,7 @@ export default function DashboardOverview({ role }: Props) {
         setPaymentPrompt(null);
     };
     const allowedForUpdate = updateTicket
-        ? getAllowedStatuses(updateTicket.status, 'engineer', (updateTicket as any).service_type, (updateTicket as any).call_type, (updateTicket as any).warranty_coverage)
+        ? getAllowedStatuses(updateTicket.status, isAdminOrWC ? 'admin' : 'engineer', (updateTicket as any).service_type, (updateTicket as any).call_type, (updateTicket as any).warranty_coverage)
         : [];
 
     // Warranty/AMC (not Out of Coverage) calls never bill for a part, except a
@@ -217,12 +235,18 @@ export default function DashboardOverview({ role }: Props) {
         if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
         const note = updateForm.note.trim();
         if (!note) { alert('❌ Action Taken is required.\nPlease describe what was done.'); return; }
-        setUpdateSaving(true);
-        const block = await validateEngineerUpdate(
-            updateTicket as any, updateForm.newStatus, note, updateSpares, userName, updatePhotos[0]?.url,
-        );
-        setUpdateSaving(false);
-        if (block) { alert(block); return; }
+        // Engineer-only close guards (locked-stage block, "Work Start" first,
+        // own-stock checks) — HTML gates every one of these behind
+        // currentUser.role==='engineer' (index.html:7695,7712,7778,7794);
+        // admin/WC bypass them entirely here too, same as HTML's saveEngUpdate.
+        if (!isAdminOrWC) {
+            setUpdateSaving(true);
+            const block = await validateEngineerUpdate(
+                updateTicket as any, updateForm.newStatus, note, updateSpares, userName, updatePhotos[0]?.url,
+            );
+            setUpdateSaving(false);
+            if (block) { alert(block); return; }
+        }
 
         const charges = computeCloseCharges(updateTicket as any, updateForm.newStatus, updateSpares, consumableCodes);
         if (needsPaymentConfirmation(updateTicket as any, updateForm.newStatus, charges)) {
@@ -282,8 +306,6 @@ export default function DashboardOverview({ role }: Props) {
     const active = dashTix.filter(t => isTicketActive(t.status)).length;
     const closed = dashTix.filter(t => isTicketClosed(t.status)).length;
     const unalloc = dashTix.filter(t => isTicketActive(t.status) && !t.assigned_to).length;
-
-    const isAdminOrWC = role === 'admin' || role === 'work_controller';
 
     const chartData = useMemo(() => {
         if (!isAdminOrWC) return null;
@@ -507,7 +529,20 @@ export default function DashboardOverview({ role }: Props) {
             {(isAdminOrWC || cspMgr) && <EngineerLiveStatusTable />}
 
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 16 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Recent Tickets</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Recent Tickets</h2>
+                    {/* HTML:3857 — currentUser.role==='admin' (DB role column, true for
+                        both a real admin AND a WC account) gets a quick "+ New Call"
+                        button right on the dashboard. */}
+                    {dbRole === 'admin' && (
+                        <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'tickets', openNewCall: true } }))}
+                            style={{ padding: '6px 12px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                        >
+                            + New Call
+                        </button>
+                    )}
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                         <thead>
@@ -530,11 +565,7 @@ export default function DashboardOverview({ role }: Props) {
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}><span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{t.created_at ? new Date(t.created_at).toLocaleDateString('en-IN') : '-'}</td>
                                     <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
-                                        {role === 'engineer' ? (
-                                            <button onClick={() => openTicketUpdate(t)} style={{ padding: '5px 10px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Update</button>
-                                        ) : (
-                                            <button onClick={() => printTicket(t)} style={{ padding: '5px 10px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>View</button>
-                                        )}
+                                        <RecentTicketAction t={t} role={role} isAdminOrWC={isAdminOrWC} onUpdate={openTicketUpdate} onReceived={setMscTicket} />
                                     </td>
                                 </tr>
                             ))}
@@ -720,6 +751,12 @@ export default function DashboardOverview({ role }: Props) {
                 </Modal>
             )}
 
+            {mscTicket && (
+                <Modal isOpen onClose={() => setMscTicket(null)} title={`📬 MSC Status — ${mscTicket.id}`}>
+                    <MSCDispatchPanel ticketId={mscTicket.id} readOnly={false} byUser={userName} onUpdated={() => setMscTicket(null)} />
+                </Modal>
+            )}
+
             {followup && (
                 <div onClick={() => setFollowup(null)} style={{ position: 'fixed', bottom: 20, right: 20, background: '#f59e0b', color: '#fff', padding: '12px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 999, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: 280 }}>
                     🔔 {followup.count} Inquiry Followup Today!
@@ -728,6 +765,33 @@ export default function DashboardOverview({ role }: Props) {
             )}
         </div>
     );
+}
+
+// Recent Tickets row action — matches HTML's per-row logic (index.html:3865):
+// engineers always get "Update"; everyone else gets a status-specific action
+// for Repaired/Sent to MSC/Pending for Delivery (Repaired only for admin/WC —
+// other non-engineer roles, e.g. CSP manager, still just get "View" there),
+// and plain "View" otherwise.
+function RecentTicketAction({ t, role, isAdminOrWC, onUpdate, onReceived }: {
+    t: Ticket; role: 'admin' | 'work_controller' | 'engineer'; isAdminOrWC: boolean;
+    onUpdate: (t: Ticket) => void; onReceived: (t: Ticket) => void;
+}) {
+    const btnBase: React.CSSProperties = { padding: '5px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' };
+    if (role === 'engineer') {
+        return <button onClick={() => onUpdate(t)} style={{ ...btnBase, background: colors.primary, color: '#fff' }}>Update</button>;
+    }
+    if (t.status === 'Repaired') {
+        return isAdminOrWC
+            ? <button onClick={() => onUpdate(t)} style={{ ...btnBase, background: colors.primary, color: '#fff' }}>Update</button>
+            : <button onClick={() => printTicket(t)} style={{ ...btnBase, background: '#f1f5f9', color: '#374151' }}>View</button>;
+    }
+    if (t.status === 'Sent to MSC') {
+        return <button onClick={() => onReceived(t)} style={{ ...btnBase, background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe' }}>📬 Received?</button>;
+    }
+    if (t.status === 'Pending for Delivery') {
+        return <button onClick={() => onUpdate(t)} style={{ ...btnBase, background: colors.primary, color: '#fff' }}>🚚 Deliver</button>;
+    }
+    return <button onClick={() => printTicket(t)} style={{ ...btnBase, background: '#f1f5f9', color: '#374151' }}>View</button>;
 }
 
 function KpiCard({ label, sub, value, icon, color, onClick }: { label: string; sub: string; value: number; icon: string; color: string; onClick: () => void }) {

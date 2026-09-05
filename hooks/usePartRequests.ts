@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PartRequest, PartRequestFilter } from '@/types/partRequest';
+import { PartRequest } from '@/types/partRequest';
 import { fetchPartRequests, approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { useSession } from 'next-auth/react';
 
-export const usePartRequests = (filter: PartRequestFilter = 'PENDING') => {
+// Mirrors HTML's renderEPPending(typeFilter) — always PENDING-only, so there
+// is no status filter here (index.html:10148,10160,11255-11262).
+export const usePartRequests = (typeFilter?: 'RETURN') => {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name ?? 'Admin';
 
@@ -13,10 +15,10 @@ export const usePartRequests = (filter: PartRequestFilter = 'PENDING') => {
 
     const load = useCallback(async () => {
         setLoading(true); setError(null);
-        try { setRequests(await fetchPartRequests(filter)); }
+        try { setRequests(await fetchPartRequests(typeFilter)); }
         catch (err) { setError((err as any).message); }
         finally { setLoading(false); }
-    }, [filter]);
+    }, [typeFilter]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -26,15 +28,11 @@ export const usePartRequests = (filter: PartRequestFilter = 'PENDING') => {
         return r;
     };
 
-    const reject = async (id: string, reason?: string) => {
-        const r = await rejectPartRequest(id, userName, reason);
+    const reject = async (id: string) => {
+        const r = await rejectPartRequest(id, userName);
         if (r.success) await load();
         return r;
     };
 
-    const pending = requests.filter(r => r.status === 'PENDING').length;
-    const approved = requests.filter(r => r.status === 'APPROVED').length;
-    const rejected = requests.filter(r => r.status === 'REJECTED').length;
-
-    return { requests, loading, error, pending, approved, rejected, approve, reject, refetch: load };
+    return { requests, loading, error, approve, reject, refetch: load };
 };

@@ -1,8 +1,15 @@
+// components/screens/reports/DailyReportsTab.tsx
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
 import { DailyReport } from '@/types/reports';
-import { waArr } from '@/services/engDailyReportService';
+import { waArr, DrOfficeWork } from '@/services/engDailyReportService';
+
+// index.html:1830 — joined "work_type - remark [from-to]" summary string.
+const officeWorkSummary = (r: DailyReport): string =>
+    waArr<DrOfficeWork>(r.office_work as any)
+        .map((o) => `${o.work_type || 'Work'}${o.remark ? ' - ' + o.remark : ''}${o.from_time && o.to_time ? ` [${o.from_time}-${o.to_time}]` : ''}`)
+        .join('; ');
 
 // index.html:1395 — owCount=(Array.isArray(owList)&&owList.length)||r.total_office_work||0
 const officeWorkCount = (r: DailyReport): number => waArr<unknown>(r.office_work as any).length || r.total_office_work || 0;
@@ -38,6 +45,7 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
             'OW-Breakdown': r.outwarranty_breakdown,
             'OW-Other': r.outwarranty_other,
             'Office Work Count': officeWorkCount(r),
+            'Office Work Details': officeWorkSummary(r),
             'Total Calls': r.total_calls,
             'Petrol KM': r.petrol_km,
             'Total Collection': r.total_amount,
@@ -64,9 +72,7 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
                     <option value="">All Engineers</option>
                     {engineers.map((n) => <option key={n}>{n}</option>)}
                 </select>
-                {(filterDate || filterEng) && (
-                    <button className="btn btn-outline btn-sm" onClick={() => { setFilterDate(''); setFilterEng(''); }}>Clear</button>
-                )}
+                {/* index.html:1817-1823 filterDailyReports has no reset button — removed to match. */}
                 <button className="btn btn-success btn-sm" onClick={handleExcel}>📊 Excel</button>
             </div>
 
@@ -127,6 +133,8 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
 
 function DailyReportDetail({ report: r, onClose }: { report: DailyReport; onClose: () => void }) {
     const pays = r.payment_details || [];
+    // index.html:1778-1779 — office_work jsonb (or legacy JSON string).
+    const owItems = waArr<DrOfficeWork>(r.office_work as any);
 
     return (
         <div className="card" style={{ marginTop: '14px', borderLeft: '4px solid var(--primary)' }}>
@@ -159,6 +167,24 @@ function DailyReportDetail({ report: r, onClose }: { report: DailyReport; onClos
                 <span>🚗 KM: <strong>{r.petrol_km || 0}</strong></span>
                 <span>💰 Total Collection: <strong style={{ color: '#065f46', fontSize: '15px' }}>₹{r.total_amount || 0}</strong></span>
             </div>
+
+            {/* Office / Remote Work — index.html:1799-1805 */}
+            {owItems.length > 0 && (
+                <>
+                    <h4 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>💼 Office / Remote Work ({owItems.length})</h4>
+                    <div style={{ marginBottom: '14px' }}>
+                        {owItems.map((o, i) => (
+                            <div key={i} style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', padding: '8px 12px', marginBottom: '6px', fontSize: '13px' }}>
+                                <b style={{ color: '#5b21b6' }}>{o.work_type || 'Work'}</b>
+                                {o.remark ? ` — ${o.remark}` : ''}
+                                {o.from_time && o.to_time && (
+                                    <span style={{ color: '#7c3aed', fontWeight: 600 }}> ({o.from_time} – {o.to_time})</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
 
             {/* Payment details */}
             {pays.length > 0 ? (

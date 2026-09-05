@@ -11,6 +11,7 @@ interface Props {
     product: WalkInProduct;
     brands: Brand[];
     models: Model[];
+    wcType?: 'ICP' | 'CSP' | 'OTHER';
     onChange: (p: WalkInProduct) => void;
     onRemove?: () => void;
 }
@@ -20,13 +21,22 @@ const rowInput: React.CSSProperties = {
     fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box', background: '#fff',
 };
 
-const PURCHASE_TYPE_OPTIONS = ['Printer Ink / Cartridges', 'New Printer', 'Camera Accessories'];
+// Mirrors HTML's wiTypeChanged (index.html:16706-16712) — a CSP-type WC only
+// sees the Printer options, an ICP-type WC only the Camera option; an
+// unrecognized ('OTHER') WC sees everything.
+const CSP_PURCHASE_OPTIONS = ['Printer Ink / Cartridges', 'New Printer'];
+const ICP_PURCHASE_OPTIONS = ['Camera Accessories'];
+function purchaseOptionsFor(wcType?: 'ICP' | 'CSP' | 'OTHER'): string[] {
+    if (wcType === 'CSP') return CSP_PURCHASE_OPTIONS;
+    if (wcType === 'ICP') return ICP_PURCHASE_OPTIONS;
+    return [...CSP_PURCHASE_OPTIONS, ...ICP_PURCHASE_OPTIONS];
+}
 const CONDITION_OPTIONS = ['Warranty', 'Non Warranty', 'Other', 'Very Old Products'];
 const WARRANTY_OPTIONS = ['In Warranty', 'Out of Warranty', 'Other'];
 
-export default function WalkInProductRow({ index, product, brands, models, onChange, onRemove }: Props) {
+export default function WalkInProductRow({ index, product, brands, models, wcType, onChange, onRemove }: Props) {
     const secondaryLabel = product.type === 'Purchase' ? 'Purchase Type' : product.type === 'For Checking Only' ? 'Condition' : 'Warranty';
-    const secondaryOptions = product.type === 'Purchase' ? PURCHASE_TYPE_OPTIONS : product.type === 'For Checking Only' ? CONDITION_OPTIONS : WARRANTY_OPTIONS;
+    const secondaryOptions = product.type === 'Purchase' ? purchaseOptionsFor(wcType) : product.type === 'For Checking Only' ? CONDITION_OPTIONS : WARRANTY_OPTIONS;
     const secondaryValue = (product.type === 'Purchase' || product.type === 'For Checking Only') ? product.subtype : product.warranty;
 
     const handleTypeChange = (type: WalkInProductType) => {

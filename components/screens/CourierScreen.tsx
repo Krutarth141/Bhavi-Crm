@@ -56,23 +56,55 @@ export default function CourierScreen() {
     return list;
   }, [entries, dirFilter, rangeFilter, customDate, todayStr]);
 
+  // Mirrors HTML's downloadWCCourierExcel/downloadCourierExcel (index.html:
+  // 18524-18598) — always includes Mobile/Warranty/Faulty Part/Invoice/
+  // Invoice Amt/Accessories columns, split across "All Entries"/"Inward"/
+  // "Outward" sheets. Scoped like the HTML version: WC users get only their
+  // own entries, admins get everything currently loaded.
   const handleExportExcel = () => {
-    const scoped = isWC ? filteredEntries.filter((e) => e.wc_id === wcId) : filteredEntries;
-    if (!scoped.length) { alert('No data to export'); return; }
-    const rows: any[] = [];
-    scoped.forEach((e) => {
-      const products = e.products || [];
-      if (!products.length) {
-        rows.push({ Date: e.entry_date, Direction: e.direction, 'AWB No': e.awb_no, Agency: e.agency, Person: e.person_name ?? '', Place: e.place ?? '', 'Weight(kg)': e.weight ?? '', WC: e.wc_name });
-      } else {
-        products.forEach((p) => {
-          rows.push({ Date: e.entry_date, Direction: e.direction, 'AWB No': e.awb_no, Agency: e.agency, Person: e.person_name ?? '', Place: e.place ?? '', 'Weight(kg)': e.weight ?? '', Model: p.model ?? '', 'Serial No': p.serial ?? '', 'Call ID': p.call_id ?? '', WC: e.wc_name });
-        });
-      }
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const scoped = isWC ? entries.filter((e) => e.wc_id === wcId) : entries;
+    if (!scoped.length) { alert('No data found'); return; }
+
+    const fmtExcelDate = (d?: string | null) => {
+      if (!d) return '';
+      const p = d.split('-');
+      return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
+    };
+    const safeStr = (v: any) => (v === null || v === undefined ? '' : String(v));
+    const safeAcc = (acc?: string[]) => (acc && acc.length ? acc.join(', ') : '');
+
+    const buildRows = (list: typeof entries) =>
+      list.flatMap((entry) => {
+        const products = entry.products || [];
+        if (!products.length) {
+          return [[
+            fmtExcelDate(entry.entry_date), safeStr(entry.direction), safeStr(entry.awb_no), safeStr(entry.agency),
+            safeStr(entry.person_name), safeStr(entry.sender_mobile), safeStr(entry.place), safeStr(entry.weight),
+            '', '', '', '', '', '', '', '', safeStr(entry.wc_name),
+          ]];
+        }
+        return products.map((p) => [
+          fmtExcelDate(entry.entry_date), safeStr(entry.direction), safeStr(entry.awb_no), safeStr(entry.agency),
+          safeStr(entry.person_name), safeStr(entry.sender_mobile), safeStr(entry.place), safeStr(entry.weight),
+          safeStr(p.call_id), safeStr(p.model), safeStr(p.serial), safeStr(p.warranty), safeStr(p.faulty_part),
+          safeStr(p.invoice_avail), safeStr(p.invoice_amount), safeAcc(p.accessories), safeStr(entry.wc_name),
+        ]);
+      });
+
+    const headers = ['Date', 'Direction', 'AWB No', 'Agency', 'Person', 'Mobile', 'Place', 'Weight(kg)', 'Call ID', 'Model', 'Serial No', 'Warranty', 'Faulty Part', 'Invoice', 'Invoice Amt', 'Accessories', 'WC'];
+    const makeSheet = (rows: any[][]) => {
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 35 }, { wch: 18 }];
+      return ws;
+    };
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Courier');
+    XLSX.utils.book_append_sheet(wb, makeSheet(buildRows(scoped)), 'All Entries');
+    const inRows = buildRows(scoped.filter((e) => e.direction === 'Inward'));
+    if (inRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(inRows), 'Inward');
+    const outRows = buildRows(scoped.filter((e) => e.direction === 'Outward'));
+    if (outRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(outRows), 'Outward');
+
     XLSX.writeFile(wb, `courier_register_${todayStr}.xlsx`);
   };
 
@@ -80,7 +112,8 @@ export default function CourierScreen() {
     setSaveLoading(true);
     setError(null);
     try {
-      const result = await insertCourierEntry({ direction: 'Inward', entry_date: todayStr, wc_id: wcId, wc_name: wcName, ...data });
+      const { entry_date, ...rest } = data;
+      const result = await insertCourierEntry({ direction: 'Inward', entry_date: entry_date || todayStr, wc_id: wcId, wc_name: wcName, ...rest });
       if (!result.success) throw new Error(result.error);
       await refetch();
     } catch (err: any) {
@@ -94,7 +127,8 @@ export default function CourierScreen() {
     setSaveLoading(true);
     setError(null);
     try {
-      const result = await insertCourierEntry({ direction: 'Outward', entry_date: todayStr, wc_id: wcId, wc_name: wcName, ...data });
+      const { entry_date, ...rest } = data;
+      const result = await insertCourierEntry({ direction: 'Outward', entry_date: entry_date || todayStr, wc_id: wcId, wc_name: wcName, ...rest });
       if (!result.success) throw new Error(result.error);
       await refetch();
     } catch (err: any) {
@@ -189,23 +223,19 @@ export default function CourierScreen() {
 
       {!loading && (
         <>
-          {activeTab === 'inward' && (
-            <>
-              <CourierInwardForm onSave={handleInwardSave} loading={saveLoading} />
-              {courierFilterBar}
-              <CourierList entries={filteredEntries} receivers={receivers} onRefresh={refetch} />
-            </>
-          )}
-          {activeTab === 'outward' && (
-            <>
-              <CourierOutwardForm receivers={receivers} onSave={handleOutwardSave} loading={saveLoading} />
-              {courierFilterBar}
-              <CourierList entries={filteredEntries} receivers={receivers} onRefresh={refetch} />
-            </>
-          )}
+          {activeTab === 'inward' && <CourierInwardForm onSave={handleInwardSave} loading={saveLoading} />}
+          {activeTab === 'outward' && <CourierOutwardForm receivers={receivers} onSave={handleOutwardSave} loading={saveLoading} />}
           {activeTab === 'receivers' && (
             <ReceiversTab receivers={receivers} onAdd={handleAddReceiver} onEdit={handleEditReceiver} onDelete={handleDeleteReceiver} onRefresh={refetchReceivers} />
           )}
+
+          {/* "All Entries" persists across every tab, including Receivers
+              (index.html:17800-17930/17906-17930). */}
+          <div style={styles.sectionHeader}>
+            <h3 style={{ ...styles.sectionTitle, fontSize: '15px' }}>📋 All Entries</h3>
+          </div>
+          {courierFilterBar}
+          <CourierList entries={filteredEntries} receivers={receivers} onRefresh={refetch} />
         </>
       )}
     </div>
