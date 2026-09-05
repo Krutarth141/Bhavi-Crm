@@ -4,6 +4,7 @@ import { EmployeeShift } from '@/types/settings';
 import {
     fetchPunchLogs, fetchAttendanceFilterEmployees, fetchAttendanceAddEmployees, verifyPunchLog, rejectPunchLog,
     fetchSundayExclude, toggleSundayExclude as toggleSundayExcludeService,
+    fetchAttendanceRosterEmployees, fetchPendingPunchApprovals,
 } from '@/services/attendanceService';
 import { fetchShiftMap } from '@/services/settingsService';
 
@@ -20,6 +21,8 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
     const [shiftMap, setShiftMap] = useState<Record<string, EmployeeShift>>({});
     const [employees, setEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
     const [addEmployees, setAddEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
+    const [rosterEmployees, setRosterEmployees] = useState<{ user_id: string; name: string; role: string }[]>([]);
+    const [pendingApprovals, setPendingApprovals] = useState<PunchLog[]>([]);
     const [sundayExclude, setSundayExclude] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -43,10 +46,22 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
 
     useEffect(() => { load(); }, [load]);
 
+    // Pending Punch Approvals — matches HTML's renderPunchApprovalSection():
+    // an unconditional fetch of ALL late_pending rows, independent of the
+    // report's currently-applied date range. Reloaded on the same triggers
+    // as the date-scoped logs so approve/reject actions refresh it too.
+    const loadPendingApprovals = useCallback(async () => {
+        if (!isAdmin) { setPendingApprovals([]); return; }
+        setPendingApprovals(await fetchPendingPunchApprovals());
+    }, [isAdmin]);
+
+    useEffect(() => { loadPendingApprovals(); }, [loadPendingApprovals]);
+
     useEffect(() => {
         if (isAdmin) {
             fetchAttendanceFilterEmployees().then(setEmployees);
             fetchAttendanceAddEmployees().then(setAddEmployees);
+            fetchAttendanceRosterEmployees().then(setRosterEmployees);
         }
     }, [isAdmin]);
 
@@ -54,13 +69,13 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
 
     const verify = async (id: string, remark: string, verifiedBy: string) => {
         const result = await verifyPunchLog(id, remark, verifiedBy);
-        if (result.success) await load();
+        if (result.success) { await load(); await loadPendingApprovals(); }
         return result;
     };
 
     const rejectPunch = async (id: string, reason: string, verifiedBy: string) => {
         const result = await rejectPunchLog(id, reason, verifiedBy);
-        if (result.success) await load();
+        if (result.success) { await load(); await loadPendingApprovals(); }
         return result;
     };
 
@@ -70,5 +85,10 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
         return result;
     };
 
-    return { logs, shiftMap, employees, addEmployees, sundayExclude, loading, error, refetch: load, verify, rejectPunch, toggleSunday };
+    const refetch = async () => { await load(); await loadPendingApprovals(); };
+
+    return {
+        logs, shiftMap, employees, addEmployees, rosterEmployees, pendingApprovals,
+        sundayExclude, loading, error, refetch, verify, rejectPunch, toggleSunday,
+    };
 };

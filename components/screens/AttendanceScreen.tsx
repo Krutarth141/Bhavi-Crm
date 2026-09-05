@@ -35,7 +35,10 @@ export default function AttendanceScreen() {
     const [editLog, setEditLog] = useState<PunchLog | null>(null);
     const [requestLog, setRequestLog] = useState<PunchLog | null>(null);
 
-    const { logs, shiftMap, employees, addEmployees, sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch } = useAttendance({
+    const {
+        logs, shiftMap, employees, addEmployees, rosterEmployees, pendingApprovals,
+        sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch,
+    } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
 
@@ -96,15 +99,18 @@ export default function AttendanceScreen() {
 
     // Roster mode — admin viewing one day with no employee filter: show every
     // punchable employee, absentees as "Not Punched In" placeholders.
+    // Uses rosterEmployees (active-only, true-admins excluded — HTML's
+    // separate loadAttendanceReport roster fetch), NOT the permissive
+    // `employees` list, which stays reserved for the filter dropdown.
     const rosterRows: RosterRow[] = useMemo(() => {
         const isRoster = isAdmin && !applied.empFilter && applied.from && applied.from === applied.to;
         if (!isRoster) return [];
         const punched: Record<string, boolean> = {};
         logs.forEach(l => { if (l.eng_id) punched[l.eng_id] = true; });
-        return employees
+        return rosterEmployees
             .filter(u => !punched[u.user_id])
             .map(u => ({ notPunched: true as const, eng_id: u.user_id, eng_name: u.name, punch_in_date: applied.from }));
-    }, [isAdmin, applied, logs, employees]);
+    }, [isAdmin, applied, logs, rosterEmployees]);
 
     // Summary KPIs — computed from real punch rows only, never roster placeholders.
     const summary = useMemo(() => {
@@ -127,10 +133,6 @@ export default function AttendanceScreen() {
             effectiveEmp, sundayInfo: sunday?.info ?? null, sundayAnyExcluded: sunday?.anyExcluded ?? false,
         };
     }, [logs, shiftMap, isAdmin, applied, myId, sundayExclude]);
-
-    // Pending Punch Approvals — admin/CSP-manager only, matches HTML's
-    // renderPunchApprovalSection(). Scoped to the currently loaded date range.
-    const pendingApprovals = useMemo(() => logs.filter(l => l.status === 'late_pending'), [logs]);
 
     const tiles = [
         { value: String(summary.totalDays), label: 'Days Present', bg: '#eff6ff', color: '#1d4ed8' },

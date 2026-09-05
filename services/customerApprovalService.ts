@@ -157,6 +157,43 @@ export const rejectTicket = async (
     }
 };
 
+// A Carry-In device the customer rejected the estimate on is still sitting
+// at the office — this is the ONLY way such a call reaches Delivered:
+// getAllowedStatuses (types/ticketStatus.ts) returns just ['Assigned'] for a
+// rejected call, same as every other terminal status, so the plain status
+// dropdown never offers it. Matches HTML's dedicated "📦 Mark Delivered
+// (Customer Collected)" button (index.html:6229-6234), which force-changes
+// status straight to Delivered with a mandatory reason — same mechanism as
+// any other admin/WC Force Status change (index.html:6749-6756: a
+// 'Force Status → <status>' timeline entry, no stock deduction since nothing
+// was ever fitted on a rejected estimate).
+export const markDeliveredAfterReject = async (
+    ticket: ApprovalTicket,
+    remark: string,
+    byUser: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const existing = ticket.timeline || [];
+        const now = new Date().toISOString();
+        const { error } = await supabase.from('tickets').update({
+            status: 'Delivered',
+            updated_at: now,
+            last_status_by: byUser,
+            timeline: [...existing, {
+                action: 'Force Status → Delivered',
+                by: byUser,
+                at: now,
+                note: `Reason: ${remark}`,
+            }],
+        }).eq('id', ticket.id);
+
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
 // Removes one part from the estimate mid-review. If that empties the list,
 // reverts the ticket to In Progress for the engineer to close directly.
 export const removeApprovalPart = async (

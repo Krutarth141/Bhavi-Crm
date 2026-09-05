@@ -100,6 +100,49 @@ export const fetchAttendanceAddEmployees = async (): Promise<{ user_id: string; 
     }
 };
 
+// index.html:25095-25106 (loadAttendanceReport, roster mode) — a SEPARATE,
+// stricter fetch used only to build the "Not Punched In" roster: active
+// employees only (is_active=eq.true), excluding true admins (role==='admin'
+// with role_type!=='work_controller' — WCs are role='admin'/role_type=
+// 'work_controller' and must still appear), plus ATT_EXCLUDED_IDS. This is
+// intentionally more restrictive than fetchAttendanceFilterEmployees, which
+// stays the permissive source for the report's employee filter dropdown.
+export const fetchAttendanceRosterEmployees = async (): Promise<{ user_id: string; name: string; role: string; role_type?: string }[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('user_id, name, role, role_type')
+            .eq('is_active', true)
+            .order('name');
+        if (error) throw error;
+        return (data || []).filter((u: any) =>
+            !ATT_EXCLUDED_IDS.includes(u.user_id) &&
+            !(u.role === 'admin' && u.role_type !== 'work_controller')
+        );
+    } catch (err) {
+        console.error('Failed to fetch roster employees:', err);
+        return [];
+    }
+};
+
+// index.html:24897-24904 (renderPunchApprovalSection) — unconditional fetch
+// of ALL late_pending punch rows, independent of whatever date range the
+// report view currently has applied.
+export const fetchPendingPunchApprovals = async (): Promise<PunchLog[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('punch_logs')
+            .select('*')
+            .eq('status', 'late_pending')
+            .order('punch_in_date', { ascending: false });
+        if (error) throw error;
+        return data || [];
+    } catch (err) {
+        console.error('Failed to fetch pending punch approvals:', err);
+        return [];
+    }
+};
+
 export const verifyPunchLog = async (
     id: string,
     remark: string,

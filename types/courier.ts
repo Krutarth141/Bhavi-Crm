@@ -18,6 +18,7 @@ export interface ReceiverSnapshot {
   name: string;
   address: string;
   city: string;
+  area?: string;   // only present when fetched from CRM by mobile (tickets.area)
   state: string;
   pin: string;
   phone: string;
@@ -35,6 +36,7 @@ export interface CourierEntry {
   place: string;
   receiver_id?: string | null;
   receiver_data?: ReceiverSnapshot | null;
+  ticket_id?: string | null;   // linked CRM ticket when receiver was fetched by mobile
   weight?: number | null;
   products: CourierProduct[];
   product_count: number;

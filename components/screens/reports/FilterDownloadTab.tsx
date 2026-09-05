@@ -3,6 +3,8 @@
 import { Ticket } from '@/types/reports';
 import { isTicketClosed } from '@/types/ticketStatus';
 import { FilterSearchFields } from '@/hooks/useReports';
+import { Engineer } from '@/hooks/useEngineers';
+import { Model } from '@/types/masters';
 
 // index.html:9422-9426 — Filter tab's own Call Type list (no "Other").
 const FILTER_CALL_TYPES = ['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat'];
@@ -28,7 +30,8 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
 interface FilterDownloadTabProps {
     fields: FilterSearchFields;
     setFields: React.Dispatch<React.SetStateAction<FilterSearchFields>>;
-    engineers: string[];
+    engineers: Engineer[];
+    models: Model[];
     searched: boolean;
     results: Ticket[];
     runSearch: () => void;
@@ -39,6 +42,7 @@ interface FilterDownloadTabProps {
 export default function FilterDownloadTab({
     fields, setFields,
     engineers,
+    models,
     searched,
     results,
     runSearch,
@@ -84,12 +88,15 @@ export default function FilterDownloadTab({
                         <label>Engineer</label>
                         <select value={fields.engineer} onChange={(e) => set('engineer', e.target.value)} style={fieldStyle}>
                             <option value="">All Engineers</option>
-                            {engineers.map((e) => <option key={e}>{e}</option>)}
+                            {engineers.map((e) => <option key={e.user_id} value={e.user_id}>{e.name}</option>)}
                         </select>
                     </div>
                     <div className="form-group">
                         <label>Model No</label>
-                        <input type="text" placeholder="Model number..." value={fields.model} onChange={(e) => set('model', e.target.value)} style={fieldStyle} />
+                        <select value={fields.model} onChange={(e) => set('model', e.target.value)} style={fieldStyle}>
+                            <option value="">All Models</option>
+                            {models.map((m) => <option key={m.id} value={m.model_no}>{m.model_no}{m.model_name ? ` — ${m.model_name}` : ''}</option>)}
+                        </select>
                     </div>
                     <div className="form-group">
                         <label>Call Type</label>

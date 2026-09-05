@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     fetchAllTickets,
     fetchDailyReports,
@@ -7,6 +7,8 @@ import {
     enrichTicketsWithKm,
     ImportResult,
 } from '@/services/reportsService';
+import { fetchModels } from '@/services/masterService';
+import { useEngineers } from '@/hooks/useEngineers';
 import {
     Ticket,
     DailyReport,
@@ -19,6 +21,7 @@ import {
     VALID_IMPORT_STATUSES,
     ImportValidationError,
 } from '@/types/reports';
+import { Model } from '@/types/masters';
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -127,8 +130,10 @@ function computeFilteredResults(all: Ticket[], f: FilterSearchFields): Ticket[] 
         });
     }
 
-    if (f.engineer) list = list.filter((t) => t.assigned_name === f.engineer);
-    if (f.model) list = list.filter((t) => (t.model || '').toLowerCase().includes(f.model.toLowerCase().trim()));
+    // index.html:9545 — engineer filter matches by ID (assigned_to), not name.
+    if (f.engineer) list = list.filter((t) => t.assigned_to === f.engineer);
+    // index.html:9546 — model filter is an exact match against the models master, not substring.
+    if (f.model) list = list.filter((t) => t.model === f.model);
     if (f.callType) list = list.filter((t) => t.call_type === f.callType);
     if (f.status) list = list.filter((t) => t.status === f.status);
     if (f.service) list = list.filter((t) => t.service_type === f.service);
@@ -206,6 +211,12 @@ export function useReports() {
     const [importRunning, setImportRunning] = useState(false);
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+    // ── Models (for Filter tab's Model dropdown, index.html:9382-9383) ────────
+    const [models, setModels] = useState<Model[]>([]);
+    useEffect(() => {
+        fetchModels().then(setModels).catch(console.error);
+    }, []);
+
     // ── Load tickets (mount + retry) ──────────────────────────────────────────
     const loadTickets = useCallback(async () => {
         try {
@@ -245,11 +256,14 @@ export function useReports() {
     const retryDaily = useCallback(() => { setDailyLoaded(false); }, []);
     const retryWc = useCallback(() => { setWcLoaded(false); }, []);
 
-    // ── Engineers list (for Filter tab's Engineer dropdown) ───────────────────
-    const engineers = useMemo(
-        () => [...new Set(allTickets.map((t) => t.assigned_name).filter(Boolean))] as string[],
-        [allTickets]
-    );
+    // ── Engineers list (for Filter tab's Engineer dropdown, index.html:9384
+    // `role=eq.engineer&is_active=eq.true`) — reuses the app's shared
+    // active-engineers hook rather than deriving names from loaded tickets,
+    // so 0-ticket engineers still appear and inactive ones don't. Matching
+    // uses each engineer's user_id, since that's what Ticket.assigned_to
+    // stores in this app (see TicketsScreen's engineer filter for the same
+    // convention) — HTML's raw `users.eng_id` has no direct equivalent here.
+    const { activeEngineers } = useEngineers();
 
     // ── Filter tab: Search (index.html:9518-9569 runFilteredReport) ──────────
     // Gated behind an explicit Search click — results stay empty until then.
@@ -430,7 +444,8 @@ export function useReports() {
         filterFields, setFilterFields,
         filterSearched, filterResults,
         runFilteredSearch,
-        engineers,
+        engineers: activeEngineers,
+        models,
         // actions
         handleDownload,
         handlePrint,

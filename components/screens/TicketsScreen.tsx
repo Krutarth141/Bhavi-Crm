@@ -22,7 +22,7 @@ import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
-import { approveTicket, rejectTicket } from '@/services/customerApprovalService';
+import { approveTicket, rejectTicket, markDeliveredAfterReject } from '@/services/customerApprovalService';
 import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
 import { fetchProblemTypes } from '@/services/masterService';
 import { supabase } from '@/lib/supabase';
@@ -95,12 +95,23 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
   // "⚠️ Invoice Pending" state, never the mark action.
   const canSeeInvoiceStatus = currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr || isAcct;
   const canMarkInvoice = currentUserRole === 'work_controller' || isAcct;
+  // Matches HTML's admin/WC/CSP-manager "Force Status" gate (index.html:6202,
+  // 6645) — CSP manager rides on the admin transition table too, same as
+  // canEditTicket/canApproveEstimate above.
+  const isAdminOrWC = currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr;
 
+  // The Status dropdown in the ticket-view modal is HTML's quick "Force
+  // Status" selector (index.html:6236/6714) — it must be restricted via
+  // getAllowedStatuses, same as the already-correct PendingListScreen.tsx /
+  // DashboardOverview.tsx pattern (isAdminOrWC ? 'admin' : 'engineer'), not
+  // the full unrestricted statusOptions list. Guarding on `modalMode !==
+  // 'edit'` here was always true (modalMode is only ever 'add'/'view' in this
+  // file) so it silently defeated this restriction for every real ticket view.
   const allowedStatusOptions = useMemo(() => {
-    if (modalMode !== 'edit' || !selectedTicket) return statusOptions;
-    const next = getAllowedStatuses(selectedTicket.status, currentUserRole, formData.service_type, formData.call_type, formData.warranty_coverage);
+    if (!selectedTicket) return statusOptions;
+    const next = getAllowedStatuses(selectedTicket.status, isAdminOrWC ? 'admin' : 'engineer', formData.service_type, formData.call_type, formData.warranty_coverage);
     return Array.from(new Set([selectedTicket.status, ...next]));
-  }, [modalMode, selectedTicket, currentUserRole, formData.service_type, formData.call_type, formData.warranty_coverage]);
+  }, [selectedTicket, isAdminOrWC, formData.service_type, formData.call_type, formData.warranty_coverage]);
 
   // Handle engineer assignment - update both ID and name
   const handleEngineerChange = (engineerId: string) => {
@@ -200,11 +211,17 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
     // edit mode). Only include them in the update when actually changed.
     const updates: Record<string, any> = { remarks: formData.remarks };
     if (formData.status && formData.status !== selectedTicket.status) {
-      if (formData.status === 'Call Cancel') {
-        const reason = prompt('🚫 Cancel Reason (mandatory):');
-        if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
-        updates.remarks = updates.remarks ? `${updates.remarks}\n\nCancel reason: ${reason}` : `Cancel reason: ${reason}`;
-      }
+      // HTML's showForceStatusRemarkModal (index.html:6709-6712,6727-6751):
+      // admin/WC always forces a mandatory reason before ANY status change is
+      // applied — not just Call Cancel. Reusing that exact copy for Call
+      // Cancel keeps its wording identical to before; every other status
+      // change gets the equivalent "Force Status Change" mandatory-reason
+      // prompt.
+      const isCancel = formData.status === 'Call Cancel';
+      const reason = prompt(isCancel ? '🚫 Cancel Reason (mandatory):' : `⚠️ Reason for status change to "${formData.status}" (mandatory):`);
+      if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
+      const label = isCancel ? 'Cancel reason' : 'Status change reason';
+      updates.remarks = updates.remarks ? `${updates.remarks}\n\n${label}: ${reason}` : `${label}: ${reason}`;
       updates.status = formData.status;
     }
     if (formData.assigned_to !== undefined && formData.assigned_to !== selectedTicket.assigned_to) {
@@ -325,12 +342,13 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
 
   const filteredTickets = useMemo(() => {
     const showAll = !!searchTerm || invoiceFilter !== 'all' || !!problemFilter;
+    const q = searchTerm.toLowerCase();
     return tickets.filter((ticket) => {
       const matchesStatus = filterStatus === 'all' ? (showAll || isTicketActive(ticket.status)) : ticket.status === filterStatus;
-      const matchesSearch = ticket.cname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.mobile.includes(searchTerm) ||
-        ticket.serial.includes(searchTerm) ||
-        ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
+      // Matches HTML's filterTickets (index.html:4913) — id/cname/serial/model/
+      // mobile/assigned_name/city, all lower-cased on both sides.
+      const matchesSearch = !q || [ticket.id, ticket.cname, ticket.serial, ticket.model, ticket.mobile, ticket.assigned_name, ticket.city]
+        .some((v) => (v || '').toLowerCase().includes(q));
       const matchesInvoice = invoiceFilter === 'all'
         || (invoiceFilter === 'pending' && isInvoiceable(ticket) && !ticket.invoice_done)
         || (invoiceFilter === 'done' && isInvoiceable(ticket) && ticket.invoice_done);
@@ -558,6 +576,28 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
     || currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr
   );
 
+  // index.html:6229-6234 — a Carry-In device the customer rejected the
+  // estimate on is still sitting at the office; admin/WC need a way to mark
+  // it collected once the customer picks it up. getAllowedStatuses returns
+  // just ['Assigned'] for Customer Reject (a terminal status like any other),
+  // so this is a dedicated action, not a status-dropdown option.
+  const canMarkDeliveredAfterReject = !!selectedTicket && selectedTicket.status === 'Customer Reject' && selectedTicket.service_type === 'Carry In' &&
+    (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr);
+
+  const handleMarkDeliveredAfterReject = async () => {
+    if (!selectedTicket) return;
+    // Matches HTML's showForceStatusRemarkModal/doForceStatusChange — a
+    // mandatory reason for this force-style status change (index.html:6739,6751).
+    const reason = prompt('📦 Mark Delivered (Customer Collected)\n\nReason / note (mandatory):');
+    if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
+    const r = await markDeliveredAfterReject(selectedTicket, reason.trim(), (session?.user as any)?.name || currentUserRole || '');
+    if (r.success) {
+      alert('✅ Marked Delivered!');
+      setModalOpen(false);
+      await fetchTickets();
+    } else alert('❌ Error: ' + r.error);
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={styles.sectionHeader}>
@@ -609,7 +649,6 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
           <option value={200}>200 / page</option>
         </select>
       </div>
-
       {loading ? <div style={styles.loadingText}>Loading...</div> : filteredTickets.length === 0 ? <div style={styles.emptyMessage}>{tickets.length === 0 ? 'No tickets' : 'No matches'}</div> : (
         <div style={styles.card}>
           <table style={styles.table}>
@@ -954,6 +993,11 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                   {canApproveEstimate && (
                     <button style={{ ...styles.btn, background: '#16a34a', color: 'white' }} onClick={() => openEstimateModal(selectedTicket!)}>
                       ✅ Approve / Reject Estimate
+                    </button>
+                  )}
+                  {canMarkDeliveredAfterReject && (
+                    <button style={{ ...styles.btn, background: '#15803d', color: 'white' }} onClick={handleMarkDeliveredAfterReject}>
+                      📦 Mark Delivered (Customer Collected)
                     </button>
                   )}
                   {selectedTicket?.status !== 'Closed' && canEditTicket(selectedTicket!) && (

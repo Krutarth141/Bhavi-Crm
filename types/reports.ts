@@ -97,6 +97,18 @@ export interface DailyReport {
     // (or a legacy JSON string), total_office_work a fallback stored count.
     office_work?: unknown;
     total_office_work?: number;
+    // index.html:1399-1404 — legacy jsonb fallback for older rows that predate
+    // the dedicated warranty_installation/warranty_breakdown/etc columns.
+    call_summary?: {
+        w_install?: number;
+        w_breakdown?: number;
+        w_repeat?: number;
+        nw_breakdown?: number;
+        nw_repeat?: number;
+        nw_other?: number;
+        nw_delivery?: number;
+        grand_total?: number;
+    };
 }
 
 // ─── WC Daily Reports ─────────────────────────────────────────────────────────

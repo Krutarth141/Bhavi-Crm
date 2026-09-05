@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
 import { useCourier } from '@/hooks/useCourier';
 import { insertCourierEntry, insertReceiver, updateReceiver, deleteReceiver } from '@/services/courierService';
 import { CourierReceiver } from '@/types/courier';
@@ -44,7 +45,8 @@ export default function CourierScreen() {
     if (dirFilter !== 'all') list = list.filter((e) => e.direction === dirFilter);
     if (rangeFilter === 'today') list = list.filter((e) => e.entry_date === todayStr);
     else if (rangeFilter === 'week') {
-      const d = new Date(); d.setDate(d.getDate() - 7);
+      // index.html:17958 — 7-day INCLUSIVE window (today minus 6), not minus 7.
+      const d = new Date(); d.setDate(d.getDate() - 6);
       const cutoff = d.toLocaleDateString('en-CA');
       list = list.filter((e) => e.entry_date >= cutoff);
     } else if (rangeFilter === 'month') {
@@ -60,52 +62,72 @@ export default function CourierScreen() {
   // 18524-18598) — always includes Mobile/Warranty/Faulty Part/Invoice/
   // Invoice Amt/Accessories columns, split across "All Entries"/"Inward"/
   // "Outward" sheets. Scoped like the HTML version: WC users get only their
-  // own entries, admins get everything currently loaded.
-  const handleExportExcel = () => {
-    const scoped = isWC ? entries.filter((e) => e.wc_id === wcId) : entries;
-    if (!scoped.length) { alert('No data found'); return; }
+  // own entries, admins get everything. Does a FRESH, unfiltered (limit
+  // 2000, no date filter) fetch rather than reusing the already-loaded,
+  // 30-day-restricted `entries` state, so "All Entries" export captures
+  // full history regardless of what's currently displayed on screen.
+  const [exporting, setExporting] = useState(false);
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      let query = supabase
+        .from('courier_log')
+        .select('*')
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(2000);
+      if (isWC) query = query.eq('wc_id', wcId);
+      const { data, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
+      const scoped = data || [];
+      if (!scoped.length) { alert('No data found'); return; }
 
-    const fmtExcelDate = (d?: string | null) => {
-      if (!d) return '';
-      const p = d.split('-');
-      return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
-    };
-    const safeStr = (v: any) => (v === null || v === undefined ? '' : String(v));
-    const safeAcc = (acc?: string[]) => (acc && acc.length ? acc.join(', ') : '');
+      const fmtExcelDate = (d?: string | null) => {
+        if (!d) return '';
+        const p = d.split('-');
+        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
+      };
+      const safeStr = (v: any) => (v === null || v === undefined ? '' : String(v));
+      const safeAcc = (acc?: string[]) => (acc && acc.length ? acc.join(', ') : '');
 
-    const buildRows = (list: typeof entries) =>
-      list.flatMap((entry) => {
-        const products = entry.products || [];
-        if (!products.length) {
-          return [[
+      const buildRows = (list: typeof scoped) =>
+        list.flatMap((entry) => {
+          const products = entry.products || [];
+          if (!products.length) {
+            return [[
+              fmtExcelDate(entry.entry_date), safeStr(entry.direction), safeStr(entry.awb_no), safeStr(entry.agency),
+              safeStr(entry.person_name), safeStr(entry.sender_mobile), safeStr(entry.place), safeStr(entry.weight),
+              '', '', '', '', '', '', '', '', safeStr(entry.wc_name),
+            ]];
+          }
+          return products.map((p: any) => [
             fmtExcelDate(entry.entry_date), safeStr(entry.direction), safeStr(entry.awb_no), safeStr(entry.agency),
             safeStr(entry.person_name), safeStr(entry.sender_mobile), safeStr(entry.place), safeStr(entry.weight),
-            '', '', '', '', '', '', '', '', safeStr(entry.wc_name),
-          ]];
-        }
-        return products.map((p) => [
-          fmtExcelDate(entry.entry_date), safeStr(entry.direction), safeStr(entry.awb_no), safeStr(entry.agency),
-          safeStr(entry.person_name), safeStr(entry.sender_mobile), safeStr(entry.place), safeStr(entry.weight),
-          safeStr(p.call_id), safeStr(p.model), safeStr(p.serial), safeStr(p.warranty), safeStr(p.faulty_part),
-          safeStr(p.invoice_avail), safeStr(p.invoice_amount), safeAcc(p.accessories), safeStr(entry.wc_name),
-        ]);
-      });
+            safeStr(p.call_id), safeStr(p.model), safeStr(p.serial), safeStr(p.warranty), safeStr(p.faulty_part),
+            safeStr(p.invoice_avail), safeStr(p.invoice_amount), safeAcc(p.accessories), safeStr(entry.wc_name),
+          ]);
+        });
 
-    const headers = ['Date', 'Direction', 'AWB No', 'Agency', 'Person', 'Mobile', 'Place', 'Weight(kg)', 'Call ID', 'Model', 'Serial No', 'Warranty', 'Faulty Part', 'Invoice', 'Invoice Amt', 'Accessories', 'WC'];
-    const makeSheet = (rows: any[][]) => {
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 35 }, { wch: 18 }];
-      return ws;
-    };
+      const headers = ['Date', 'Direction', 'AWB No', 'Agency', 'Person', 'Mobile', 'Place', 'Weight(kg)', 'Call ID', 'Model', 'Serial No', 'Warranty', 'Faulty Part', 'Invoice', 'Invoice Amt', 'Accessories', 'WC'];
+      const makeSheet = (rows: any[][]) => {
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 35 }, { wch: 18 }];
+        return ws;
+      };
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, makeSheet(buildRows(scoped)), 'All Entries');
-    const inRows = buildRows(scoped.filter((e) => e.direction === 'Inward'));
-    if (inRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(inRows), 'Inward');
-    const outRows = buildRows(scoped.filter((e) => e.direction === 'Outward'));
-    if (outRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(outRows), 'Outward');
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, makeSheet(buildRows(scoped)), 'All Entries');
+      const inRows = buildRows(scoped.filter((e) => e.direction === 'Inward'));
+      if (inRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(inRows), 'Inward');
+      const outRows = buildRows(scoped.filter((e) => e.direction === 'Outward'));
+      if (outRows.length) XLSX.utils.book_append_sheet(wb, makeSheet(outRows), 'Outward');
 
-    XLSX.writeFile(wb, `courier_register_${todayStr}.xlsx`);
+      XLSX.writeFile(wb, `courier_register_${todayStr}.xlsx`);
+    } catch (err: any) {
+      alert('Error: ' + (err?.message ?? String(err)));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleInwardSave = async (data: any) => {
@@ -188,7 +210,9 @@ export default function CourierScreen() {
       <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setRangeFilter('custom'); }}
         style={{ border: `1px solid ${colors.border}`, borderRadius: '8px', padding: '6px 10px', fontSize: '13px' }} />
       <span style={{ fontSize: '12px', color: colors.textMuted }}>{filteredEntries.length} entries</span>
-      <button onClick={handleExportExcel} style={{ ...styles.btn, ...styles.btnSm, backgroundColor: '#059669', color: '#fff' }}>📊 Excel</button>
+      <button onClick={handleExportExcel} disabled={exporting} style={{ ...styles.btn, ...styles.btnSm, backgroundColor: '#059669', color: '#fff', opacity: exporting ? 0.7 : 1, cursor: exporting ? 'not-allowed' : 'pointer' }}>
+        {exporting ? '⏳ Exporting...' : '📊 Excel'}
+      </button>
     </div>
   );
 

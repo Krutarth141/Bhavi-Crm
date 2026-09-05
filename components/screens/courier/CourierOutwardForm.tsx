@@ -38,11 +38,64 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
   const [form, setForm] = useState({ awb_no: '', agency: '', weight: '', entry_date: getToday() });
   const [search, setSearch] = useState('');
   const [ddOpen, setDdOpen] = useState(false);
-  const [selectedReceiver, setSelectedReceiver] = useState<CourierReceiver | null>(null);
+  // Unified receiver snapshot — set either by picking a Receiver Master row
+  // (id present) or by fetching a past call from CRM by mobile (no id, but
+  // selectedCrmTicketId set instead). Mirrors HTML's single
+  // window._selectedReceiver + window._selectedCrmTicketId (index.html:
+  // 18721-18732, 18762-18776).
+  const [selectedReceiver, setSelectedReceiver] = useState<
+    { id?: string; name: string; address?: string; city?: string; area?: string; state?: string; pin?: string; phone?: string } | null
+  >(null);
+  const [selectedCrmTicketId, setSelectedCrmTicketId] = useState<string | null>(null);
+  const [crmMobile, setCrmMobile] = useState('');
+  const [crmSearching, setCrmSearching] = useState(false);
+  const [crmResults, setCrmResults] = useState<any[]>([]);
+  const [crmMessage, setCrmMessage] = useState<{ type: 'info' | 'error' | 'success'; text: string } | null>(null);
   const [products, setProducts] = useState<CourierProduct[]>([emptyCourierProduct()]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Fetch Receiver from CRM (by Mobile) — index.html:18740-18761
+  // (searchCrmForCourier): exact match on tickets.mobile, most recent 10.
+  const searchCrmForCourier = async () => {
+    const mobile = crmMobile.trim();
+    if (!mobile) { setCrmMessage({ type: 'error', text: 'Enter a mobile number to search.' }); return; }
+    setCrmSearching(true);
+    setCrmMessage({ type: 'info', text: 'Searching...' });
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('id, cname, mobile, address, area, city, state, pin, model, problem, call_type, status, created_at')
+        .eq('mobile', mobile)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      if (!data || !data.length) {
+        setCrmResults([]);
+        setCrmMessage({ type: 'info', text: 'No calls found for this mobile — search Receiver Master below, or add the address manually.' });
+        return;
+      }
+      setCrmResults(data);
+      setCrmMessage(null);
+    } catch (e: any) {
+      setCrmResults([]);
+      setCrmMessage({ type: 'error', text: 'Error: ' + (e?.message ?? String(e)) });
+    } finally {
+      setCrmSearching(false);
+    }
+  };
+
+  // index.html:18762-18776 (selectCrmReceiver)
+  const selectCrmReceiver = (ticketId: string) => {
+    const t = crmResults.find((x) => x.id === ticketId);
+    if (!t) return;
+    const r = { name: t.cname || '', address: t.address || '', city: t.city || '', area: t.area || '', state: t.state || '', pin: t.pin || '', phone: t.mobile || '' };
+    setSelectedReceiver(r);
+    setSelectedCrmTicketId(t.id);
+    setSearch(r.name);
+    setCrmMessage({ type: 'success', text: `✅ Fetched from ${ticketId} — verify address below before saving.` });
+  };
 
   useEffect(() => {
     supabase.from('models').select('model_no').order('model_no').limit(500).then(({ data }) => {
@@ -69,7 +122,11 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
   const validate = () => {
     const errors: Record<string, string> = {};
     if (!form.agency.trim()) errors.agency = 'Courier Agency is required';
-    if (!selectedReceiver) errors.receiver = 'Please select a Receiver (from Master)';
+    // A Master pick (id set) or a CRM fetch-by-mobile (selectedCrmTicketId
+    // set) both count as a valid receiver — index.html:18124.
+    if (!selectedReceiver || (!selectedReceiver.id && !selectedCrmTicketId)) {
+      errors.receiver = 'Please select a Receiver (from Master, or fetch from CRM by mobile)';
+    }
     return errors;
   };
 
@@ -87,11 +144,12 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
       person_name: selectedReceiver!.name,
       sender_mobile: null,
       place: selectedReceiver!.city || '',
-      receiver_id: selectedReceiver!.id,
+      receiver_id: selectedReceiver!.id || null,
       receiver_data: {
         name: selectedReceiver!.name, address: selectedReceiver!.address, city: selectedReceiver!.city,
-        state: selectedReceiver!.state, pin: selectedReceiver!.pin, phone: selectedReceiver!.phone,
+        area: selectedReceiver!.area, state: selectedReceiver!.state, pin: selectedReceiver!.pin, phone: selectedReceiver!.phone,
       },
+      ticket_id: selectedCrmTicketId || null,
       weight: form.weight ? parseFloat(form.weight) : null,
       entry_date: form.entry_date || getToday(),
       products: cleanProducts,
@@ -100,6 +158,10 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
 
     setForm({ awb_no: '', agency: '', weight: '', entry_date: getToday() });
     setSelectedReceiver(null);
+    setSelectedCrmTicketId(null);
+    setCrmMobile('');
+    setCrmResults([]);
+    setCrmMessage(null);
     setSearch('');
     setProducts([emptyCourierProduct()]);
     setSubmitted(false);
@@ -125,8 +187,48 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
               placeholder="e.g. BlueDart, DTDC, FedEx" />
             {errors.agency && <div style={errorStyle}>{errors.agency}</div>}
           </div>
+          {/* Fetch Receiver from CRM (by Mobile) — index.html:17843-17850.
+              Separate from the Receiver Master picker below (one-off end
+              customers vs. repeat vendors/repair centers) — both paths just
+              fill the same selectedReceiver + preview box. */}
+          <div style={{ gridColumn: '1 / -1', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 12px' }}>
+            <label style={{ ...styles.formLabel, fontWeight: 700, color: '#1D4ED8' }}>🔍 Fetch Receiver from CRM (by Mobile)</label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <input
+                type="tel"
+                value={crmMobile}
+                onChange={e => setCrmMobile(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchCrmForCourier(); } }}
+                maxLength={15}
+                placeholder="Customer's mobile number"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button type="button" disabled={crmSearching}
+                style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, opacity: crmSearching ? 0.7 : 1 }}
+                onClick={searchCrmForCourier}>
+                {crmSearching ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+            {crmMessage && (
+              <div style={{ marginTop: 6, fontSize: 12, color: crmMessage.type === 'error' ? colors.danger : crmMessage.type === 'success' ? '#15803d' : colors.textMuted, fontWeight: crmMessage.type === 'success' ? 600 : 400 }}>
+                {crmMessage.text}
+              </div>
+            )}
+            {crmResults.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Found {crmResults.length} call(s) — pick the right one:</div>
+                {crmResults.map(t => (
+                  <div key={t.id} onClick={() => selectCrmReceiver(t.id)}
+                    style={{ cursor: 'pointer', background: '#fff', border: '1px solid #BFDBFE', borderRadius: 8, padding: '8px 10px', marginBottom: 5 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1D4ED8' }}>{t.id} — {t.cname || ''}</div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>{t.model || ''}{t.problem ? ` · ${t.problem}` : ''} · {t.city || ''} · {t.status || ''}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ gridColumn: '1 / -1' }} ref={wrapRef}>
-            <label style={styles.formLabel}>Receiver * <span style={{ fontSize: 11, color: colors.textMuted }}>(Select from Master)</span></label>
+            <label style={styles.formLabel}>Receiver * <span style={{ fontSize: 11, color: colors.textMuted }}>(Select from Master, or fetch from CRM above)</span></label>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -140,7 +242,7 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
               {ddOpen && search && filteredReceivers.length > 0 && (
                 <div style={{ position: 'absolute', zIndex: 300, background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', width: '100%', top: '100%', left: 0 }}>
                   {filteredReceivers.map(r => (
-                    <div key={r.id} onClick={() => { setSelectedReceiver(r); setSearch(r.name); setDdOpen(false); }}
+                    <div key={r.id} onClick={() => { setSelectedReceiver(r); setSelectedCrmTicketId(null); setSearch(r.name); setDdOpen(false); }}
                       style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #F1F5F9' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
                       onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
@@ -154,8 +256,9 @@ export default function CourierOutwardForm({ receivers, onSave, loading }: Couri
             {errors.receiver && <div style={errorStyle}>{errors.receiver}</div>}
             {selectedReceiver && (
               <div style={{ display: 'block', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', marginTop: 6, fontSize: 12 }}>
-                <b>{selectedReceiver.name}</b><br />
+                <b>{selectedReceiver.name}</b>{selectedCrmTicketId && <span style={{ color: '#64748B', fontWeight: 400 }}> (from {selectedCrmTicketId})</span>}<br />
                 {selectedReceiver.address && <>{selectedReceiver.address}<br /></>}
+                {selectedReceiver.area && <>{selectedReceiver.area}, </>}
                 {selectedReceiver.city}{selectedReceiver.pin ? `, ${selectedReceiver.pin}` : ''}{selectedReceiver.state ? `, ${selectedReceiver.state}` : ''}
                 {selectedReceiver.phone && <><br />📞 {selectedReceiver.phone}</>}
               </div>

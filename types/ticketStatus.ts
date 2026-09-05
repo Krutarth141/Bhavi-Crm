@@ -41,15 +41,14 @@ export function getAllowedStatuses(
     const isRepeat = callType === 'Warranty Repeat' || callType === 'Non-Warranty Repeat';
     const isCarryIn = (serviceType || '').toLowerCase().includes('carry');
 
+    // Terminal states — only admin/WC can reopen, and only back to Assigned
+    // (index.html:3117-3120). This holds even for a Customer Reject on a
+    // Carry-In device: HTML has NO 'Delivered' option in this dropdown for
+    // that case — marking such a device collected goes through a separate,
+    // dedicated "📦 Mark Delivered (Customer Collected)" button elsewhere on
+    // the ticket (index.html:6229-6234), never this status dropdown.
     if (['Closed', 'Customer Reject', 'Call Cancel', 'Delivered Not Approved', 'Delivered'].includes(current || '')) {
-        if (isAdminOrWC) {
-            // Special case (index.html:6229-6234): a Carry-In device that the
-            // customer rejected the estimate on is still sitting in the office —
-            // admin/WC need a path to mark it collected once the customer picks
-            // it up, in addition to the normal reopen-to-Assigned path.
-            if (current === 'Customer Reject' && isCarryIn) return ['Assigned', 'Delivered'];
-            return ['Assigned'];
-        }
+        if (isAdminOrWC) return ['Assigned'];
         return [];
     }
 
