@@ -26,6 +26,7 @@ export default function LeaveSection({ myId, myName, myRole, canApprove, isAdmin
     const [pending, setPending] = useState<LeaveRequest[]>([]);
     const [mine, setMine] = useState<LeaveRequest[]>([]);
     const [loading, setLoading] = useState(true);
+    const [tableMissing, setTableMissing] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [from, setFrom] = useState(new Date().toLocaleDateString('en-CA'));
     const [to, setTo] = useState(new Date().toLocaleDateString('en-CA'));
@@ -35,11 +36,16 @@ export default function LeaveSection({ myId, myName, myRole, canApprove, isAdmin
     const load = useCallback(async () => {
         if (!myId) return;
         setLoading(true);
-        if (canApprove) {
-            const [p, m] = await Promise.all([fetchPendingLeaves(), fetchMyLeaves(myId)]);
-            setPending(p); setMine(m);
-        } else {
-            setMine(await fetchMyLeaves(myId));
+        try {
+            if (canApprove) {
+                const [p, m] = await Promise.all([fetchPendingLeaves(), fetchMyLeaves(myId)]);
+                setPending(p); setMine(m);
+            } else {
+                setMine(await fetchMyLeaves(myId));
+            }
+            setTableMissing(false);
+        } catch {
+            setTableMissing(true);
         }
         setLoading(false);
     }, [myId, canApprove]);
@@ -97,7 +103,11 @@ export default function LeaveSection({ myId, myName, myRole, canApprove, isAdmin
                 )}
             </div>
 
-            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 12 }}>Loading...</p> : (
+            {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 12 }}>Loading...</p> : tableMissing ? (
+                <div style={{ fontSize: 13, color: '#b45309' }}>
+                    🌴 Leave module: <b>leave_requests</b> table hajı banela nathi. Supabase ma LEAVE_TABLE.sql run karo.
+                </div>
+            ) : (
                 <>
                     {canApprove && (
                         <>

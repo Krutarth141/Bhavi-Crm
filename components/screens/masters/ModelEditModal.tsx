@@ -32,15 +32,27 @@ export default function ModelEditModal({ model, brands, subcategories, onSave, o
     const [subcatId, setSubcatId] = useState(model.subcategory_id || '');
     const [printerType, setPrinterType] = useState(model.printer_type || '');
     const [salePrice, setSalePrice] = useState(model.sale_price != null ? String(model.sale_price) : '');
+    const [carryInCharge, setCarryInCharge] = useState(model.carry_in_charge != null ? String(model.carry_in_charge) : '');
+    const [onsiteApplicable, setOnsiteApplicable] = useState(model.onsite_applicable !== false);
+    const [onsiteCharge, setOnsiteCharge] = useState(model.onsite_charge != null ? String(model.onsite_charge) : '');
     const [saving, setSaving] = useState(false);
 
     const filteredSubcats = brandId ? subcategories.filter(s => s.brand_id === brandId) : subcategories;
+
+    const handleToggleOnsite = (checked: boolean) => {
+        setOnsiteApplicable(checked);
+        if (!checked) setOnsiteCharge('');
+    };
 
     const handleSave = async () => {
         if (!modelNo.trim()) { alert('Enter model no'); return; }
         setSaving(true);
         try {
-            await onSave(model.id, { model_no: modelNo, model_name: modelName, brand_id: brandId, subcategory_id: subcatId, printer_type: printerType, sale_price: salePrice });
+            await onSave(model.id, {
+                model_no: modelNo, model_name: modelName, brand_id: brandId, subcategory_id: subcatId,
+                printer_type: printerType, sale_price: salePrice,
+                carry_in_charge: carryInCharge, onsite_applicable: onsiteApplicable, onsite_charge: onsiteCharge,
+            });
             onClose();
         } catch (e: any) { alert('Error: ' + e.message); }
         finally { setSaving(false); }
@@ -81,9 +93,27 @@ export default function ModelEditModal({ model, brands, subcategories, onSave, o
                     {PRINTER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
             </div>
-            <div>
+            <div style={{ marginBottom: 12 }}>
                 <label style={labelStyle}>Sale Price (₹)</label>
                 <input type="number" min={0} value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="e.g. 12500" style={fieldStyle} />
+            </div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#166534', marginBottom: 8 }}>💰 Service Charges</div>
+                <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle}>Carry-In Charge (₹)</label>
+                    <input type="number" min={0} value={carryInCharge} onChange={e => setCarryInCharge(e.target.value)} placeholder="e.g. 413" style={fieldStyle} />
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={onsiteApplicable} onChange={e => handleToggleOnsite(e.target.checked)} /> Onsite Service Applicable for this Model
+                </label>
+                {onsiteApplicable ? (
+                    <div>
+                        <label style={labelStyle}>Onsite Charge (₹)</label>
+                        <input type="number" min={0} value={onsiteCharge} onChange={e => setOnsiteCharge(e.target.value)} placeholder="e.g. 649" style={fieldStyle} />
+                    </div>
+                ) : (
+                    <div style={{ fontSize: 10, color: '#64748b' }}>Onsite not applicable — this model will show as Carry-In only, everywhere (call form + chatbot).</div>
+                )}
             </div>
         </Modal>
     );

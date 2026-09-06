@@ -32,6 +32,9 @@ export interface Model {
     created_at?: string;
     brand?: { name: string } | null;
     subcategory?: { name: string } | null;
+    carry_in_charge?: number | null;
+    onsite_charge?: number | null;
+    onsite_applicable?: boolean | null;
 }
 
 export interface ProblemType {
@@ -63,6 +66,9 @@ export interface ModelForm {
     subcategory_id: string;
     sale_price: string;
     printer_type: string;
+    carry_in_charge: string;
+    onsite_applicable: boolean;
+    onsite_charge: string;
 }
 
 export interface ProblemTypeForm {
@@ -76,6 +82,7 @@ export const emptySubCategoryForm: SubCategoryForm = { name: '', brand_id: '' };
 export const emptyModelForm: ModelForm = {
     model_no: '', model_name: '', brand_id: '',
     subcategory_id: '', sale_price: '', printer_type: '',
+    carry_in_charge: '', onsite_applicable: true, onsite_charge: '',
 };
 export const emptyProblemTypeForm: ProblemTypeForm = {
     problem: '', brand_id: '', is_active: true,

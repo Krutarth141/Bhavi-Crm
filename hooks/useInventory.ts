@@ -206,7 +206,7 @@ export const useInventory = () => {
 
             if (transactionType === 'in') {
                 newQty += transactionData.quantity;
-            } else if (transactionType === 'out' || transactionType === 'sell') {
+            } else {
                 newQty = Math.max(0, newQty - transactionData.quantity);
             }
 
@@ -217,16 +217,37 @@ export const useInventory = () => {
 
             if (error) throw error;
 
-            // Log transaction
+            // Log transaction — mirrors HTML's saveStockAdjust() (index.html:
+            // 8957-8983): a real 'sell' type (not folded into 'out'), and
+            // per-type dedicated columns instead of one freeform note.
+            // Matches HTML's own latent quirk of ignoring the Note field on
+            // Stock In / Sell (only the auto-generated "Purchase from X"/
+            // "Sale to X" string is saved) while Stock Out's Purpose/Note
+            // field IS used verbatim.
             try {
-                const noteParts = [transactionData.note, transactionData.supplier ? `Supplier: ${transactionData.supplier}` : '', transactionData.invoice ? `Invoice: ${transactionData.invoice}` : '', transactionData.customer ? `Customer: ${transactionData.customer}` : ''].filter(Boolean);
-                await supabase.from('inventory_log').insert({
+                const logData: any = {
                     inventory_id: selectedItem.id,
-                    type: transactionType === 'sell' ? 'out' : transactionType,
+                    type: transactionType,
                     qty: transactionData.quantity,
-                    note: noteParts.join(' | ') || null,
                     done_by: by,
-                });
+                    created_at: new Date().toISOString(),
+                };
+                if (transactionType === 'in') {
+                    logData.note = 'Purchase' + (transactionData.supplier ? ' from ' + transactionData.supplier : '') + (transactionData.invoice ? ' INV:' + transactionData.invoice : '');
+                    logData.supplier = transactionData.supplier || null;
+                    logData.invoice_no = transactionData.invoice || null;
+                    logData.txn_date = transactionData.date;
+                } else if (transactionType === 'out') {
+                    logData.note = transactionData.note?.trim() || 'Manual stock out';
+                    logData.txn_date = transactionData.date;
+                } else {
+                    logData.note = 'Sale to ' + transactionData.customer + (transactionData.invoice ? ' INV:' + transactionData.invoice : '');
+                    logData.customer_name = transactionData.customer;
+                    logData.invoice_no = transactionData.invoice;
+                    logData.price_per_unit = transactionData.sell_price;
+                    logData.txn_date = transactionData.date;
+                }
+                await supabase.from('inventory_log').insert(logData);
             } catch (e) {
                 console.warn('Could not log transaction:', e);
             }

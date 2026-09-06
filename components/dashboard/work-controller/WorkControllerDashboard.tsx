@@ -135,7 +135,7 @@ export default function WorkControllerDashboard() {
             case 'site-visits': return <SiteVisitsScreen />;
             case 'tat-report': return <TatReportScreen />;
             case 'part-request': return <PartRequestScreen />;
-            case 'work-log': return <EngineerWorkLogScreen engId={wcId} engName={wcName} />;
+            case 'work-log': return <EngineerWorkLogScreen engId={wcId} engName={wcName} isWC />;
             case 'work-log-report': return <WorkLogScreen />;
             case 'master': return <MasterDataScreen />;
             case 'sales': return <SalesScreen />;

@@ -224,6 +224,10 @@ export default function InventoryScreen() {
 
     const handleSaveTransaction = async () => {
         if (!selectedItem) return;
+        if (transactionType === 'sell' && !transactionData.customer.trim()) {
+            alert('Customer name required!');
+            return;
+        }
         if (transactionData.quantity <= 0) {
             alert('Quantity must be greater than 0');
             return;

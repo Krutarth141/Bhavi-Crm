@@ -62,6 +62,11 @@ export default function WalkInReportScreen() {
     }
   };
 
+  useEffect(() => {
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filteredResults = useMemo(() => (wcFilter ? results.filter((r) => r.wc_id === wcFilter) : results), [results, wcFilter]);
 
   // Mirrors HTML's mkCard KPI breakdown (index.html:17550-17559) — only an

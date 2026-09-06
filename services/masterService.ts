@@ -85,7 +85,7 @@ export const fetchModels = async (): Promise<Model[]> => {
     while (true) {
         const { data: page, error } = await supabase
             .from('models')
-            .select('id, model_no, model_name, brand_id, subcategory_id, sale_price, printer_type, brochure_url, created_at, brand:brands(name), subcategory:subcategories(name)')
+            .select('id, model_no, model_name, brand_id, subcategory_id, sale_price, printer_type, brochure_url, created_at, carry_in_charge, onsite_charge, onsite_applicable, brand:brands(name), subcategory:subcategories(name)')
             .order('model_no')
             .range(from, from + PAGE - 1);
         if (error) throw error;
@@ -256,6 +256,9 @@ export const updateModel = async (id: string, form: ModelForm): Promise<void> =>
             subcategory_id: form.subcategory_id || null,
             sale_price: form.sale_price ? Number(form.sale_price) : null,
             printer_type: form.printer_type || null,
+            carry_in_charge: form.carry_in_charge ? Number(form.carry_in_charge) : null,
+            onsite_applicable: form.onsite_applicable,
+            onsite_charge: form.onsite_applicable && form.onsite_charge ? Number(form.onsite_charge) : null,
         })
         .eq('id', id);
     if (error) throw error;

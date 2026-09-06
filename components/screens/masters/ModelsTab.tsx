@@ -6,6 +6,8 @@ import { Brand, SubCategory, Model, ModelForm, emptyModelForm } from '@/types/ma
 import { importModels } from '@/services/masterService';
 import ModelEditModal from './ModelEditModal';
 
+const isModelOnsiteEligible = (m: Model) => m.onsite_applicable !== false;
+
 interface Props {
     brands: Brand[];
     subcategories: SubCategory[];
@@ -149,7 +151,7 @@ export default function ModelsTab({ brands, subcategories, models, onAdd, onEdit
                     <div className="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>#</th><th>Model No.</th><th>Model Name</th><th>Brand</th><th>Sub-Category</th><th>Sale Price</th><th>Action</th></tr>
+                                <tr><th>#</th><th>Model No.</th><th>Model Name</th><th>Brand</th><th>Sub-Category</th><th>Sale Price</th><th>Carry-In ₹</th><th>Onsite ₹</th><th>Action</th></tr>
                             </thead>
                             <tbody>
                                 {filteredModels.map((m, i) => (
@@ -160,6 +162,8 @@ export default function ModelsTab({ brands, subcategories, models, onAdd, onEdit
                                         <td>{m.brand?.name || '—'}</td>
                                         <td>{m.subcategory?.name || '—'}</td>
                                         <td>{m.sale_price ? `₹${m.sale_price.toLocaleString()}` : '—'}</td>
+                                        <td>{m.carry_in_charge != null ? `₹${Number(m.carry_in_charge).toLocaleString('en-IN')}` : '—'}</td>
+                                        <td>{isModelOnsiteEligible(m) ? (m.onsite_charge != null ? `₹${Number(m.onsite_charge).toLocaleString('en-IN')}` : '—') : 'N/A'}</td>
                                         <td>
                                             <button className="btn-icon" onClick={() => setEditingModel(m)}>✏️</button>
                                             <button className="btn-icon" onClick={() => handleDelete(m.id)} style={{ color: 'var(--danger)' }}>🗑️</button>

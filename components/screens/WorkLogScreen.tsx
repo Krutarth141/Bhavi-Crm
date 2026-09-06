@@ -127,9 +127,10 @@ export function isAutoWorkLog(log: WorkLog): boolean {
 interface EngineerWorkLogScreenProps {
     engId: string;
     engName: string;
+    isWC?: boolean;
 }
 
-export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenProps) {
+export function EngineerWorkLogScreen({ engId, engName, isWC }: EngineerWorkLogScreenProps) {
     const today = new Date().toLocaleDateString('en-CA');
     const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(true);
@@ -178,7 +179,7 @@ export function EngineerWorkLogScreen({ engId, engName }: EngineerWorkLogScreenP
         const result = await saveWorkLog({
             eng_id: engId,
             eng_name: engName,
-            member_role: 'Engineer',
+            member_role: isWC ? 'WC' : 'Engineer',
             log_date: today,
             from_time: wlFrom,
             to_time: wlTo,

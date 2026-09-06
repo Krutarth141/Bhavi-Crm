@@ -218,6 +218,10 @@ export default function SiteVisitsScreen() {
                     {canManage(v) && <button onClick={() => openEdit(v)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>✏️</button>}
                     {canAct(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
                     {canManage(v) && <button onClick={() => handleDelete(v)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
+                    {/* Cancel is mutually exclusive with Edit/Delete — HTML only shows it
+                        when canManage is false (index.html:23886-23891); an admin/WC never
+                        sees it alongside Edit+Delete. */}
+                    {!canManage(v) && canAct(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
                 </div>
                 {(v.travel_start_at || v.work_start_at) && (
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6, fontSize: 11, color: '#64748b', borderTop: '1px dashed #e5e7eb', paddingTop: 6 }}>
