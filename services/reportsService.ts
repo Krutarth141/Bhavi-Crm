@@ -290,6 +290,9 @@ export async function saveWCDailyReport(payload: {
     try {
         const inwardTotal = payload.inward.warranty + payload.inward.non_warranty + payload.inward.other;
         const outwardTotal = payload.outward.warranty + payload.outward.non_warranty + payload.outward.other;
+        // index.html:14198-14203 — only push a review if(name): blank-customer
+        // rows added via "+ Add Review" and left empty are dropped before save.
+        const cleanReviews = payload.reviews.filter((rv) => rv.customer && rv.customer.trim());
         const { error } = await supabase.from('wc_daily_reports').insert([{
             wc_id: payload.wc_id,
             wc_name: payload.wc_name,
@@ -300,8 +303,8 @@ export async function saveWCDailyReport(payload: {
             total_inquiries: inwardTotal + outwardTotal,
             inward_breakdown: payload.inward,
             outward_breakdown: payload.outward,
-            google_reviews: payload.reviews,
-            total_reviews: payload.reviews.length,
+            google_reviews: cleanReviews,
+            total_reviews: cleanReviews.length,
             remarks: payload.remarks,
         }]);
         if (error) throw error;

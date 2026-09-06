@@ -74,7 +74,9 @@ export default function WalkInScreen() {
 
   const handleCallNext = useCallback(() => {
     const cur = parseInt(localStorage.getItem(getTodayKey()) || '0', 10) || 0;
-    const tokens = todayLogs.map((e) => e.token_no).filter((t): t is number => !!t).sort((a, b) => a - b);
+    // index.html:17312 — falls back to (index+1) for a log missing token_no,
+    // rather than dropping it from the callable queue entirely.
+    const tokens = todayLogs.map((e, i) => e.token_no || (i + 1)).sort((a, b) => a - b);
     let next = tokens.find((t) => t > cur);
     if (next === undefined) {
       if (!tokens.length) { alert('No customers in queue today.'); return; }

@@ -33,6 +33,7 @@ export default function ReportsScreen() {
     filterSearched, filterResults,
     runFilteredSearch,
     engineers,
+    models,
     // tickets
     allTickets,
     // actions
@@ -70,16 +71,10 @@ export default function ReportsScreen() {
 
   return (
     <div className="content-section">
-      {/* Header */}
-      <div className="section-header">
-        <h2>📈 Reports</h2>
-        {activeTab === 'filter' && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-outline btn-sm" onClick={handleDownload}>📊 Excel</button>
-            <button className="btn btn-primary btn-sm" onClick={handlePrint}>🖨️ Print</button>
-          </div>
-        )}
-      </div>
+      {/* index.html:9210-9222 renderReports() has no page-level header — the
+          tab bar is the only thing above the active tab's own content; Search/
+          Excel/Print live solely inside the Filter tab's own card
+          (FilterDownloadTab.tsx), not duplicated here. */}
 
       {/* Tab Bar */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
@@ -120,6 +115,7 @@ export default function ReportsScreen() {
               fields={filterFields}
               setFields={setFilterFields}
               engineers={engineers}
+              models={models}
               searched={filterSearched}
               results={filterResults}
               runSearch={runFilteredSearch}
