@@ -6,7 +6,6 @@ import Modal from '@/components/Modal';
 
 interface InventoryModalsProps {
     showAddForm: boolean;
-    showViewModal: boolean;
     showStockTransactionModal: boolean;
     selectedItem: InventoryItem | null;
     brands: Brand[];
@@ -15,7 +14,6 @@ interface InventoryModalsProps {
     transactionType: 'in' | 'out' | 'sell';
     submitting: boolean;
     onCloseAddForm: () => void;
-    onCloseViewModal: () => void;
     onCloseStockModal: () => void;
     onFormChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
     onTransactionChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
@@ -26,7 +24,6 @@ interface InventoryModalsProps {
 
 export function InventoryModals({
     showAddForm,
-    showViewModal,
     showStockTransactionModal,
     selectedItem,
     brands,
@@ -35,7 +32,6 @@ export function InventoryModals({
     transactionType,
     submitting,
     onCloseAddForm,
-    onCloseViewModal,
     onCloseStockModal,
     onFormChange,
     onTransactionChange,
@@ -188,52 +184,6 @@ export function InventoryModals({
                         />
                     </div>
                 </form>
-            </Modal>
-
-            {/* View Item Modal */}
-            <Modal
-                isOpen={showViewModal}
-                title="ℹ️ Item Details"
-                onClose={onCloseViewModal}
-                footer={
-                    <button className="btn btn-outline" onClick={onCloseViewModal}>
-                        Close
-                    </button>
-                }
-            >
-                {selectedItem && (
-                    <div style={{ display: 'grid', gap: '12px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                            <DetailRow label="Item Code" value={selectedItem.item_code} />
-                            <DetailRow label="Part Code" value={selectedItem.part_code || '—'} />
-                            <DetailRow label="Item Name" value={selectedItem.item_name} />
-                            <DetailRow label="Brand" value={brands.find(b => b.id === selectedItem.brand_id)?.name || '—'} />
-                            <DetailRow label="Category" value={selectedItem.category || '—'} />
-                            <DetailRow label="Stock Qty" value={selectedItem.qty_in_stock} />
-                            <DetailRow label="Min Stock" value={selectedItem.min_stock} />
-                            <DetailRow label="Purchase Price (DTP)" value={selectedItem.purchase_price ? `₹${selectedItem.purchase_price.toLocaleString()}` : '—'} />
-                            <DetailRow label="Unit Price (MRP)" value={`₹${(selectedItem.unit_price || 0).toLocaleString()}`} />
-                            <DetailRow label="GST %" value={`${selectedItem.gst_pct != null ? selectedItem.gst_pct : 18}%`} />
-                            <DetailRow
-                                label="Stock Value"
-                                value={(() => {
-                                    const dtp = selectedItem.purchase_price || 0;
-                                    const mrp = selectedItem.unit_price || 0;
-                                    const val = dtp > 0
-                                        ? (selectedItem.qty_in_stock || 0) * dtp * (1 + ((selectedItem.gst_pct || 0) / 100))
-                                        : (selectedItem.qty_in_stock || 0) * mrp;
-                                    return `₹${val.toFixed(0)}`;
-                                })()}
-                            />
-                        </div>
-                        <div>
-                            <strong>Description:</strong> {selectedItem.description || '—'}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                            <strong>Updated:</strong> {new Date(selectedItem.updated_at).toLocaleString()}
-                        </div>
-                    </div>
-                )}
             </Modal>
 
             {/* Stock Transaction Modal */}
@@ -457,13 +407,5 @@ export function InventoryModals({
                 )}
             </Modal>
         </>
-    );
-}
-
-function DetailRow({ label, value }: { label: string; value: any }) {
-    return (
-        <div>
-            <strong>{label}:</strong> {value}
-        </div>
     );
 }

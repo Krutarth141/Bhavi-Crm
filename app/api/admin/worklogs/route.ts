@@ -79,9 +79,11 @@ export async function GET(request: NextRequest) {
             logs.map((l: any) => l.ticket_id).filter((x: any) => x && !String(x).startsWith('FT') && !String(x).startsWith('SV'))
         ));
         if (ticketIds.length) {
-            const { data: tix } = await supabaseAdmin.from('tickets').select('id, area, service_type').in('id', ticketIds);
+            const { data: tix } = await supabaseAdmin.from('tickets').select('id, area, city, service_type').in('id', ticketIds);
             const tixMap: Record<string, { area?: string; service_type?: string }> = {};
-            (tix ?? []).forEach((t: any) => { tixMap[t.id] = { area: t.area, service_type: t.service_type }; });
+            // Matches HTML's loadWorkLogReport() (index.html:21790): fall back to
+            // city when the ticket has no area set.
+            (tix ?? []).forEach((t: any) => { tixMap[t.id] = { area: t.area || t.city || '', service_type: t.service_type }; });
             logs.forEach((l: any) => {
                 const info = l.ticket_id ? tixMap[l.ticket_id] : undefined;
                 if (info) { l.area = info.area; l.service_type = info.service_type; }

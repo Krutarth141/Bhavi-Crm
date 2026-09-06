@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { WalkInEntry } from '@/types/walkin';
 import { colors, styles } from '@/styles/ticketsStyles';
+import { updateWalkIn } from '@/services/walkInService';
 import CreateJobModal from './CreateJobModal';
 
 interface WalkInListProps {
@@ -23,6 +24,34 @@ const TYPE_COLORS: Record<string, string> = {
 // Report screen).
 export default function WalkInList({ entries, onEdit, onDeparture, onJobCreated, busyId }: WalkInListProps) {
   const [jobEntry, setJobEntry] = useState<WalkInEntry | null>(null);
+
+  // Click-to-edit customer name — mirrors HTML's viewWalkInCustomer /
+  // saveWalkInCustomer (index.html:17648-17707), same pattern reused from
+  // WalkInReportScreen.tsx's openCustEdit/saveCustEdit.
+  const [editCust, setEditCust] = useState<WalkInEntry | null>(null);
+  const [custForm, setCustForm] = useState({ name: '', mobile: '', address: '', city: '', state: '', pin: '' });
+  const [custSaving, setCustSaving] = useState(false);
+
+  const openCustEdit = (entry: WalkInEntry) => {
+    setEditCust(entry);
+    setCustForm({
+      name: entry.customer_name || '', mobile: entry.mobile || '', address: entry.address || '',
+      city: entry.city || '', state: entry.state || '', pin: entry.pin || '',
+    });
+  };
+  const saveCustEdit = async () => {
+    if (!editCust) return;
+    if (!custForm.name.trim()) { alert('Customer name required'); return; }
+    setCustSaving(true);
+    const r = await updateWalkIn(editCust.id, {
+      customer_name: custForm.name.trim(), mobile: custForm.mobile.trim(), address: custForm.address.trim(),
+      city: custForm.city.trim(), state: custForm.state.trim(), pin: custForm.pin.trim(),
+    });
+    setCustSaving(false);
+    if (!r.success) { alert('Error saving: ' + r.error); return; }
+    setEditCust(null);
+    await onJobCreated(); // shared refresh callback from the parent (WalkInScreen's refreshLists)
+  };
 
   const hasService = (entry: WalkInEntry) =>
     (entry.products || []).some((p) => p.type === 'Inward' || p.type === 'For Checking Only');
@@ -49,7 +78,7 @@ export default function WalkInList({ entries, onEdit, onDeparture, onJobCreated,
                       #{entry.token_no}
                     </span>
                   )}
-                  <span style={{ color: colors.primary }}>{entry.customer_name}</span>{' '}
+                  <span onClick={() => openCustEdit(entry)} style={{ cursor: 'pointer', color: colors.primary, textDecoration: 'underline' }}>{entry.customer_name}</span>{' '}
                   <span style={{ fontSize: 12, color: colors.textMuted }}>{entry.mobile}</span>{' '}
                   {entry.job_id && (
                     <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6 }}>
@@ -123,6 +152,51 @@ export default function WalkInList({ entries, onEdit, onDeparture, onJobCreated,
 
       {jobEntry && (
         <CreateJobModal entry={jobEntry} onClose={() => setJobEntry(null)} onCreated={onJobCreated} />
+      )}
+
+      {editCust && (
+        <div style={styles.modalOverlay} onClick={() => setEditCust(null)}>
+          <div style={{ ...styles.modal, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h2 style={styles.modalTitle}>👤 Customer Details</h2>
+              <button style={styles.closeBtn} onClick={() => setEditCust(null)}>✕</button>
+            </div>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={styles.formLabel}>CUSTOMER NAME</label>
+                <input value={custForm.name} onChange={(e) => setCustForm((p) => ({ ...p, name: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div>
+                <label style={styles.formLabel}>MOBILE NO</label>
+                <input value={custForm.mobile} onChange={(e) => setCustForm((p) => ({ ...p, mobile: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div>
+                <label style={styles.formLabel}>ADDRESS</label>
+                <input value={custForm.address} onChange={(e) => setCustForm((p) => ({ ...p, address: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={styles.formLabel}>CITY</label>
+                  <input value={custForm.city} onChange={(e) => setCustForm((p) => ({ ...p, city: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>STATE</label>
+                  <input value={custForm.state} onChange={(e) => setCustForm((p) => ({ ...p, state: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
+                  <label style={styles.formLabel}>PIN CODE</label>
+                  <input value={custForm.pin} onChange={(e) => setCustForm((p) => ({ ...p, pin: e.target.value }))} style={styles.formInput} />
+                </div>
+              </div>
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={() => setEditCust(null)}>Cancel</button>
+              <button style={{ ...styles.btn, ...styles.btnPrimary, opacity: custSaving ? 0.7 : 1 }} onClick={saveCustEdit} disabled={custSaving}>
+                {custSaving ? 'Saving...' : '💾 Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

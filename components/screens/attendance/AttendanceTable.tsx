@@ -57,9 +57,6 @@ export default function AttendanceTable({ logs, rosterRows, shiftMap, isAdmin, m
                             action = (
                                 <span style={{ display: 'inline-flex', gap: 4 }}>
                                     <button onClick={() => onAdminEdit(l)} style={{ padding: '4px 10px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>✏️ Edit</button>
-                                    {l.status === 'late_pending' && (
-                                        <button onClick={() => onVerify(l)} style={{ padding: '3px 10px', background: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✅ Verify</button>
-                                    )}
                                 </span>
                             );
                         } else if (l.eng_id === myId && !pe) {

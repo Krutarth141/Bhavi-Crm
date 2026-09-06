@@ -143,7 +143,7 @@ export async function importTickets(
                 warranty_coverage: row.warranty_coverage || (isW ? 'Under Coverage' : 'NA'),
                 wc_type: row.wc_type || 'ICP',
                 rerepair: row.rerepair || 'No',
-                rerepair_foc: row.rerepair_foc === 'TRUE' || row.rerepair_foc === 'true',
+                rerepair_foc: row.rerepair_foc === 'TRUE',
                 remarks: row.remarks || '',
                 tat_date: tatDate,
                 visit_date: row.visit_date || '',
@@ -292,7 +292,7 @@ export async function saveWCDailyReport(payload: {
         const outwardTotal = payload.outward.warranty + payload.outward.non_warranty + payload.outward.other;
         // index.html:14198-14203 — only push a review if(name): blank-customer
         // rows added via "+ Add Review" and left empty are dropped before save.
-        const cleanReviews = payload.reviews.filter((rv) => rv.customer && rv.customer.trim());
+        const cleanReviews = payload.reviews.filter((rv) => rv.customer);
         const { error } = await supabase.from('wc_daily_reports').insert([{
             wc_id: payload.wc_id,
             wc_name: payload.wc_name,

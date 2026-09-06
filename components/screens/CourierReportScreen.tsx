@@ -81,6 +81,13 @@ export default function CourierReportScreen() {
     }
   };
 
+  // Mirrors HTML's renderCourierReport() — runs the search immediately on
+  // open so today's data is visible without an explicit click.
+  useEffect(() => {
+    handleSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Mirrors HTML's downloadCourierExcel (index.html:18524-18583) — "All
   // Entries" + separate "Inward"/"Outward" sheets, DD-MM-YYYY dates.
   const handleExport = () => {
@@ -161,9 +168,9 @@ export default function CourierReportScreen() {
           <button onClick={handleSearch} disabled={loading} style={{ ...styles.btn, ...styles.btnPrimary, opacity: loading ? 0.7 : 1 }}>
             {loading ? '⏳ Searching...' : '🔍 Search'}
           </button>
-          {results.length > 0 && (
-            <button onClick={handleExport} style={{ ...styles.btn, backgroundColor: '#059669', color: '#fff' }}>📊 Excel Download</button>
-          )}
+          {/* index.html:18471 — the Excel Download button is always visible,
+              even with zero results (handleExport just no-ops/alerts then). */}
+          <button onClick={handleExport} style={{ ...styles.btn, backgroundColor: '#059669', color: '#fff' }}>📊 Excel Download</button>
         </div>
       </div>
 

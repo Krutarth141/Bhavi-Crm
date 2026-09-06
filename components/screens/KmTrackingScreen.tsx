@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { isCspManager } from '@/lib/permissions';
 import { fetchKmReport, setOfficeLocation, editKmReading, KmReportResult } from '@/services/kmTrackingService';
-import { supabase } from '@/lib/supabase';
+import TicketDetailModal from '@/components/screens/tickets/TicketDetailModal';
 
 const todayStr = () => new Date().toLocaleDateString('en-CA');
 const TYPE_LABEL: Record<string, string> = { opening: '🏢 Day Start (Opening)', arrival: '📍 Reached Customer', closing: '🏁 Day End (Closing)' };
@@ -33,16 +33,9 @@ export default function KmTrackingScreen() {
     const [settingOffice, setSettingOffice] = useState(false);
     const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-    // index.html:25711 — ticket ID in each row is clickable (viewTicket()).
-    const [viewTicket, setViewTicket] = useState<any | null>(null);
-    const [viewTicketLoading, setViewTicketLoading] = useState(false);
-    const openTicket = async (id: string) => {
-        setViewTicketLoading(true);
-        setViewTicket({ id });
-        const { data } = await supabase.from('tickets').select('id, cname, mobile, model, status, problem, assigned_name, call_type, service_type').eq('id', id).maybeSingle();
-        setViewTicket(data || { id, notFound: true });
-        setViewTicketLoading(false);
-    };
+    // index.html:25711 — ticket ID in each row is clickable (viewTicket()),
+    // opening the same full ticket-detail view used app-wide.
+    const [viewTicketId, setViewTicketId] = useState<string | null>(null);
 
     // Accepts explicit from/to so callers that just changed the date range
     // (quick()) can fetch the new range immediately, rather than scheduling a
@@ -273,7 +266,7 @@ export default function KmTrackingScreen() {
                                                             <span style={{ color: '#7c3aed', fontWeight: 700 }}>🚚 Other Work</span>
                                                         ) : l.ticket_id ? (
                                                             <>
-                                                                <a onClick={() => openTicket(l.ticket_id as string)} style={{ color: '#1d4ed8', fontWeight: 600, cursor: 'pointer' }}>{l.ticket_id}</a>
+                                                                <a onClick={() => setViewTicketId(l.ticket_id as string)} style={{ color: '#1d4ed8', fontWeight: 600, cursor: 'pointer' }}>{l.ticket_id}</a>
                                                                 {l.area && <div style={{ fontSize: 11, color: '#0d9488', fontWeight: 700 }}>📍 {l.area}</div>}
                                                             </>
                                                         ) : '—'}
@@ -300,30 +293,7 @@ export default function KmTrackingScreen() {
                 </div>
             )}
 
-            {viewTicket && (
-                <div onClick={() => setViewTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 420, padding: 20 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🎫 {viewTicket.id}</h3>
-                            <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
-                        </div>
-                        {viewTicketLoading ? (
-                            <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>
-                        ) : viewTicket.notFound ? (
-                            <div style={{ padding: 12, color: '#6b7280', fontSize: 13 }}>Ticket not found.</div>
-                        ) : (
-                            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div><b>Customer:</b> {viewTicket.cname || '—'}{viewTicket.mobile ? ` | ${viewTicket.mobile}` : ''}</div>
-                                <div><b>Model:</b> {viewTicket.model || '—'}</div>
-                                <div><b>Status:</b> {viewTicket.status || '—'}</div>
-                                <div><b>Type:</b> {viewTicket.call_type || '—'} | {viewTicket.service_type || '—'}</div>
-                                <div><b>Assigned:</b> {viewTicket.assigned_name || '—'}</div>
-                                {viewTicket.problem && <div><b>Problem:</b> {viewTicket.problem}</div>}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            <TicketDetailModal ticketId={viewTicketId} onClose={() => setViewTicketId(null)} />
         </div>
     );
 }

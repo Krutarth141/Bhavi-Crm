@@ -1,22 +1,22 @@
 import { supabase } from '@/lib/supabase';
 import { LeaveRequest, LeaveStatus } from '@/types/leave';
 
+// No internal try/catch here — matches HTML's renderLeaveSection(), which lets
+// any failure from these calls (e.g. leave_requests table missing) bubble up
+// to its own outer try/catch so it can show a specific "table not created yet"
+// message instead of a generic empty state.
 export const fetchMyLeaves = async (engId: string): Promise<LeaveRequest[]> => {
-    try {
-        const { data, error } = await supabase.from('leave_requests').select('*')
-            .eq('eng_id', engId).order('applied_at', { ascending: false }).limit(20);
-        if (error) throw error;
-        return data || [];
-    } catch (err) { console.error('fetchMyLeaves:', err); return []; }
+    const { data, error } = await supabase.from('leave_requests').select('*')
+        .eq('eng_id', engId).order('applied_at', { ascending: false }).limit(20);
+    if (error) throw error;
+    return data || [];
 };
 
 export const fetchPendingLeaves = async (): Promise<LeaveRequest[]> => {
-    try {
-        const { data, error } = await supabase.from('leave_requests').select('*')
-            .eq('status', 'pending').order('applied_at', { ascending: false });
-        if (error) throw error;
-        return data || [];
-    } catch (err) { console.error('fetchPendingLeaves:', err); return []; }
+    const { data, error } = await supabase.from('leave_requests').select('*')
+        .eq('status', 'pending').order('applied_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
 };
 
 export const submitLeave = async (

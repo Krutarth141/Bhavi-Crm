@@ -69,13 +69,13 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
 
     const verify = async (id: string, remark: string, verifiedBy: string) => {
         const result = await verifyPunchLog(id, remark, verifiedBy);
-        if (result.success) { await load(); await loadPendingApprovals(); }
+        if (result.success) { await loadPendingApprovals(); }
         return result;
     };
 
     const rejectPunch = async (id: string, reason: string, verifiedBy: string) => {
         const result = await rejectPunchLog(id, reason, verifiedBy);
-        if (result.success) { await load(); await loadPendingApprovals(); }
+        if (result.success) { await loadPendingApprovals(); }
         return result;
     };
 
@@ -89,6 +89,6 @@ export const useAttendance = ({ isAdmin, myId, from, to, empFilter }: Params) =>
 
     return {
         logs, shiftMap, employees, addEmployees, rosterEmployees, pendingApprovals,
-        sundayExclude, loading, error, refetch, verify, rejectPunch, toggleSunday,
+        sundayExclude, loading, error, refetch, load, verify, rejectPunch, toggleSunday,
     };
 };

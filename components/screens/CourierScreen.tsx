@@ -31,11 +31,6 @@ export default function CourierScreen() {
   // Quick date/direction filters + Excel export — mirrors HTML's
   // filterCourierList()/downloadWCCourierExcel() (index.html:17913-17930,
   // 18585-18598) on the main Courier Register "All Entries" card.
-  const roleType = (session?.user as any)?.roleType;
-  const dbRole = (session?.user as any)?.role;
-  // Defensive dual-check like HTML's own isWCUser (index.html:17792) —
-  // role_type/role for WC accounts can vary by how the row was seeded.
-  const isWC = roleType === 'work_controller' || dbRole === 'work_controller';
   const [rangeFilter, setRangeFilter] = useState<RangeFilter>('today');
   const [dirFilter, setDirFilter] = useState<'all' | 'Inward' | 'Outward'>('all');
   const [customDate, setCustomDate] = useState('');
@@ -61,22 +56,26 @@ export default function CourierScreen() {
   // Mirrors HTML's downloadWCCourierExcel/downloadCourierExcel (index.html:
   // 18524-18598) — always includes Mobile/Warranty/Faulty Part/Invoice/
   // Invoice Amt/Accessories columns, split across "All Entries"/"Inward"/
-  // "Outward" sheets. Scoped like the HTML version: WC users get only their
-  // own entries, admins get everything. Does a FRESH, unfiltered (limit
-  // 2000, no date filter) fetch rather than reusing the already-loaded,
-  // 30-day-restricted `entries` state, so "All Entries" export captures
-  // full history regardless of what's currently displayed on screen.
+  // "Outward" sheets. Does a FRESH, unfiltered (limit 2000, no date filter)
+  // fetch rather than reusing the already-loaded, 30-day-restricted `entries`
+  // state, so "All Entries" export captures full history regardless of what's
+  // currently displayed on screen.
   const [exporting, setExporting] = useState(false);
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      let query = supabase
+      // Unscoped for WC too — HTML's downloadWCCourierExcel gates on
+      // `currentUser.role==='admin'`, which is TRUE for WC accounts as well
+      // (only role_type distinguishes them; see auth.config.ts), so a WC's
+      // export is the same full unfiltered dataset an admin gets — matching
+      // the always-unscoped on-screen "All Entries" list (useCourier never
+      // filters by wc_id either).
+      const query = supabase
         .from('courier_log')
         .select('*')
         .order('entry_date', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(2000);
-      if (isWC) query = query.eq('wc_id', wcId);
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
       const scoped = data || [];

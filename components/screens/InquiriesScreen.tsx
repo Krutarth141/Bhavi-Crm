@@ -6,7 +6,6 @@ import { useInquiries } from '@/hooks/useInquiries';
 import { useEngineers } from '@/hooks/useEngineers';
 import Modal from '@/components/Modal';
 import { InquiryFormData, emptyInquiryForm, INQUIRY_TYPES, INQUIRY_STATUSES, INQUIRY_STATUS_COLORS, AutoInquiry } from '@/types/inquiries';
-import AIWriteButton from '@/components/shared/AIWriteButton';
 import { notifyAll, notifyEngineer } from '@/services/telegramNotify';
 
 const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'inherit' };
@@ -324,10 +323,7 @@ export default function InquiriesScreen() {
                         <div><label style={labelStyle}>📅 Followup Date</label><input type="date" value={addForm.followup_date} onChange={e => setAddForm(f => ({ ...f, followup_date: e.target.value }))} style={fieldStyle} /></div>
                     </div>
                     <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <label style={labelStyle}>Description / Product</label>
-                            <AIWriteButton type="inquiry" onInsert={(text) => setAddForm(f => ({ ...f, description: text }))} />
-                        </div>
+                        <label style={labelStyle}>Description / Product</label>
                         <textarea value={addForm.description} onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
                     </div>
                     {isAdmin && (
@@ -366,10 +362,7 @@ export default function InquiriesScreen() {
                         )}
                     </div>
                     <div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <label style={labelStyle}>Description / Product</label>
-                            <AIWriteButton type="inquiry" onInsert={(text) => setEditForm(f => ({ ...f, description: text }))} />
-                        </div>
+                        <label style={labelStyle}>Description / Product</label>
                         <textarea value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} />
                     </div>
                     <div>

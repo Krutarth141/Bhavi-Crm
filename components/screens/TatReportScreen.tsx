@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { loadTatReport, TatReportRow } from '@/services/tatReportService';
-import { supabase } from '@/lib/supabase';
+import TicketDetailModal from '@/components/screens/tickets/TicketDetailModal';
 
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 13, boxSizing: 'border-box' as const };
 
@@ -21,16 +21,9 @@ export default function TatReportScreen() {
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
 
-    // index.html:9348 — Call Details table's Ticket ID is clickable (viewTicket()).
-    const [viewTicket, setViewTicket] = useState<any | null>(null);
-    const [viewTicketLoading, setViewTicketLoading] = useState(false);
-    const openTicket = async (id: string) => {
-        setViewTicketLoading(true);
-        setViewTicket({ id });
-        const { data } = await supabase.from('tickets').select('id, cname, mobile, model, status, problem, assigned_name, call_type, service_type').eq('id', id).maybeSingle();
-        setViewTicket(data || { id, notFound: true });
-        setViewTicketLoading(false);
-    };
+    // index.html:9348 — Call Details table's Ticket ID is clickable (viewTicket()),
+    // opening the same full ticket-detail view used app-wide.
+    const [viewTicketId, setViewTicketId] = useState<string | null>(null);
 
     const search = async () => {
         setLoading(true);
@@ -157,7 +150,7 @@ export default function TatReportScreen() {
                                                 {rows.slice().sort((a, b) => b.closedAt.getTime() - a.closedAt.getTime()).map(r => (
                                                     <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                         <td style={{ padding: '6px 8px', fontWeight: 700 }}>
-                                                            <a onClick={() => openTicket(r.id)} style={{ color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}>{r.id}</a>
+                                                            <a onClick={() => setViewTicketId(r.id)} style={{ color: '#1d4ed8', cursor: 'pointer', fontWeight: 700 }}>{r.id}</a>
                                                         </td>
                                                         <td style={{ padding: '6px 8px' }}>{r.cname || '-'}</td>
                                                         <td style={{ padding: '6px 8px' }}>{r.mobile ? <a href={`tel:${r.mobile}`} style={{ color: '#185FA5' }}>📞 {r.mobile}</a> : '-'}</td>
@@ -179,30 +172,7 @@ export default function TatReportScreen() {
                             </>
                         )}
 
-            {viewTicket && (
-                <div onClick={() => setViewTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 420, padding: 20 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>🎫 {viewTicket.id}</h3>
-                            <button onClick={() => setViewTicket(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
-                        </div>
-                        {viewTicketLoading ? (
-                            <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>
-                        ) : viewTicket.notFound ? (
-                            <div style={{ padding: 12, color: '#6b7280', fontSize: 13 }}>Ticket not found.</div>
-                        ) : (
-                            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                <div><b>Customer:</b> {viewTicket.cname || '—'}{viewTicket.mobile ? ` | ${viewTicket.mobile}` : ''}</div>
-                                <div><b>Model:</b> {viewTicket.model || '—'}</div>
-                                <div><b>Status:</b> {viewTicket.status || '—'}</div>
-                                <div><b>Type:</b> {viewTicket.call_type || '—'} | {viewTicket.service_type || '—'}</div>
-                                <div><b>Assigned:</b> {viewTicket.assigned_name || '—'}</div>
-                                {viewTicket.problem && <div><b>Problem:</b> {viewTicket.problem}</div>}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+            <TicketDetailModal ticketId={viewTicketId} onClose={() => setViewTicketId(null)} />
         </div>
     );
 }

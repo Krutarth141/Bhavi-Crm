@@ -11,6 +11,9 @@ export const deleteInventoryItems = async (ids: string[], inventory: InventoryIt
             if (error.code === '23503' || (error.message || '').toLowerCase().includes('foreign key')) {
                 const inv = inventory.find(i => i.id === id);
                 skipped.push(inv?.item_name || id);
+            } else {
+                alert('Error: ' + error.message);
+                break;
             }
         } else {
             deleted++;

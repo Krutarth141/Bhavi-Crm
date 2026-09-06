@@ -16,7 +16,7 @@ import BulkActionsBar from '@/components/screens/inventory/BulkActionsBar';
 import { useMasters } from '@/hooks/useMasters';
 import { isAccountant } from '@/lib/permissions';
 
-type ModalMode = 'add' | 'edit' | 'view' | null;
+type ModalMode = 'add' | 'edit' | null;
 type InvTab = 'stock' | 'purchase' | 'sales' | 'tally';
 
 export default function InventoryScreen() {
@@ -163,16 +163,6 @@ export default function InventoryScreen() {
     const closeAddForm = () => {
         setModalMode(null);
         setFormData({});
-    };
-
-    const openViewModal = (item: InventoryItem) => {
-        setSelectedItem(item);
-        setModalMode('view');
-    };
-
-    const closeViewModal = () => {
-        setModalMode(null);
-        setSelectedItem(null);
     };
 
     const openStockModal = (item: InventoryItem) => {
@@ -460,7 +450,6 @@ export default function InventoryScreen() {
                     selectedIds={selectedIds}
                     onToggleOne={toggleSelectOne}
                     onToggleAll={toggleSelectAll}
-                    onViewItem={openViewModal}
                     onAdjustStock={openStockModal}
                     onEditItem={(item) => openAddForm(item)}
                     onDeleteItem={handleDeleteItem}
@@ -471,7 +460,6 @@ export default function InventoryScreen() {
             {/* Modals */}
             <InventoryModals
                 showAddForm={modalMode === 'add' || modalMode === 'edit'}
-                showViewModal={modalMode === 'view'}
                 showStockTransactionModal={showStockTransactionModal}
                 selectedItem={selectedItem}
                 brands={brands}
@@ -480,7 +468,6 @@ export default function InventoryScreen() {
                 transactionType={transactionType}
                 submitting={submitting}
                 onCloseAddForm={closeAddForm}
-                onCloseViewModal={closeViewModal}
                 onCloseStockModal={closeStockModal}
                 onFormChange={handleFormChange}
                 onTransactionChange={handleTransactionChange}

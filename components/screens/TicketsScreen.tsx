@@ -6,7 +6,7 @@ import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tic
 import { getAllowedStatuses, validateStatusChangeReason, isTicketActive } from '@/types/ticketStatus';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
-import { useTicketForm } from '@/hooks/useTicketForm';
+import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
 import { createTicket, updateTicket, closeTicket, ensureGroupId } from '@/services/ticketService';
 import { printTicket, getBadgeStyle, printJobSheet } from '@/utils/printTicket';
@@ -22,9 +22,13 @@ import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
-import { approveTicket, rejectTicket, markDeliveredAfterReject } from '@/services/customerApprovalService';
+import { approveTicket, rejectTicket, markDeliveredAfterReject, markDeliveredWithPayment, DeliveryPaymentData } from '@/services/customerApprovalService';
+import {
+  computeCloseCharges, needsPaymentConfirmation, deliveryPaymentPrefill, fetchSpareConsumableCodes,
+} from '@/services/engineerUpdateService';
 import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
-import { fetchProblemTypes } from '@/services/masterService';
+import { fetchProblemTypes, fetchBrands, fetchSubCategories } from '@/services/masterService';
+import { Brand, SubCategory } from '@/types/masters';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import Modal from '@/components/Modal';
@@ -71,6 +75,14 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
   const [estimateForm, setEstimateForm] = useState<EstimateForm>(emptyEstimateForm);
   const [inspCharges, setInspCharges] = useState('300');
   const [estimateSaving, setEstimateSaving] = useState(false);
+  // Carry-In "Mark Delivered" Payment Confirmation — mirrors HTML's
+  // needsDeliveryPayment/showPaymentConfirmation gate (index.html:6670-6707),
+  // shared by both the dedicated "📦 Mark Delivered (Customer Collected)"
+  // button and the plain Status dropdown's Repaired → Delivered change.
+  const [deliverTicket, setDeliverTicket] = useState<Ticket | null>(null);
+  const [deliverPaymentPrompt, setDeliverPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
+  const [deliverPaymentForm, setDeliverPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
+  const [deliverPaymentSaving, setDeliverPaymentSaving] = useState(false);
   // "Add Product (Same Customer)" — mirrors HTML's addProductForSameCustomer():
   // links a new call to an existing one's group_id and pre-fills customer info.
   const [groupBanner, setGroupBanner] = useState<{ groupId: string; anchor: Ticket } | null>(null);
@@ -185,15 +197,63 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
     setModalOpen(true);
   };
 
+  // Sibling tickets under the same group_id — mirrors HTML's
+  // loadLinkedProducts() (index.html:6328-6337), shown in the view modal.
+  const [linkedTickets, setLinkedTickets] = useState<Ticket[]>([]);
   const handleViewTicket = (ticket: Ticket) => {
     setModalMode('view');
     setSelectedTicket(ticket);
     setFormValues(ticket);
     setModalOpen(true);
+    setLinkedTickets([]);
+    if (ticket.group_id) {
+      supabase.from('tickets').select('id, model, serial, status, call_type, cname')
+        .eq('group_id', ticket.group_id).neq('id', ticket.id).order('created_at', { ascending: true })
+        .then(({ data }) => setLinkedTickets((data || []) as Ticket[]));
+    }
   };
 
   const handlePrintTicket = () => {
     if (selectedTicket) printTicket(selectedTicket);
+  };
+
+  // Carry-In device handover gate — mirrors HTML's needsDeliveryPayment
+  // (index.html:6670): a Carry-In device being marked Delivered, with no
+  // payment_mode recorded yet, bills & collects payment via the Payment
+  // Confirmation popup BEFORE the status actually changes. Returns true (and
+  // opens the popup) when the caller must stop and wait for that popup
+  // instead of proceeding with its own plain-reason flow.
+  const openDeliveryPaymentGate = async (ticket: Ticket): Promise<boolean> => {
+    const spares = ticket.spares || [];
+    const consumableCodes = await fetchSpareConsumableCodes(spares);
+    const charges = computeCloseCharges(ticket as any, 'Delivered', spares, consumableCodes);
+    if (!needsPaymentConfirmation(ticket as any, 'Delivered', charges, spares, consumableCodes)) return false;
+    const prefill = deliveryPaymentPrefill(ticket as any, spares, consumableCodes);
+    setDeliverTicket(ticket);
+    setDeliverPaymentPrompt(prefill);
+    setDeliverPaymentForm({ cname: ticket.cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '' });
+    return true;
+  };
+
+  const handleConfirmDeliverPayment = async () => {
+    if (!deliverTicket) return;
+    if (!deliverPaymentForm.mode) { alert('Please select a payment mode.'); return; }
+    setDeliverPaymentSaving(true);
+    const payment: DeliveryPaymentData = {
+      cname: deliverPaymentForm.cname.trim(),
+      payment_mode: deliverPaymentForm.mode,
+      service_charges: Number(deliverPaymentForm.service) || 0,
+      parts_cost: Number(deliverPaymentForm.parts) || 0,
+      payment_notes: deliverPaymentForm.notes.trim(),
+    };
+    const r = await markDeliveredWithPayment(deliverTicket, payment, (session?.user as any)?.name || currentUserRole || '', currentUserId);
+    setDeliverPaymentSaving(false);
+    if (!r.success) { alert('❌ Error: ' + r.error); return; }
+    alert('✅ Marked Delivered!');
+    setDeliverPaymentPrompt(null);
+    setDeliverTicket(null);
+    setModalOpen(false);
+    await fetchTickets();
   };
 
   const handleSaveRemarks = async () => {
@@ -211,6 +271,12 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
     // edit mode). Only include them in the update when actually changed.
     const updates: Record<string, any> = { remarks: formData.remarks };
     if (formData.status && formData.status !== selectedTicket.status) {
+      // Carry-In device handover (Repaired → Delivered, or a Customer Reject
+      // pickup) bills & collects payment before anything else — checked
+      // BEFORE the generic mandatory-reason prompt below, same order HTML's
+      // quickStatusChange uses (index.html:6670 needsDeliveryPayment, then
+      // 6710 the admin/WC Force Status fallback).
+      if (formData.status === 'Delivered' && await openDeliveryPaymentGate(selectedTicket)) return;
       // HTML's showForceStatusRemarkModal (index.html:6709-6712,6727-6751):
       // admin/WC always forces a mandatory reason before ANY status change is
       // applied — not just Call Cancel. Reusing that exact copy for Call
@@ -298,7 +364,23 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
         if (!result.success) throw new Error(result.error);
         alert('✅ Updated!');
       } else {
-        const ticketData: Partial<Ticket> = { ...getFormDataWithEngineerName() };
+        const raw = getFormDataWithEngineerName();
+        // brand_id / subcategory_id / subcategory_name are form-only master
+        // ids (no such ticket columns); address2 folds into address below —
+        // matches MyCallsScreen.tsx's handleSaveNewCall / index.html:5687-5700.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { address2, brand_id, subcategory_id, subcategory_name, ...rest } = raw;
+        const ticketData: Partial<Ticket> = {
+          ...rest,
+          address: `${(raw.address || '').trim()}${(address2 || '').trim() ? ', ' + address2.trim() : ''}`,
+          // Warranty coverage follows the call type (index.html:5700).
+          warranty_coverage: (raw.call_type === 'Warranty' || raw.call_type === 'Warranty Repeat') ? 'Under Coverage' : 'NA',
+          // In "Add Product (Same Customer)" mode the anchor call's own
+          // wc_type is kept best-effort (index.html:6415, group_id path).
+          wc_type: groupBanner
+            ? (groupBanner.anchor.wc_type || deriveWcType(subcategory_name, raw.brand_name, currentUserRole, (session?.user as any)?.name))
+            : deriveWcType(subcategory_name, raw.brand_name, currentUserRole, (session?.user as any)?.name),
+        };
         // Engineers don't see the "Assign to Engineer" field (admin/WC only) —
         // default the call to themselves, mirroring HTML's auto-select.
         if (currentUserRole === 'engineer' && !ticketData.assigned_to) {
@@ -333,6 +415,16 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
   // form's Problem field is free-text with autocomplete, not a locked list.
   const [masterProblems, setMasterProblems] = useState<string[]>([]);
   useEffect(() => { fetchProblemTypes().then((rows) => setMasterProblems(rows.map((r) => r.problem).filter(Boolean))).catch(() => undefined); }, []);
+
+  // Brand + Sub-Category masters for the New Call form — wc_type is derived
+  // from them (index.html:5688, deriveWcType), same as MyCallsScreen.tsx.
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  useEffect(() => {
+    fetchBrands().then(setBrands).catch(() => setBrands([]));
+    fetchSubCategories().then(setSubCategories).catch(() => setSubCategories([]));
+  }, []);
+  const subCatsForBrand = useMemo(() => subCategories.filter((s) => !formData.brand_id || s.brand_id === formData.brand_id), [subCategories, formData.brand_id]);
   const problemOptions = useMemo(() => {
     const set = new Set<string>();
     masterProblems.forEach((p) => set.add(p.trim()));
@@ -552,6 +644,9 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
   const [callPhotosTicket, setCallPhotosTicket] = useState<Ticket | null>(null);
   const [callPhotosKm, setCallPhotosKm] = useState<any[]>([]);
   const [callPhotosLoading, setCallPhotosLoading] = useState(false);
+  // In-page zoom on a Call Photos image — mirrors HTML's showPhotoFull()
+  // (index.html:25275-25282): a full-screen dark overlay, click to close.
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const openCallPhotos = async (t: Ticket) => {
     setCallPhotosTicket(t);
     setCallPhotosLoading(true);
@@ -586,6 +681,11 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
 
   const handleMarkDeliveredAfterReject = async () => {
     if (!selectedTicket) return;
+    // Carry-In device handover bills & collects payment via the Payment
+    // Confirmation popup first (index.html:6670-6707 needsDeliveryPayment) —
+    // the plain mandatory-reason prompt below is only HTML's fallback for
+    // when no payment is actually due (e.g. a pure Warranty reject).
+    if (await openDeliveryPaymentGate(selectedTicket)) return;
     // Matches HTML's showForceStatusRemarkModal/doForceStatusChange — a
     // mandatory reason for this force-style status change (index.html:6739,6751).
     const reason = prompt('📦 Mark Delivered (Customer Collected)\n\nReason / note (mandatory):');
@@ -703,7 +803,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                         <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleViewTicket(t)}>
                           👁 View
                         </button>
-                        {currentUserRole === 'engineer' && (
+                        {(currentUserRole === 'engineer' || isAdminOrWC) && (
                           <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={() => handleAddProductSameCustomer(t)}>
                             ➕ Add Product
                           </button>
@@ -800,10 +900,12 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                   <FormInput label="Mobile *" name="mobile" value={formData.mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="City *" name="city" value={formData.city} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="Alt Mobile" name="alt_mobile" value={formData.alt_mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Email" name="email" value={formData.email} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="State" name="state" value={formData.state} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="PIN" name="pin" value={formData.pin} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="Area" name="area" value={formData.area} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="Address" name="address" value={formData.address} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Address Line 2" name="address2" value={formData.address2} onChange={handleFormChange} disabled={modalMode === 'view'} />
                 </div>
                 {modalMode === 'view' && formData.mobile && (
                   <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
@@ -822,7 +924,42 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🏭 Product</h3>
                 <div style={styles.formGrid}>
-                  <FormInput label="Brand" name="brand_name" value={formData.brand_name} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  {modalMode === 'add' ? (
+                    <>
+                      {/* Brand + Sub-Category drive wc_type (index.html:5688) —
+                          which Work Controller's reports this call lands under. */}
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>Brand</label>
+                        <select
+                          value={formData.brand_id}
+                          onChange={(e) => {
+                            const b = brands.find((x) => x.id === e.target.value);
+                            setFormValues({ brand_id: e.target.value, brand_name: b?.name || '', subcategory_id: '', subcategory_name: '' });
+                          }}
+                          style={styles.formInput}
+                        >
+                          <option value="">-- Select Brand --</option>
+                          {brands.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
+                        </select>
+                      </div>
+                      <div style={styles.formGroup}>
+                        <label style={styles.formLabel}>Sub-Category</label>
+                        <select
+                          value={formData.subcategory_id}
+                          onChange={(e) => {
+                            const sc = subCatsForBrand.find((x) => x.id === e.target.value);
+                            setFormValues({ subcategory_id: e.target.value, subcategory_name: sc?.name || '' });
+                          }}
+                          style={styles.formInput}
+                        >
+                          <option value="">-- All / General --</option>
+                          {subCatsForBrand.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <FormInput label="Brand" name="brand_name" value={formData.brand_name} onChange={handleFormChange} disabled />
+                  )}
                   <FormInput label="Model" name="model" value={formData.model} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="Serial *" name="serial" value={formData.serial} onChange={handleFormChange} disabled={modalMode === 'view'} />
                 </div>
@@ -839,6 +976,34 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                     <label style={styles.formLabel}>Description</label>
                     <textarea name="description" value={formData.description} onChange={handleFormChange} rows={2} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
                   </div>
+                  <FormInput label="Condition" name="condition" value={formData.condition} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Accessories" name="accessories" value={formData.accessories} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <div style={styles.formGroup}>
+                    <label style={styles.formLabel}>Re-Repair?</label>
+                    <select
+                      value={formData.rerepair ? 'Yes' : 'No'}
+                      onChange={(e) => setFormValues({ rerepair: e.target.value === 'Yes', rerepair_foc: e.target.value === 'Yes' ? formData.rerepair_foc : false })}
+                      disabled={modalMode === 'view'}
+                      style={{ ...styles.formInput, opacity: modalMode === 'view' ? 0.6 : 1 }}
+                    >
+                      {['No', 'Yes'].map((o) => (<option key={o} value={o}>{o}</option>))}
+                    </select>
+                  </div>
+                  {formData.rerepair && (
+                    <div style={{ ...styles.formGroup, alignSelf: 'end' }}>
+                      <label style={styles.formLabel}>Re-Repair charges</label>
+                      <div style={{ display: 'flex', gap: 14, fontSize: 13, paddingTop: 6 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: modalMode === 'view' ? 'default' : 'pointer' }}>
+                          <input type="radio" name="rr-charges" checked={!formData.rerepair_foc} disabled={modalMode === 'view'} onChange={() => setFormValues({ rerepair_foc: false })} />
+                          Chargeable
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: modalMode === 'view' ? 'default' : 'pointer' }}>
+                          <input type="radio" name="rr-charges" checked={formData.rerepair_foc} disabled={modalMode === 'view'} onChange={() => setFormValues({ rerepair_foc: true })} />
+                          FOC (free)
+                        </label>
+                      </div>
+                    </div>
+                  )}
                   {modalMode === 'view' && selectedTicket?.work_done && (
                     <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
                       <label style={styles.formLabel}>Action Taken</label>
@@ -851,9 +1016,12 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🔧 Service</h3>
                 <div style={styles.formGrid}>
-                  <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC']} disabled={modalMode === 'view'} />
+                  <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat', 'Other']} disabled={modalMode === 'view'} />
+                  <FormSelect label="Service Type" name="service_type" value={formData.service_type} onChange={handleFormChange} options={['On Site', 'Carry In']} disabled={modalMode === 'view'} />
+                  <FormSelect label="Priority" name="priority" value={formData.priority} onChange={handleFormChange} options={['Normal', 'High', 'Urgent']} disabled={modalMode === 'view'} />
                   <FormSelect label="Status" name="status" value={formData.status} onChange={handleFormChange} options={allowedStatusOptions} disabled={false} />
                   <FormInput label="SE Call ID" name="se_call_id" value={formData.se_call_id} onChange={handleFormChange} disabled={modalMode === 'view'} />
+                  <FormInput label="Physical JS No" name="phys_js" value={formData.phys_js} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   {modalMode === 'add' && (
                     <div style={{ ...styles.formGroup, gridColumn: '1 / -1', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: 12 }}>
                       <label style={{ ...styles.formLabel, color: '#166534' }}>📅 Canon Portal — Call Received Date &amp; Time (optional)</label>
@@ -945,6 +1113,34 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Parts{isCustReject ? ' (not billed — rejected)' : ''}</span><span>₹{fittedPartsTotal.toFixed(0)}</span></div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, borderTop: '1px solid #e5e7eb', paddingTop: 6, marginTop: 2 }}><span>Total</span><span>₹{ticketGrandTotal.toFixed(0)}</span></div>
                   </div>
+                </div>
+              )}
+
+              {modalMode === 'view' && selectedTicket && (
+                <div style={styles.sectionDivider}>
+                  <h3 style={styles.sectionHeader2}>🔗 Linked Products — Same Customer</h3>
+                  {linkedTickets.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+                      {linkedTickets.map((s) => (
+                        // Sibling rows only carry a handful of columns (id/model/
+                        // serial/status/call_type/cname) — view the FULL record
+                        // already loaded in `tickets` when available, matching
+                        // HTML's viewTicket('${s.id}') (index.html:6335) which
+                        // always re-fetches/looks up the complete ticket.
+                        <div key={s.id} onClick={() => handleViewTicket(tickets.find((x) => x.id === s.id) || s)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: '#f9fafb', borderRadius: 8, padding: '6px 10px', fontSize: 12 }}>
+                          <span><b>{s.id}</b> — {s.model || '-'} / {s.serial || '-'}</span>
+                          <span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[s.status] || 'badge-open') }}>{s.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: colors.textMuted }}>No other linked products yet.</div>
+                  )}
+                  {(currentUserRole === 'engineer' || isAdminOrWC) && (
+                    <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline, marginTop: 8 }} onClick={() => handleAddProductSameCustomer(selectedTicket)}>
+                      ➕ Add Another Product (Same Customer)
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1079,9 +1275,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                   ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6 }}>
                       {jsPhotos.map((u, i) => (
-                        <a key={i} href={u} target="_blank" rel="noreferrer">
-                          <img src={u} style={{ maxWidth: 150, maxHeight: 150, borderRadius: 10, border: '1px solid #e2e8f0' }} />
-                        </a>
+                        <img key={i} src={u} onClick={() => setLightboxSrc(u)} style={{ maxWidth: 150, maxHeight: 150, borderRadius: 10, border: '1px solid #e2e8f0', cursor: 'zoom-in' }} />
                       ))}
                     </div>
                   )}
@@ -1099,7 +1293,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                     return (
                       <div key={l.id} style={{ display: 'flex', gap: 10, alignItems: 'center', border: `1px solid ${colors.border}`, borderRadius: 10, padding: 8, marginBottom: 8 }}>
                         {l.photo_url ? (
-                          <a href={l.photo_url} target="_blank" rel="noreferrer"><img src={l.photo_url} style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 8 }} /></a>
+                          <img src={l.photo_url} onClick={() => setLightboxSrc(l.photo_url)} style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 8, cursor: 'zoom-in' }} />
                         ) : (
                           <div style={{ width: 70, height: 52, background: '#f1f5f9', borderRadius: 8 }} />
                         )}
@@ -1244,6 +1438,61 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
               <button style={{ ...styles.btn, background: '#059669', color: '#fff' }} disabled={estimateSaving} onClick={handleApproveEstimate}>✅ Customer Approved</button>
             </div>
           </div>
+        </div>
+      )}
+      {deliverPaymentPrompt && deliverTicket && (
+        <Modal
+          isOpen
+          onClose={() => { setDeliverPaymentPrompt(null); setDeliverTicket(null); }}
+          title="💳 Payment Confirmation"
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setDeliverPaymentPrompt(null); setDeliverTicket(null); }} style={{ ...styles.btn, ...styles.btnOutline }}>Cancel</button>
+              <button onClick={handleConfirmDeliverPayment} disabled={deliverPaymentSaving} style={{ ...styles.btn, ...styles.btnPrimary, opacity: deliverPaymentSaving ? 0.6 : 1 }}>
+                {deliverPaymentSaving ? 'Saving...' : '✅ Confirm & Deliver'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Customer Name</label>
+              <input type="text" value={deliverPaymentForm.cname} onChange={(e) => setDeliverPaymentForm((f) => ({ ...f, cname: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Service Charges (₹)</label>
+              <input type="number" value={deliverPaymentForm.service} onChange={(e) => setDeliverPaymentForm((f) => ({ ...f, service: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Parts Cost (₹)</label>
+              <input type="number" value={deliverPaymentForm.parts} onChange={(e) => setDeliverPaymentForm((f) => ({ ...f, parts: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, borderLeft: '4px solid #15803d' }}>
+              <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700 }}>Total Amount (₹)</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>
+                {((Number(deliverPaymentForm.service) || 0) + (Number(deliverPaymentForm.parts) || 0)).toFixed(0)}
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Payment Mode *</label>
+              <select value={deliverPaymentForm.mode} onChange={(e) => setDeliverPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
+                <option value="">— Select —</option>
+                <option value="Cash">💵 Cash</option>
+                <option value="Online">💻 Online</option>
+                <option value="Check">📋 Cheque</option>
+                <option value="Card">💳 Card</option>
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Additional Notes</label>
+              <textarea value={deliverPaymentForm.notes} onChange={(e) => setDeliverPaymentForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional notes..." style={{ ...styles.formInput, resize: 'vertical' }} />
+            </div>
+          </div>
+        </Modal>
+      )}
+      {lightboxSrc && (
+        <div onClick={() => setLightboxSrc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <img src={lightboxSrc} style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} />
         </div>
       )}
     </div>

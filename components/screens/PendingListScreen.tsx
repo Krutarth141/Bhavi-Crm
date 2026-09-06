@@ -9,7 +9,7 @@ import Modal from '@/components/Modal';
 import { getAllowedStatuses } from '@/types/ticketStatus';
 import {
   updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
-  needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes,
+  needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
 } from '@/services/engineerUpdateService';
 import { EngineerTicket, PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
@@ -87,6 +87,7 @@ interface TicketRow {
   pin?: string;
   status: string;
   created_at: string;
+  updated_at?: string;
   assigned_to?: string;
   assigned_name?: string;
   call_type: string;
@@ -150,6 +151,12 @@ export default function PendingListScreen() {
   const [updateForm, setUpdateForm] = useState({ newStatus: '', note: '', labour: '', faultCode: '' });
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateSaving, setUpdateSaving] = useState(false);
+  // Carry-In "Mark Delivered" Payment Confirmation gate for this plain
+  // Ready-for-Pickup modal — same needsPaymentConfirmation/Payment
+  // Confirmation flow the "Full Update" modal below already has.
+  const [updateConsumableCodes, setUpdateConsumableCodes] = useState<Set<string>>(new Set());
+  const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
 
   // index.html:26669-26686 — "Ready for Pickup" is computed from the RAW
   // ticket list with only wcTypeFilter/brandFilter applied — deliberately
@@ -299,11 +306,27 @@ export default function PendingListScreen() {
     setUpdateTicket(fresh);
     const allowed = getAllowedStatuses(fresh.status, 'admin', fresh.service_type, fresh.call_type, fresh.warranty_coverage);
     setUpdateForm({ newStatus: allowed[0] || '', note: '', labour: String(fresh.labor || fresh.service_charges || ''), faultCode: fresh.fault_code || '' });
+    fetchSpareConsumableCodes(fresh.spares || []).then(setUpdateConsumableCodes);
+    setPaymentPrompt(null);
   };
 
   const allowedForUpdate = updateTicket
     ? getAllowedStatuses(updateTicket.status, 'admin', updateTicket.service_type, updateTicket.call_type, updateTicket.warranty_coverage)
     : [];
+
+  const doSaveUpdate = async (payment?: PaymentConfirmData) => {
+    if (!updateTicket) return;
+    setUpdateSaving(true);
+    const r = await updateTicketStatus(
+      updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, byUser, updateForm.faultCode,
+      { workDone: updateForm.note, payment, engId, memberRole: 'WC' },
+    );
+    setUpdateSaving(false);
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    setPaymentPrompt(null);
+    setUpdateTicket(null);
+    refetch();
+  };
 
   const saveUpdate = async () => {
     if (!updateTicket || !updateForm.newStatus) { alert('Select new status'); return; }
@@ -321,10 +344,21 @@ export default function PendingListScreen() {
       alert(block);
       return;
     }
-    const r = await updateTicketStatus(updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, byUser, updateForm.faultCode);
     setUpdateSaving(false);
-    if (r.success) { setUpdateTicket(null); refetch(); }
-    else alert('Error: ' + r.error);
+    // Carry-In device handover: a Repaired→Delivered (or Customer Reject
+    // pickup)→Delivered move bills & collects payment right here, before the
+    // status actually changes (index.html:6670-6707 needsDeliveryPayment).
+    const spares = updateTicket.spares || [];
+    const charges = computeCloseCharges(updateTicket, updateForm.newStatus, spares, updateConsumableCodes);
+    if (needsPaymentConfirmation(updateTicket, updateForm.newStatus, charges, spares, updateConsumableCodes)) {
+      const prefill = updateForm.newStatus === 'Delivered'
+        ? deliveryPaymentPrefill(updateTicket, spares, updateConsumableCodes)
+        : { serviceCharges: charges.serviceCharges, partsCost: paymentPartsCost(updateTicket, spares, updateConsumableCodes) };
+      setPaymentPrompt(prefill);
+      setPaymentForm({ cname: updateTicket.cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '' });
+      return;
+    }
+    await doSaveUpdate();
   };
 
   // ── Full ticket-update modal for the main "Actionable Calls" table ─────────
@@ -422,11 +456,16 @@ export default function PendingListScreen() {
       return;
     }
 
+    // Carry-In device handover: a Repaired→Delivered (or Customer Reject
+    // pickup)→Delivered move bills & collects payment right here, before the
+    // status actually changes (index.html:6670-6707 needsDeliveryPayment).
     const charges = computeCloseCharges(fullTicket, fullForm.newStatus, fullSpares, fullConsumableCodes);
-    if (needsPaymentConfirmation(fullTicket, fullForm.newStatus, charges)) {
-      const parts = paymentPartsCost(fullTicket, fullSpares, fullConsumableCodes);
-      setFullPaymentPrompt({ serviceCharges: charges.serviceCharges, partsCost: parts });
-      setFullPaymentForm({ cname: fullTicket.cname || '', service: charges.serviceCharges.toFixed(0), parts: parts.toFixed(0), mode: '', notes: '' });
+    if (needsPaymentConfirmation(fullTicket, fullForm.newStatus, charges, fullSpares, fullConsumableCodes)) {
+      const prefill = fullForm.newStatus === 'Delivered'
+        ? deliveryPaymentPrefill(fullTicket, fullSpares, fullConsumableCodes)
+        : { serviceCharges: charges.serviceCharges, partsCost: paymentPartsCost(fullTicket, fullSpares, fullConsumableCodes) };
+      setFullPaymentPrompt(prefill);
+      setFullPaymentForm({ cname: fullTicket.cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '' });
       return;
     }
     await doFullUpdateSave();
@@ -440,6 +479,17 @@ export default function PendingListScreen() {
       service_charges: Number(fullPaymentForm.service) || 0,
       parts_cost: Number(fullPaymentForm.parts) || 0,
       payment_notes: fullPaymentForm.notes.trim(),
+    });
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!paymentForm.mode) { alert('Please select a payment mode.'); return; }
+    await doSaveUpdate({
+      cname: paymentForm.cname.trim(),
+      payment_mode: paymentForm.mode,
+      service_charges: Number(paymentForm.service) || 0,
+      parts_cost: Number(paymentForm.parts) || 0,
+      payment_notes: paymentForm.notes.trim(),
     });
   };
 
@@ -595,32 +645,64 @@ export default function PendingListScreen() {
         <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>{actionable.length} actionable calls</span>
       </div>
 
-      {/* Ready for Pickup section */}
+      {/* Ready for Pickup section — HTML's dedicated purple theme
+          (index.html:26752-26790), not the main table's green/blue one:
+          Repaired-date column instead of plain creation date, and a
+          "🟣 Ready for Pickup" status chip instead of the usual status badge. */}
       {readyForPickup.length > 0 && (
-        <div
-          style={{
-            ...styles.card,
-            border: '2px solid #16a34a',
-            marginBottom: '20px',
-          }}
-        >
-          <h3
-            style={{
-              fontSize: '14px',
-              fontWeight: 700,
-              color: '#16a34a',
-              marginBottom: '12px',
-            }}
-          >
-            ✅ Ready for Pickup ({readyForPickup.length})
-          </h3>
-          <TicketTable
-            tickets={readyForPickup}
-            engineers={engineers}
-            onUpdateClick={openUpdate}
-            actionLabel="🔄 Update"
-            gateAction={isAdminOrWC}
-          />
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ borderLeft: '4px solid #7c3aed', paddingLeft: 10, fontSize: 15, fontWeight: 800, color: '#1e293b' }}>
+              🟣 Ready for Pickup
+            </div>
+            <span style={{ background: '#fdf4ff', color: '#7c3aed', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+              {readyForPickup.length} device{readyForPickup.length !== 1 ? 's' : ''} in office
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto', border: '1.5px solid #e9d5ff', borderRadius: 8, background: '#faf5ff' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f5f0ff', borderBottom: '2px solid #e9d5ff' }}>
+                  {['Ticket / Repaired', 'Customer', 'Model / Serial', 'Call Type', 'Status', 'Action'].map((h, i) => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: i === 5 ? 'center' : 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, color: '#7c3aed' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {readyForPickup.map((t) => {
+                  const repairedDate = t.updated_at ? new Date(t.updated_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+                  return (
+                    <tr key={t.id} style={{ borderBottom: '1px solid #e9d5ff' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontWeight: 700, color: '#7c3aed', fontSize: 13 }}>{t.id || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Repaired: {repairedDate}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontWeight: 600, color: '#1f2937', fontSize: 13 }}>{t.cname || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>{t.mobile || ''}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1f2937' }}>{t.model || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>S/N: {t.serial || '—'}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontSize: 11, color: '#374151', fontWeight: 600 }}>{t.call_type || '—'}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ background: '#fdf4ff', color: '#7c3aed', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>🟣 Ready for Pickup</span>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>{t.assigned_name || '—'}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {isAdminOrWC ? (
+                          <button onClick={() => openUpdate(t.id)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>🔄 Update</button>
+                        ) : (
+                          <span style={{ fontSize: 11, color: '#9ca3af' }}>Awaiting pickup</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -705,6 +787,62 @@ export default function PendingListScreen() {
                 ⏳ No status update available for: <strong>{updateTicket.status}</strong>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+      {/* Payment Confirmation — Carry-In "Mark Delivered" from the plain
+          Ready-for-Pickup Update modal above (index.html:6671-6707). */}
+      {paymentPrompt && updateTicket && (
+        <Modal
+          isOpen
+          onClose={() => setPaymentPrompt(null)}
+          title="💳 Payment Confirmation"
+          footer={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPaymentPrompt(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+              <button
+                onClick={handleConfirmPayment}
+                disabled={updateSaving}
+                style={{ padding: '8px 16px', background: colors.primary, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: updateSaving ? 0.6 : 1 }}
+              >
+                {updateSaving ? 'Saving...' : '✅ Confirm & Deliver'}
+              </button>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Customer Name</label>
+              <input type="text" value={paymentForm.cname} onChange={(e) => setPaymentForm((f) => ({ ...f, cname: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Service Charges (₹)</label>
+              <input type="number" value={paymentForm.service} onChange={(e) => setPaymentForm((f) => ({ ...f, service: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Parts Cost (₹)</label>
+              <input type="number" value={paymentForm.parts} onChange={(e) => setPaymentForm((f) => ({ ...f, parts: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, borderLeft: '4px solid #15803d' }}>
+              <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700 }}>Total Amount (₹)</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>
+                {((Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0)).toFixed(0)}
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Payment Mode *</label>
+              <select value={paymentForm.mode} onChange={(e) => setPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
+                <option value="">— Select —</option>
+                <option value="Cash">💵 Cash</option>
+                <option value="Online">💻 Online</option>
+                <option value="Check">📋 Cheque</option>
+                <option value="Card">💳 Card</option>
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Additional Notes</label>
+              <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm((f) => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional notes..." style={{ ...styles.formInput, resize: 'vertical' }} />
+            </div>
           </div>
         </Modal>
       )}

@@ -8,7 +8,6 @@ interface InventoryTableProps {
     selectedIds: string[];
     onToggleOne: (id: string) => void;
     onToggleAll: (checked: boolean) => void;
-    onViewItem: (item: InventoryItem) => void;
     onAdjustStock: (item: InventoryItem) => void;
     onEditItem: (item: InventoryItem) => void;
     onDeleteItem: (item: InventoryItem) => void;
@@ -21,7 +20,6 @@ export function InventoryTable({
     selectedIds,
     onToggleOne,
     onToggleAll,
-    onViewItem,
     onAdjustStock,
     onEditItem,
     onDeleteItem,
@@ -124,9 +122,8 @@ export function InventoryTable({
                                 </td>
                                 <td style={{ ...inventoryStyles.tableCell, textAlign: 'center' }}>
                                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'nowrap' }}>
-                                        <ActionButton emoji="👁" onClick={() => onViewItem(item)} color="#4338ca" bgColor="#e0e7ff" />
-                                        <ActionButton emoji="📋" onClick={() => onOpenHistory(item)} color="#1d4ed8" bgColor="#dbeafe" />
                                         <ActionButton emoji="📦" onClick={() => onAdjustStock(item)} color="#065f46" bgColor="#dcfce7" />
+                                        <ActionButton emoji="📋" onClick={() => onOpenHistory(item)} color="#1d4ed8" bgColor="#dbeafe" />
                                         <ActionButton emoji="✏️" onClick={() => onEditItem(item)} color="#92400e" bgColor="#fef3c7" />
                                         <ActionButton emoji="🗑" onClick={() => onDeleteItem(item)} color="#dc2626" bgColor="#fee2e2" />
                                     </div>

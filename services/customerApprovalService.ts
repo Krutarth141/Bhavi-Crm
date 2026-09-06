@@ -167,6 +167,13 @@ export const rejectTicket = async (
 // any other admin/WC Force Status change (index.html:6749-6756: a
 // 'Force Status → <status>' timeline entry, no stock deduction since nothing
 // was ever fitted on a rejected estimate).
+//
+// This is only HTML's FALLBACK path for marking a device Delivered — used
+// when needsDeliveryPayment (engineerUpdateService.needsPaymentConfirmation)
+// is false (e.g. a pure Warranty reject with no charges due, or payment was
+// already recorded). Whenever payment IS due, HTML shows the Payment
+// Confirmation popup instead (index.html:6670-6707) — see
+// markDeliveredWithPayment below, which callers must check for first.
 export const markDeliveredAfterReject = async (
     ticket: ApprovalTicket,
     remark: string,
@@ -187,6 +194,69 @@ export const markDeliveredAfterReject = async (
             }],
         }).eq('id', ticket.id);
 
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};
+
+export interface DeliveryPaymentData {
+    cname?: string;
+    payment_mode: string;
+    service_charges: number;
+    parts_cost: number;
+    payment_notes?: string;
+}
+
+// Carry-In device handover, payment-due case — mirrors HTML's
+// quickStatusChange's needsDeliveryPayment branch (index.html:6671-6707): a
+// direct PATCH to Delivered carrying the payment fields, once the Payment
+// Confirmation popup is confirmed. Deliberately NOT routed through the full
+// "engineer update" pipeline (engineerUpdateService.updateTicketStatus) —
+// this device may have been Repaired days ago, or the customer may be
+// collecting after rejecting the estimate; neither case has a fresh
+// "Action Taken" note to log, same as HTML's raw PATCH here.
+export const markDeliveredWithPayment = async (
+    ticket: { id: string; status?: string; timeline?: any[]; charges_note?: string },
+    payment: DeliveryPaymentData,
+    byUser: string,
+    byUserId?: string,
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const isRejectDelivery = ticket.status === 'Customer Reject';
+        const now = new Date().toISOString();
+        const existing = ticket.timeline || [];
+        const data: any = {
+            status: 'Delivered',
+            last_status_by: byUser,
+            updated_at: now,
+            timeline: [...existing, {
+                action: 'Status → Delivered',
+                by: byUser,
+                at: now,
+                note: (isRejectDelivery ? 'Customer collected device after rejecting estimate. ' : '') + 'Payment collected on delivery.',
+            }],
+            payment_mode: payment.payment_mode,
+            service_charges: payment.service_charges,
+            final_charges: payment.parts_cost + payment.service_charges,
+            // Payment Collection groups pending-to-clear amounts by whoever
+            // actually COLLECTED the money at handover (WC/office), not by the
+            // field engineer who did the repair (index.html:6684-6689).
+            payment_collected_by: byUser,
+        };
+        if (byUserId) data.payment_collected_by_id = byUserId;
+        if (payment.cname) data.cname = payment.cname;
+        if (payment.payment_notes) data.charges_note = `${ticket.charges_note ? ticket.charges_note + '\n' : ''}Payment notes: ${payment.payment_notes}`;
+
+        let { error } = await supabase.from('tickets').update(data).eq('id', ticket.id);
+        if (error) {
+            // Same collision-safe fallback HTML uses when these columns don't
+            // exist on an older schema (index.html:6693-6700).
+            const msg = String((error as any)?.message || error);
+            if (msg.includes('payment_collected_by_id')) { delete data.payment_collected_by_id; delete data.payment_collected_by; ({ error } = await supabase.from('tickets').update(data).eq('id', ticket.id)); }
+            else if (msg.includes('payment_collected_by')) { delete data.payment_collected_by; ({ error } = await supabase.from('tickets').update(data).eq('id', ticket.id)); }
+        }
         if (error) throw error;
         return { success: true };
     } catch (err) {

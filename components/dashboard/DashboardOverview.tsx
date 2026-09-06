@@ -17,7 +17,7 @@ import { punchIn, punchOut, startLocationTracking, stopLocationTracking, saveLoc
 import { hasKmEntryToday } from '@/services/kmTrackingService';
 import {
     updateTicketStatus, validateEngineerUpdate, computeCloseCharges,
-    needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes,
+    needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
 } from '@/services/engineerUpdateService';
 import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { hasDailyReportToday } from '@/services/engDailyReportService';
@@ -248,12 +248,17 @@ export default function DashboardOverview({ role }: Props) {
             if (block) { alert(block); return; }
         }
 
+        // Carry-In device handover: a Repaired→Delivered (or Customer Reject
+        // pickup)→Delivered move bills & collects payment right here, before
+        // the status actually changes (index.html:6670-6707 needsDeliveryPayment).
         const charges = computeCloseCharges(updateTicket as any, updateForm.newStatus, updateSpares, consumableCodes);
-        if (needsPaymentConfirmation(updateTicket as any, updateForm.newStatus, charges)) {
-            const parts = paymentPartsCost(updateTicket as any, updateSpares, consumableCodes);
-            setPaymentPrompt({ serviceCharges: charges.serviceCharges, partsCost: parts });
+        if (needsPaymentConfirmation(updateTicket as any, updateForm.newStatus, charges, updateSpares, consumableCodes)) {
+            const prefill = updateForm.newStatus === 'Delivered'
+                ? deliveryPaymentPrefill(updateTicket as any, updateSpares, consumableCodes)
+                : { serviceCharges: charges.serviceCharges, partsCost: paymentPartsCost(updateTicket as any, updateSpares, consumableCodes) };
+            setPaymentPrompt(prefill);
             setPaymentForm({
-                cname: (updateTicket as any).cname || '', service: charges.serviceCharges.toFixed(0), parts: parts.toFixed(0), mode: '', notes: '',
+                cname: (updateTicket as any).cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '',
             });
             return;
         }

@@ -26,7 +26,7 @@ export default function PartRequestScreen() {
         if (!confirm(`Approve request for ${req.engineer_name}?\nParts: ${partNames || 'see request'}`)) return;
         setProcessing(req.id);
         const r = await approve(req);
-        if (!r.success) alert('Error: ' + r.error);
+        if (!r.success) { alert('Error: ' + r.error); await refetch(); }
         setProcessing(null);
     };
 

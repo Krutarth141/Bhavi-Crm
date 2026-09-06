@@ -34,9 +34,6 @@ export default function SiteVisitsScreen() {
     const [visits, setVisits] = useState<SiteVisit[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
-    const [engFilter, setEngFilter] = useState('');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
@@ -83,11 +80,7 @@ export default function SiteVisitsScreen() {
 
     const filtered = (arr: SiteVisit[]) => arr.filter(v => {
         const q = search.toLowerCase();
-        const matchSearch = !q || (v.client_name || '').toLowerCase().includes(q) || (v.site_name || '').toLowerCase().includes(q) || (v.address || '').toLowerCase().includes(q);
-        const matchType = !typeFilter || v.visit_type === typeFilter;
-        const matchStatus = !statusFilter || v.status === statusFilter;
-        const matchEng = !engFilter || v.assigned_to === engFilter;
-        return matchSearch && matchType && matchStatus && matchEng;
+        return !q || (v.client_name || '').toLowerCase().includes(q) || (v.site_name || '').toLowerCase().includes(q) || (v.address || '').toLowerCase().includes(q);
     });
 
     const openCreate = () => { setEditId(null); setForm({ ...emptySiteVisitForm, assigned_to: isEng ? myId : '' }); setModalOpen(true); };
@@ -252,23 +245,6 @@ export default function SiteVisitsScreen() {
                 <div style={{ background: '#f0fdfa', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#0d9488', fontWeight: 700 }}>📍 Reached</div><div style={{ fontSize: 20, fontWeight: 800, color: '#0d9488' }}>{reachedCount}</div></div>
                 <div style={{ background: '#eef2ff', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#4338ca', fontWeight: 700 }}>🔧 Working</div><div style={{ fontSize: 20, fontWeight: 800, color: '#4338ca' }}>{workingCount}</div></div>
                 <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 16px' }}><div style={{ fontSize: 11, color: '#15803d', fontWeight: 700 }}>✅ Done</div><div style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>{done.length}</div></div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ ...fieldStyle, width: 'auto' }}>
-                    <option value="">All Types</option>
-                    {SV_TYPES.map(t => <option key={t} value={t}>{SV_TYPE_META[t].emoji} {t}</option>)}
-                </select>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...fieldStyle, width: 'auto' }}>
-                    <option value="">All Status</option>
-                    {SV_STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                {canAdminList && (
-                    <select value={engFilter} onChange={e => setEngFilter(e.target.value)} style={{ ...fieldStyle, width: 'auto' }}>
-                        <option value="">All Engineers</option>
-                        {engineers.map(e => <option key={e.id} value={e.user_id}>{e.name}</option>)}
-                    </select>
-                )}
             </div>
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>

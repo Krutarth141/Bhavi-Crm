@@ -37,7 +37,7 @@ export default function AttendanceScreen() {
 
     const {
         logs, shiftMap, employees, addEmployees, rosterEmployees, pendingApprovals,
-        sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch,
+        sundayExclude, loading, error, verify, rejectPunch, toggleSunday, refetch, load,
     } = useAttendance({
         isAdmin, myId, from: applied.from, to: applied.to, empFilter: applied.empFilter,
     });
@@ -85,7 +85,7 @@ export default function AttendanceScreen() {
         if (!pe) { alert('No pending request'); return; }
         if (!confirm(`Approve edit request from ${log.eng_name}?`)) return;
         const r = await approveAttEdit(log, pe, log.eng_id ? shiftMap[log.eng_id] : undefined);
-        if (r.success) { alert('✅ Attendance edit approved!'); await refetch(); }
+        if (r.success) { alert('✅ Attendance edit approved!'); await load(); }
         else alert('Error: ' + r.error);
     };
 
@@ -93,7 +93,7 @@ export default function AttendanceScreen() {
         const reason = prompt('Reason for rejection:');
         if (reason === null) return;
         const r = await rejectAttEdit(log.id, reason);
-        if (r.success) { alert('❌ Edit request rejected.'); await refetch(); }
+        if (r.success) { alert('❌ Edit request rejected.'); await load(); }
         else alert('Error: ' + r.error);
     };
 

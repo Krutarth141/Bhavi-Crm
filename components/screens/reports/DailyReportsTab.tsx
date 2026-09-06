@@ -100,9 +100,9 @@ export default function DailyReportsTab({ reports, loading }: DailyReportsTabPro
                                     <td><strong>{r.report_date}</strong></td>
                                     <td>{r.eng_name}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700, color: '#1d4ed8' }}>{r.warranty_installation || r.call_summary?.w_install || 0}</td>
-                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#1d4ed8' }}>{r.warranty_breakdown || r.call_summary?.w_breakdown || 0}</td>
-                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_breakdown || r.call_summary?.nw_breakdown || 0}</td>
-                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_other || r.call_summary?.nw_other || 0}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#1d4ed8' }}>{r.warranty_breakdown || ((r.call_summary?.w_breakdown || 0) + (r.call_summary?.w_repeat || 0)) || 0}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_breakdown || ((r.call_summary?.nw_breakdown || 0) + (r.call_summary?.nw_repeat || 0)) || 0}</td>
+                                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#d97706' }}>{r.outwarranty_other || ((r.call_summary?.nw_other || 0) + (r.call_summary?.nw_delivery || 0)) || 0}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700, color: officeWorkCount(r) ? '#5b21b6' : '#cbd5e1' }}>{officeWorkCount(r)}</td>
                                     <td style={{ textAlign: 'center', fontWeight: 700 }}>{r.total_calls || r.call_summary?.grand_total || 0}</td>
                                     <td style={{ textAlign: 'center' }}>{r.petrol_km || 0} km</td>

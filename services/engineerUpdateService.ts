@@ -282,17 +282,39 @@ export const computeCloseCharges = (
     return none;
 };
 
-// Payment Confirmation popup gate (index.html:7936-7942): Non-Warranty/'Other'
-// On-Site closes, OR a Warranty On-Site call that ended up with nonzero
-// final_charges (a consumable was used, per computeCloseCharges above).
+// Payment Confirmation popup gate. Two independent triggers, matching HTML's
+// two separate gates:
+//  - On Site close (index.html:7936-7942, needsPaymentConfirmation): Non-
+//    Warranty/'Other' On-Site closes, OR a Warranty On-Site call that ended
+//    up with nonzero final_charges (a consumable was used, per
+//    computeCloseCharges above).
+//  - Carry-In device handover (index.html:6670, needsDeliveryPayment): billed
+//    & collected at the moment the customer actually TAKES the device
+//    (Delivered) — not when the engineer finishes the repair — covering both
+//    a plain Non-Warranty/'Other' Carry-In pickup AND a Customer Reject
+//    pickup (inspection/visit charge only) AND a Warranty Carry-In call that
+//    used a chargeable Consumable part. Skipped once payment_mode is already
+//    recorded (a second delivery attempt must not re-prompt).
 export const needsPaymentConfirmation = (
-    ticket: EngineerTicket, newStatus: string, charges: ComputedCharges
+    ticket: EngineerTicket, newStatus: string, charges: ComputedCharges,
+    spares?: TicketSpare[], consumableCodes?: Set<string>
 ): boolean => {
-    if (newStatus !== 'Closed' && newStatus !== 'Resolved By Phone') return false;
-    if (ticket.service_type !== 'On Site') return false;
     const ct = ticket.call_type || '';
-    const warrantyHasConsumableCharge = isWarrantyCall(ticket) && charges.finalCharges > 0;
-    return ct.includes('Non-Warranty') || ct === 'Other' || warrantyHasConsumableCharge;
+    if (ticket.service_type === 'On Site') {
+        if (newStatus !== 'Closed' && newStatus !== 'Resolved By Phone') return false;
+        const warrantyHasConsumableCharge = isWarrantyCall(ticket) && charges.finalCharges > 0;
+        return ct.includes('Non-Warranty') || ct === 'Other' || warrantyHasConsumableCharge;
+    }
+    if (ticket.service_type === 'Carry In') {
+        if (newStatus !== 'Delivered') return false;
+        if (ticket.payment_mode) return false;
+        const isRejectDelivery = ticket.status === 'Customer Reject';
+        const warrantyConsumableCostDelivery = (!isRejectDelivery && isWarrantyCall(ticket))
+            ? (spares ?? ticket.spares ?? []).filter((s) => isChargeableSpare(s, consumableCodes ?? new Set())).reduce((a, s) => a + (Number(s.price) || 0) * (Number(s.qty) || 1), 0)
+            : 0;
+        return ct.includes('Non-Warranty') || ct === 'Other' || warrantyConsumableCostDelivery > 0;
+    }
+    return false;
 };
 
 // Parts figure the Payment Confirmation popup pre-fills. On a Warranty/AMC call
@@ -305,6 +327,23 @@ export const paymentPartsCost = (
     return (spares || [])
         .filter((s) => !warranty || isChargeableSpare(s, consumableCodes))
         .reduce((sum, s) => sum + (Number(s.price) || 0) * (Number(s.qty) || 1), 0);
+};
+
+// Payment Confirmation popup pre-fill for a Carry-In "Mark Delivered" —
+// mirrors HTML's ptData (index.html:6675-6676): a rejected estimate's parts
+// were only requested, never fitted, so only the final inspection/visit
+// charge (already parked in final_charges/labor) is billed; a normal
+// Repaired→Delivered handover bills the full approved spares list + labour.
+export const deliveryPaymentPrefill = (
+    ticket: EngineerTicket, spares: TicketSpare[], consumableCodes: Set<string>
+): { serviceCharges: number; partsCost: number } => {
+    if (ticket.status === 'Customer Reject') {
+        return { serviceCharges: Number(ticket.final_charges) || Number(ticket.labor) || 0, partsCost: 0 };
+    }
+    return {
+        serviceCharges: Number(ticket.labor) || Number(ticket.service_charges) || 0,
+        partsCost: paymentPartsCost(ticket, spares, consumableCodes),
+    };
 };
 
 // Convenience for callers that need the consumable flags fresh from Inventory.
@@ -549,9 +588,22 @@ export const updateTicketStatus = async (
                 updateData.charges_note = (updateData.charges_note || '') + `\nPayment notes: ${p.payment_notes}`;
             }
             updateData.final_charges = p.parts_cost + p.service_charges;
+            // Payment Collection groups pending-to-clear amounts by whoever
+            // actually COLLECTED the money at handover (WC/office), not by the
+            // field engineer who did the repair (index.html:6684-6689).
+            updateData.payment_collected_by = updatedBy;
+            if (extra.engId) updateData.payment_collected_by_id = extra.engId;
         }
 
-        const { error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id);
+        let { error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id);
+        if (error) {
+            // Same collision-safe fallback HTML uses when these columns don't
+            // exist on an older schema (index.html:6693-6700) — never let a
+            // missing optional column block the whole status change.
+            const msg = String((error as any)?.message || error);
+            if (msg.includes('payment_collected_by_id')) { delete updateData.payment_collected_by_id; delete updateData.payment_collected_by; ({ error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id)); }
+            else if (msg.includes('payment_collected_by')) { delete updateData.payment_collected_by; ({ error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id)); }
+        }
         if (error) throw error;
 
         if (isMsc && extra?.mscCenter) {
