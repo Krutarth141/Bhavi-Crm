@@ -601,8 +601,16 @@ export const updateTicketStatus = async (
             // exist on an older schema (index.html:6693-6700) — never let a
             // missing optional column block the whole status change.
             const msg = String((error as any)?.message || error);
-            if (msg.includes('payment_collected_by_id')) { delete updateData.payment_collected_by_id; delete updateData.payment_collected_by; ({ error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id)); }
-            else if (msg.includes('payment_collected_by')) { delete updateData.payment_collected_by; ({ error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id)); }
+            let stripped = false;
+            if (msg.includes('payment_collected_by_id')) { delete updateData.payment_collected_by_id; stripped = true; }
+            if (msg.includes('payment_collected_by')) { delete updateData.payment_collected_by; stripped = true; }
+            if (updateData.jobsheet_photo && msg.includes('jobsheet_photo')) { delete updateData.jobsheet_photo; stripped = true; }
+            if (updateData.attachments && msg.includes('attachments')) { delete updateData.attachments; stripped = true; }
+            if (updateData.payment_mode && msg.includes('payment_mode')) { delete updateData.payment_mode; stripped = true; }
+            if (updateData.page_count !== undefined && msg.includes('page_count')) { delete updateData.page_count; delete updateData.page_count_skip_reason; stripped = true; }
+            if (updateData.condition_type && msg.includes('condition_type')) { delete updateData.condition_type; stripped = true; }
+            if (updateData.condition_photos && msg.includes('condition_photos')) { delete updateData.condition_photos; stripped = true; }
+            if (stripped) ({ error } = await supabase.from('tickets').update(updateData).eq('id', ticket.id));
         }
         if (error) throw error;
 

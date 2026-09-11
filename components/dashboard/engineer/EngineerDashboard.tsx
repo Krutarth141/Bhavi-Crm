@@ -97,7 +97,7 @@ export default function EngineerDashboard() {
     ];
     const visibleNavItems = allNavItems.filter((item) => item.id === 'overview' || isVisible(item.id));
 
-    const [activeTab, setActiveTab] = useState<EngineerTab>('overview');
+    const [activeTab, setActiveTab] = useState<EngineerTab>('my-calls');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);

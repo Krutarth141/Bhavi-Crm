@@ -1103,47 +1103,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         ))}
       </div>
 
-      {/* 4. Today's Route */}
-      {todayRoute.length > 0 && (
-        <div style={{ ...styles.card, marginBottom: '20px' }}>
-          <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
-            <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🗺️ Today's Route</span>
-            <span style={{ fontSize: '12px', color: colors.textMuted }}>{todayRoute.length} calls planned</span>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  {['Seq #', 'Ticket ID', 'Customer', 'Mobile', 'Area', 'Status', 'TAT'].map((h) => (
-                    <th key={h} style={styles.tableHeader}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {todayRoute.map((ticket) => {
-                  const tat = tatLabel(ticket.tat_date);
-                  return (
-                    <tr key={ticket.id} style={styles.tableRow}>
-                      <td style={{ ...styles.tableCell, textAlign: 'center' }}>{ticket.sequence_no ?? '—'}</td>
-                      <td style={{ ...styles.tableCell, fontWeight: 600, color: colors.primary }}>{ticket.id}</td>
-                      <td style={styles.tableCell}>{ticket.cname ?? '—'}</td>
-                      <td style={styles.tableCell}>{ticket.mobile ?? '—'}</td>
-                      <td style={styles.tableCell}>{ticket.area ?? '—'}</td>
-                      <td style={styles.tableCell}>
-                        <span style={getStatusBadgeStyle(ticket.status)}>{ticket.status}</span>
-                      </td>
-                      <td style={{ ...styles.tableCell, fontSize: 11, fontWeight: 700, color: tat.overdue ? '#dc2626' : '#166534' }}>
-                        {tat.text}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* 5. My Daily Calls chart — mirrors HTML's last7 bar chart. */}
       {last7.length > 0 && (
         <div style={{ ...styles.card, marginBottom: '20px' }}>
