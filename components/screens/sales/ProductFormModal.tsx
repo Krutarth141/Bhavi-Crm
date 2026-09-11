@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Modal from '@/components/Modal';
 import { SalesProduct } from '@/types/sales';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
     product: SalesProduct | null;
@@ -30,13 +31,14 @@ export default function ProductFormModal({ product, onClose, onSave }: Props) {
         if (!file) return;
         setUploading(true);
         try {
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-            setImageUrl(base64);
+            const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+            const fname = `prod_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+                .from('product-images')
+                .upload(fname, file, { upsert: true, contentType: file.type });
+            if (uploadError) throw uploadError;
+            const url = supabase.storage.from('product-images').getPublicUrl(fname).data.publicUrl;
+            setImageUrl(url);
         } catch (e: any) {
             alert('Upload failed: ' + e.message);
         } finally {

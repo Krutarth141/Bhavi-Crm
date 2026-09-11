@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import { colors, styles } from '@/styles/ticketsStyles';
 import Modal from '@/components/Modal';
-import { getAllowedStatuses } from '@/types/ticketStatus';
+import { getAllowedStatuses, FORCE_STATUS_OPTIONS, canForceStatus } from '@/types/ticketStatus';
 import {
   updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
   needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
@@ -389,7 +389,7 @@ export default function PendingListScreen() {
     setFullTicket(fresh);
     // Matches HTML's openEngUpdate/saveEngUpdate (index.html:7219,7705): admin/
     // WC use the 'admin' transition table.
-    const allowed = getAllowedStatuses(fresh.status, 'admin', fresh.service_type, fresh.call_type, fresh.warranty_coverage);
+    const allowed = canForceStatus(fresh.status) ? FORCE_STATUS_OPTIONS : [fresh.status];
     setFullForm({ newStatus: allowed[0] || '', note: '', labour: String(fresh.labor || fresh.service_charges || ''), faultCode: fresh.fault_code || '' });
     const spares: TicketSpare[] = fresh.spares || [];
     setFullSpares(spares);
@@ -402,7 +402,7 @@ export default function PendingListScreen() {
     setFullPaymentPrompt(null);
   };
   const allowedForFullUpdate = fullTicket
-    ? getAllowedStatuses(fullTicket.status, 'admin', fullTicket.service_type, fullTicket.call_type, fullTicket.warranty_coverage)
+    ? (canForceStatus(fullTicket.status) ? FORCE_STATUS_OPTIONS : [fullTicket.status])
     : [];
 
   const spareHidesFullPrice = (s: TicketSpare) => {

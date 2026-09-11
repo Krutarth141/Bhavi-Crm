@@ -216,7 +216,6 @@ export default function SiteVisitsScreen() {
                     {canAct(v) && v.status === 'Working' && <button onClick={() => handleWorkEnd(v)} style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🏁 Work End</button>}
                     {canAct(v) && v.status === 'Working' && <button onClick={() => handleStopWork(v)} style={{ border: '1px solid #dc2626', color: '#dc2626', background: '#fff', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⏹ Stop Work</button>}
                     {canManage(v) && <button onClick={() => openEdit(v)} style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>✏️</button>}
-                    {canAct(v) && v.status !== 'Done' && v.status !== 'Cancelled' && <button onClick={() => handleCancel(v)} style={{ border: '1px solid #fde68a', color: '#b45309', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🚫</button>}
                     {canManage(v) && <button onClick={() => handleDelete(v)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>🗑️</button>}
                     {/* Cancel is mutually exclusive with Edit/Delete — HTML only shows it
                         when canManage is false (index.html:23886-23891); an admin/WC never

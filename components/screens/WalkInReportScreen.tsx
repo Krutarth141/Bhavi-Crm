@@ -364,10 +364,12 @@ export default function WalkInReportScreen() {
                   <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {(entry.products || []).map((p, idx) => {
                       const tc = PRODUCT_TYPE_COLORS[p.type] || '#7c3aed';
+                      const wLabel = p.type === 'Purchase' ? (p.subtype || '') : p.type === 'For Checking Only' ? (p.subtype || p.warranty || '') : p.warranty;
+                      const isPositive = wLabel === 'In Warranty' || wLabel === 'Warranty';
                       return (
                         <span key={idx} style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 6, padding: '3px 8px', fontSize: 11 }}>
                           {p.brand && <b>{p.brand} </b>}{p.model} <span style={{ color: tc }}>[{p.type}]</span>
-                          {p.warranty && <span style={{ color: p.warranty === 'In Warranty' ? '#065f46' : '#991b1b' }}> ({p.warranty})</span>}
+                          {wLabel && <span style={{ color: isPositive ? '#065f46' : '#991b1b' }}> ({wLabel})</span>}
                           {p.remarks && <> — {p.remarks}</>}
                         </span>
                       );

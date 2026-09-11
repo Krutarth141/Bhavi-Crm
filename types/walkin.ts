@@ -41,5 +41,5 @@ export const SELF_CHECKIN_WC_IDS = {
 export const isSelfCheckin = (wcId: string) => wcId.startsWith('SELF_CHECKIN_');
 
 export const emptyWalkInProduct = (): WalkInProduct => ({
-  brand: '', model: '', type: 'Inward', warranty: '', subtype: '', remarks: '', serial: '',
+  brand: '', model: '', type: 'Inward', warranty: 'In Warranty', subtype: '', remarks: '', serial: '',
 });

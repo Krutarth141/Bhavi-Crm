@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { BHAVI_PAYMENT } from '@/types/sales';
 import { saveCompanyInfo } from '@/services/settingsService';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
     upiQrUrl: string | null;
@@ -19,14 +20,13 @@ export default function SalesSetupTab({ upiQrUrl, onUpdated }: Props) {
         if (!file) { setStatus('Select a file first'); return; }
         setUploading(true);
         try {
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-            await saveCompanyInfo({ upi_qr_url: base64 });
-            setStatus('✅ QR saved — visible on all devices!');
+            const { error: uploadError } = await supabase.storage
+                .from('product-images')
+                .upload('bhavi_upi_qr.png', file, { upsert: true, contentType: file.type });
+            if (uploadError) throw uploadError;
+            const url = supabase.storage.from('product-images').getPublicUrl('bhavi_upi_qr.png').data.publicUrl;
+            await saveCompanyInfo({ upi_qr_url: url });
+            setStatus('✅ QR saved to server — visible on all devices!');
             onUpdated();
         } catch (e: any) {
             setStatus('Error: ' + e.message);

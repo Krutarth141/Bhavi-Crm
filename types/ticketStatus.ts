@@ -28,6 +28,20 @@ export const isTicketClosed = (status?: string) => TICKET_DONE_STATUSES.includes
 export const isTicketCancelled = (status?: string) => TICKET_CANCELLED_STATUSES.includes(status || '');
 export const isTicketActive = (status?: string) => !isTicketClosed(status) && !isTicketCancelled(status);
 
+export const FORCE_STATUS_OPTIONS = [
+    'Assigned', 'In Progress', 'Pending Parts', 'Pending Engineer Stock',
+    'Pending Repair On Site', 'Pending Repair Carry In', 'Pending Customer Approval',
+    'Customer Approved', 'Repaired', 'Closed', 'Call Cancel',
+];
+
+export function canForceStatus(current: string | undefined): boolean {
+    const isPendingArrival = current === 'Pending Customer Arrival';
+    const isPendingApproval = current === 'Pending Customer Approval';
+    const isRepaired = current === 'Repaired' || current === 'Pending for Delivery';
+    const isClosed = ['Closed', 'Customer Reject', 'Call Cancel'].includes(current || '');
+    return !isPendingArrival && !isPendingApproval && !isRepaired && !isClosed;
+}
+
 export type TicketRole = 'admin' | 'work_controller' | 'engineer' | string;
 export function getAllowedStatuses(
     current: string | undefined,

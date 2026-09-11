@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Ticket, statusBadges, callTypeBadges, statusOptions } from '@/types/tickets';
-import { getAllowedStatuses, validateStatusChangeReason, isTicketActive } from '@/types/ticketStatus';
+import { getAllowedStatuses, validateStatusChangeReason, isTicketActive, FORCE_STATUS_OPTIONS, canForceStatus } from '@/types/ticketStatus';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
@@ -121,7 +121,11 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
   // file) so it silently defeated this restriction for every real ticket view.
   const allowedStatusOptions = useMemo(() => {
     if (!selectedTicket) return statusOptions;
-    const next = getAllowedStatuses(selectedTicket.status, isAdminOrWC ? 'admin' : 'engineer', formData.service_type, formData.call_type, formData.warranty_coverage);
+    if (isAdminOrWC) {
+      if (!canForceStatus(selectedTicket.status)) return [selectedTicket.status];
+      return Array.from(new Set([selectedTicket.status, ...FORCE_STATUS_OPTIONS]));
+    }
+    const next = getAllowedStatuses(selectedTicket.status, 'engineer', formData.service_type, formData.call_type, formData.warranty_coverage);
     return Array.from(new Set([selectedTicket.status, ...next]));
   }, [selectedTicket, isAdminOrWC, formData.service_type, formData.call_type, formData.warranty_coverage]);
 
@@ -1242,7 +1246,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
                       ✏️ Edit Report
                     </button>
                   )}
-                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && selectedTicket?.warranty_coverage !== 'Out of Coverage' && (
+                  {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && selectedTicket?.warranty_coverage !== 'Out of Coverage' && ['Warranty', 'Warranty Repeat', 'AMC'].includes(selectedTicket?.call_type || '') && (
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>
                   )}
                   <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>

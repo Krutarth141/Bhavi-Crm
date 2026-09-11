@@ -40,7 +40,10 @@ export default function WalkInProductRow({ index, product, brands, models, wcTyp
     const secondaryValue = (product.type === 'Purchase' || product.type === 'For Checking Only') ? product.subtype : product.warranty;
 
     const handleTypeChange = (type: WalkInProductType) => {
-        onChange({ ...product, type, warranty: '', subtype: '' });
+        const defaults = type === 'Purchase' ? { warranty: '', subtype: '' }
+            : type === 'For Checking Only' ? { warranty: '', subtype: 'Warranty' }
+                : { warranty: 'In Warranty', subtype: '' };
+        onChange({ ...product, type, ...defaults });
     };
     const handleSecondaryChange = (val: string) => {
         if (product.type === 'Purchase' || product.type === 'For Checking Only') onChange({ ...product, subtype: val });
@@ -89,7 +92,7 @@ export default function WalkInProductRow({ index, product, brands, models, wcTyp
                 <div>
                     <label style={styles.formLabel}>{secondaryLabel}</label>
                     <select value={secondaryValue} onChange={(e) => handleSecondaryChange(e.target.value)} style={rowInput}>
-                        <option value="">— Select —</option>
+                        {product.type === 'Purchase' && <option value="">— Select —</option>}
                         {secondaryOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>

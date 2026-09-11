@@ -17,6 +17,7 @@ const fieldStyle: React.CSSProperties = { border: `1px solid ${colors.border}`, 
 
 export default function CourierEditModal({ entry, onClose, onSaved }: Props) {
     const isIn = entry.direction === 'Inward';
+    const [entryDate, setEntryDate] = useState(entry.entry_date || '');
     const [awb, setAwb] = useState(entry.awb_no || '');
     const [agency, setAgency] = useState(entry.agency || '');
     const [person, setPerson] = useState(entry.person_name || '');
@@ -43,6 +44,7 @@ export default function CourierEditModal({ entry, onClose, onSaved }: Props) {
             ...(!isIn ? { faulty_part: p.faulty_part || 'No', invoice_avail: p.invoice_avail || 'No', invoice_amount: p.invoice_amount || '' } : {}),
         }));
         const result = await updateCourierEntry(entry.id, {
+            entry_date: entryDate,
             awb_no: awb.trim(),
             agency: agency.trim(),
             person_name: person.trim() || null,
@@ -65,6 +67,7 @@ export default function CourierEditModal({ entry, onClose, onSaved }: Props) {
                 </div>
                 <div style={styles.modalBody}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 14 }}>
+                        <div><label style={styles.formLabel}>📅 Entry Date</label><input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} style={fieldStyle} /></div>
                         <div><label style={styles.formLabel}>AWB No</label><input value={awb} onChange={e => setAwb(e.target.value)} style={fieldStyle} /></div>
                         <div><label style={styles.formLabel}>Agency</label><input value={agency} onChange={e => setAgency(e.target.value)} style={fieldStyle} /></div>
                         <div><label style={styles.formLabel}>{isIn ? 'Sender' : 'Receiver'}</label><input value={person} onChange={e => setPerson(e.target.value)} style={fieldStyle} /></div>
