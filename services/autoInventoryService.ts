@@ -114,7 +114,7 @@ export const recordStockTransaction = async (params: {
 };
 
 export const fetchAutoInventoryLogs = async (inventoryId: number): Promise<AutoInventoryLog[]> => {
-    const { data, error } = await supabase.from('auto_inventory').select('*').order('brand').order('item_name');
+    const { data, error } = await supabase.from('auto_inventory_log').select('*').eq('inventory_id', inventoryId).order('created_at', { ascending: false }).limit(100);
     if (error) throw error;
     return data || [];
 };

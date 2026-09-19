@@ -524,12 +524,12 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
   const openEstimateModal = (t: Ticket) => {
     setModalOpen(false);
     setEstimateTicket(t);
-    setEstimateForm({ ...emptyEstimateForm, labourAmt: String(t.service_charges || t.labor || 0) });
+    const partsTotal = (t.spares || []).filter((s: any) => s.requested).reduce((sum: number, sp: any) => sum + (sp.qty || 0) * (sp.price || 0), 0);
+    setEstimateForm({ ...emptyEstimateForm, partsAmt: String(partsTotal), labourAmt: String(t.service_charges || t.labor || 0) });
     setInspCharges(String(t.service_charges || t.labor || 300));
   };
 
-  const { partsAfterDisc: estPartsAfterDisc, labourAfterDisc: estLabourAfterDisc, final: estimateFinal, saved: estimateSaved } =
-    calcEstimate(estimateForm, (estimateTicket?.spares || []) as ApprovalSpare[]);
+  const { final: estimateFinal } = calcEstimate(estimateForm);
 
   const handleApproveEstimate = async () => {
     if (!estimateTicket) return;
@@ -841,7 +841,6 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
           </div>
         </div>
       )}
-
       {modalOpen && (
         <div style={styles.modalOverlay} onClick={() => { setModalOpen(false); setGroupBanner(null); }}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -1411,30 +1410,23 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>
+                  <label style={styles.formLabel}>Parts ₹</label>
+                  <input type="number" value={estimateForm.partsAmt} onChange={(e) => setEstimateForm((f) => ({ ...f, partsAmt: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div>
                   <label style={styles.formLabel}>Labour / Service ₹</label>
                   <input type="number" value={estimateForm.labourAmt} onChange={(e) => setEstimateForm((f) => ({ ...f, labourAmt: e.target.value }))} style={styles.formInput} />
                 </div>
                 <div>
-                  <label style={styles.formLabel}>Parts Discount %</label>
-                  <input type="number" value={estimateForm.partsDisc} onChange={(e) => setEstimateForm((f) => ({ ...f, partsDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
-                </div>
-                <div>
-                  <label style={styles.formLabel}>Labour Discount %</label>
-                  <input type="number" value={estimateForm.labourDisc} onChange={(e) => setEstimateForm((f) => ({ ...f, labourDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+                  <label style={styles.formLabel}>Discount ₹</label>
+                  <input type="number" value={estimateForm.discount} onChange={(e) => setEstimateForm((f) => ({ ...f, discount: e.target.value }))} min="0" style={styles.formInput} />
                 </div>
               </div>
 
               <div style={{ background: '#d1fae5', borderRadius: 8, padding: 12, marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span>Parts (after {estimateForm.partsDisc}% disc)</span><span>₹{estPartsAfterDisc.toFixed(0)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
-                  <span>Labour (after {estimateForm.labourDisc}% disc)</span><span>₹{estLabourAfterDisc.toFixed(0)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid #a7f3d0', paddingTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
                   <span>Final Estimate</span><span style={{ color: '#065f46' }}>₹{estimateFinal.toFixed(0)}</span>
                 </div>
-                {estimateSaved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{estimateSaved.toFixed(0)}</div>}
               </div>
 
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, marginBottom: 12 }}>

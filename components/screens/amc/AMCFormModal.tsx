@@ -2,6 +2,7 @@
 
 import Modal from '@/components/Modal';
 import { AMCFormData, AMC_TYPES } from '@/types/amc';
+import { fetchCustomerByMobile } from '@/services/customerService';
 
 interface Props {
     isOpen: boolean;
@@ -18,6 +19,17 @@ const fieldStyle = { width: '100%', padding: '8px 12px', border: '1px solid #e5e
 const labelStyle = { display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '14px' };
 
 export default function AMCFormModal({ isOpen, title, saveLabel, form, saving, onClose, onSave, onChange }: Props) {
+    const handleMobileChange = (value: string) => {
+        onChange('mobile', value);
+        if (value.length === 10) {
+            fetchCustomerByMobile(value).then((c) => {
+                if (!c) return;
+                if (!form.customer_name.trim() && c.cname) onChange('customer_name', c.cname);
+                if (!form.address.trim() && c.address) onChange('address', c.address);
+            }).catch(() => { /* best-effort */ });
+        }
+    };
+
     const footer = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
@@ -32,7 +44,7 @@ export default function AMCFormModal({ isOpen, title, saveLabel, form, saving, o
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div><label style={labelStyle}>Customer Name *</label><input type="text" value={form.customer_name} onChange={e => onChange('customer_name', e.target.value)} style={fieldStyle} placeholder="Full name" /></div>
-                    <div><label style={labelStyle}>Mobile</label><input type="tel" value={form.mobile} onChange={e => onChange('mobile', e.target.value)} style={fieldStyle} /></div>
+                    <div><label style={labelStyle}>Mobile</label><input type="tel" value={form.mobile} onChange={e => handleMobileChange(e.target.value)} style={fieldStyle} /></div>
                     <div><label style={labelStyle}>Product</label><input type="text" value={form.product} onChange={e => onChange('product', e.target.value)} style={fieldStyle} placeholder="e.g. Canon Printer" /></div>
                     <div><label style={labelStyle}>Serial No.</label><input type="text" value={form.serial_no} onChange={e => onChange('serial_no', e.target.value)} style={fieldStyle} /></div>
                     <div>

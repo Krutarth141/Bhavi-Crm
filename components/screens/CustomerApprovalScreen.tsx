@@ -21,14 +21,14 @@ export default function CustomerApprovalScreen() {
     const [inspCharges, setInspCharges] = useState('300');
 
     const openApproval = (ticket: ApprovalTicket) => {
+        const partsTotal = (ticket.spares || []).filter(s => s.requested).reduce((s, sp) => s + (sp.qty || 0) * (sp.price || 0), 0);
         setSelected(ticket);
-        setForm({ ...emptyEstimateForm, labourAmt: String(ticket.service_charges || ticket.labor || 0) });
+        setForm({ ...emptyEstimateForm, partsAmt: String(partsTotal), labourAmt: String(ticket.service_charges || ticket.labor || 0) });
         setInspCharges(String(ticket.service_charges || ticket.labor || 300));
         setModalOpen(true);
     };
 
-    const { partsTotal, partsAfterDisc, labourAfterDisc, final, saved } =
-        calcEstimate(form, selected?.spares || []);
+    const { final } = calcEstimate(form);
 
     const handleApprove = async () => {
         if (!selected) return;
@@ -67,6 +67,8 @@ export default function CustomerApprovalScreen() {
             setModalOpen(false);
         } else {
             setSelected(s => s ? { ...s, spares: r.spares } : s);
+            const newPartsTotal = (r.spares || []).filter((s: any) => s.requested).reduce((sum: number, sp: any) => sum + (sp.qty || 0) * (sp.price || 0), 0);
+            setForm(f => ({ ...f, partsAmt: String(newPartsTotal) }));
         }
     };
 
@@ -151,33 +153,24 @@ export default function CustomerApprovalScreen() {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div>
+                                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parts ₹</label>
+                                <input type="number" value={form.partsAmt} onChange={e => setForm(f => ({ ...f, partsAmt: e.target.value }))} style={fieldStyle} />
+                            </div>
+                            <div>
                                 <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Labour / Service ₹</label>
                                 <input type="number" value={form.labourAmt} onChange={e => setForm(f => ({ ...f, labourAmt: e.target.value }))} style={fieldStyle} />
                             </div>
                             <div>
-                                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parts Discount %</label>
-                                <input type="number" value={form.partsDisc} onChange={e => setForm(f => ({ ...f, partsDisc: e.target.value }))} min="0" max="100" style={fieldStyle} />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Labour Discount %</label>
-                                <input type="number" value={form.labourDisc} onChange={e => setForm(f => ({ ...f, labourDisc: e.target.value }))} min="0" max="100" style={fieldStyle} />
+                                <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>Discount ₹</label>
+                                <input type="number" value={form.discount} onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} min="0" style={fieldStyle} />
                             </div>
                         </div>
 
                         <div style={{ background: '#d1fae5', borderRadius: 8, padding: 12 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                                <span>Parts (after {form.partsDisc}% disc)</span>
-                                <span>₹{partsAfterDisc.toFixed(0)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
-                                <span>Labour (after {form.labourDisc}% disc)</span>
-                                <span>₹{labourAfterDisc.toFixed(0)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid #a7f3d0', paddingTop: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
                                 <span>Final Estimate</span>
                                 <span style={{ color: '#065f46' }}>₹{final.toFixed(0)}</span>
                             </div>
-                            {saved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{saved.toFixed(0)}</div>}
                         </div>
 
                         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12 }}>

@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
     }
 }
 
+// ─── POST — create user (Settings → Engineers/WC "Add") ───────────────────────
+// This route had no POST handler at all, so UserFormModal's "Add" (used by
+// both the Engineers and Work Controllers sub-tabs of Settings) always
+// failed with a 405. Mirrors /api/admin/engineers's POST, generalized for
+// either role_type.
+
 export async function POST(request: NextRequest) {
     try {
         const session = await getServerSession(authOptions);

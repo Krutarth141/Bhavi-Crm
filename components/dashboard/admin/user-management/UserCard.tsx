@@ -7,10 +7,9 @@ interface Props {
     type: 'engineer' | 'wc';
     onEdit: (user: AppUser) => void;
     onToggle: (user: AppUser) => void;
-    onDelete: (user: AppUser) => void;
 }
 
-export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Props) {
+export default function UserCard({ user, type, onEdit, onToggle }: Props) {
     const initials = user.initials ||
         user.name.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
 
@@ -24,7 +23,6 @@ export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Pro
             background: user.is_active ? 'var(--card, #fff)' : '#fafafa',
             opacity: user.is_active ? 1 : 0.7,
         }}>
-            {/* Avatar */}
             <div style={{
                 width: 40, height: 40, borderRadius: '50%',
                 background: avatarColor, color: '#fff',
@@ -34,7 +32,6 @@ export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Pro
                 {initials}
             </div>
 
-            {/* Info */}
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{user.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -45,7 +42,6 @@ export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Pro
                 </div>
             </div>
 
-            {/* Status badge */}
             <span
                 onClick={() => onToggle(user)}
                 title="Click to toggle active status"
@@ -59,7 +55,6 @@ export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Pro
                 {user.is_active ? '✅ Active' : '❌ Inactive'}
             </span>
 
-            {/* Actions */}
             <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 <button
                     onClick={() => onEdit(user)}
@@ -70,16 +65,6 @@ export default function UserCard({ user, type, onEdit, onToggle, onDelete }: Pro
                     }}
                 >
                     ✏️ Edit
-                </button>
-                <button
-                    onClick={() => onDelete(user)}
-                    style={{
-                        padding: '4px 10px', border: 'none',
-                        borderRadius: 6, fontSize: 12, cursor: 'pointer',
-                        background: '#fee2e2', color: '#991b1b',
-                    }}
-                >
-                    🗑️
                 </button>
             </div>
         </div>

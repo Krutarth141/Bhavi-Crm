@@ -19,8 +19,9 @@ import MSCCentersTab from './user-management/MSCCentersTab';
 import PortalServicesTab from './user-management/PortalServicesTab';
 import TelegramTab from './user-management/TelegramTab';
 import NavPermissionsTab from './user-management/NavPermissionsTab';
+import HolidaysTab from './user-management/HolidaysTab';
 
-type TabId = 'engineers' | 'wc' | 'admin' | 'logo' | 'company' | 'portal' | 'msc' | 'telegram' | 'navperms';
+type TabId = 'engineers' | 'wc' | 'admin' | 'logo' | 'company' | 'portal' | 'msc' | 'telegram' | 'navperms' | 'holidays';
 
 const TABS: { id: TabId; label: string }[] = [
     { id: 'engineers', label: '👷 Engineers' },
@@ -32,6 +33,7 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'msc', label: '🏭 MSC Centers' },
     { id: 'telegram', label: '📱 Telegram' },
     { id: 'navperms', label: '🔐 Nav Permissions' },
+    { id: 'holidays', label: '🎉 Holidays' },
 ];
 
 export default function AdminUserManagement() {
@@ -42,7 +44,7 @@ export default function AdminUserManagement() {
     const {
         engineers, workControllers,
         loading, error,
-        addUser, editUser, toggleActive, removeUser, updatePassword,
+        addUser, editUser, toggleActive, updatePassword,
     } = useUsers();
 
     const [activeTab, setActiveTab] = useState<TabId>('engineers');
@@ -81,11 +83,6 @@ export default function AdminUserManagement() {
         catch (e: any) { alert(e.message); }
     };
 
-    const handleDelete = async (user: AppUser) => {
-        if (!confirm(`Delete "${user.name}"? This cannot be undone.`)) return;
-        try { await removeUser(user.id); showFeedback('Deleted!'); }
-        catch (e: any) { alert(e.message); }
-    };
 
     const handlePasswordChange = async (currentPassword: string, newPassword: string) => {
         await changeOwnPassword(currentPassword, newPassword);
@@ -98,7 +95,7 @@ export default function AdminUserManagement() {
                     <EngineersTab
                         engineers={engineers} loading={loading}
                         onAdd={() => openAdd('engineer')}
-                        onEdit={openEdit} onToggle={handleToggle} onDelete={handleDelete}
+                        onEdit={openEdit} onToggle={handleToggle}
                     />
                 );
             case 'wc':
@@ -106,7 +103,7 @@ export default function AdminUserManagement() {
                     <WorkControllersTab
                         workControllers={workControllers} loading={loading}
                         onAdd={() => openAdd('wc')}
-                        onEdit={openEdit} onToggle={handleToggle} onDelete={handleDelete}
+                        onEdit={openEdit} onToggle={handleToggle}
                     />
                 );
             case 'admin':
@@ -122,6 +119,8 @@ export default function AdminUserManagement() {
                 return <TelegramTab />;
             case 'navperms':
                 return <NavPermissionsTab />;
+            case 'holidays':
+                return <HolidaysTab />;
             default:
                 return null;
         }

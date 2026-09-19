@@ -13,6 +13,8 @@ import KmCaptureModal from './tickets/KmCaptureModal';
 import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import AIWriteButton from '@/components/shared/AIWriteButton';
 import { tatLabel } from '@/utils/tatHelpers';
+import { computeHolidayAwareTat } from '@/utils/holidayCalc';
+import { fetchExtraHolidaySet } from '@/services/holidaysService';
 import Modal from '@/components/Modal';
 import { getAllowedStatuses, isTicketActive, isTicketClosed } from '@/types/ticketStatus';
 import { ATT_EXCLUDED_IDS } from '@/types/attendance';
@@ -138,6 +140,8 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   // + minute-number control here (index.html:5319-5321, _tat12Controls) and
   // derives tat_date from it as received + 24h (autoCalcCallTAT).
   const [canonRecv, setCanonRecv] = useState({ date: '', hh: '00', mm: '00' });
+  const extraHolidaysRef = useRef<Set<string> | null>(null);
+  useEffect(() => { fetchExtraHolidaySet().then((s) => { extraHolidaysRef.current = s; }); }, []);
   const applyCanonRecv = (next: { date: string; hh: string; mm: string }) => {
     setCanonRecv(next);
     if (!next.date) { setCallFormValues({ tat_date: '' }); return; }
@@ -146,10 +150,8 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     const mi = Math.min(59, Math.max(0, parseInt(next.mm, 10) || 0));
     const recv = new Date(y, (m || 1) - 1, d || 1, h, mi, 0, 0);
     if (isNaN(recv.getTime())) { setCallFormValues({ tat_date: '' }); return; }
-    // NOTE: HTML additionally pushes the deadline past any consecutive holiday
-    // days (isHolidayDate). This port has no holiday master at all, so it is a
-    // plain +24h.
-    setCallFormValues({ tat_date: new Date(recv.getTime() + 24 * 3600000).toISOString() });
+    const deadline = computeHolidayAwareTat(recv, extraHolidaysRef.current || new Set());
+    setCallFormValues({ tat_date: deadline.toISOString() });
   };
 
   // Daily Report / Past Reports — mirrors HTML's My Calls header buttons.
@@ -165,41 +167,22 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     newStatus: '', note: '', labour: '', faultCode: '', workDone: '',
     seCallId: '', pageCount: '', pageCountSkip: false, pageCountSkipReason: '',
     otherCharge: '', visitDate: '', visitIn: '', visitOut: '', meterStart: '', meterEnd: '', mscCenter: '',
-    // Product Condition (index.html:7302-7316) + manual Time In/Out reason
-    // (index.html:7249-7252).
     conditionType: '', manualTimeReason: '',
   });
   const [updateSaving, setUpdateSaving] = useState(false);
-  // Up to 3 Product Condition photos → tickets.condition_photos.
   const [conditionPhotos, setConditionPhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
-  // The Time In/Out the modal OPENED with — HTML's data-orig on those inputs
-  // (index.html:7249). Any difference means the engineer hand-edited them and a
-  // reason becomes mandatory (index.html:7757-7766).
   const [origVisitTimes, setOrigVisitTimes] = useState({ visitIn: '', visitOut: '' });
-  // MSC centre suggestions for the datalist behind the MSC Center input
-  // (index.html:7211 + loadMSCCentersDropdown at 27668).
   const [mscCenters, setMscCenters] = useState<{ name: string; city?: string }[]>([]);
-  // Serial edit for NO-SN- tickets (index.html:5267 / openSerialEditModal 25307).
   const [serialEditTicket, setSerialEditTicket] = useState<any | null>(null);
   const [serialEditValue, setSerialEditValue] = useState('');
   const [serialEditSaving, setSerialEditSaving] = useState(false);
 
-  // Spares list as edited in the Update modal — HTML's `currentSpares`
-  // (index.html:7073). Removals live here until the whole form is saved.
   const [updateSpares, setUpdateSpares] = useState<TicketSpare[]>([]);
-  // Which of the spares' part codes are flagged is_consumable in Inventory, so
-  // the CONS badge and the ₹0-under-warranty pricing match HTML's
-  // isChargeableSpare()/_spareHidesPrice() (index.html:6114-6131, 7650-7657).
   const [consumableCodes, setConsumableCodes] = useState<Set<string>>(new Set());
-  // Attachments: slot 0 = Job Sheet (mandatory for CSP closes), slots 1-2 extra
-  // (index.html:7293-7300, 7319-7322).
   const [updatePhotos, setUpdatePhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
-  // Payment Confirmation popup (index.html:7936-7961 / 16289).
   const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
   const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
 
-  // Visit/Work panel + warranty/parts — mirrors EngineerUpdateScreen's fuller
-  // Update modal (matches HTML's single shared openEngUpdate() everywhere).
   const [panelBusy, setPanelBusy] = useState(false);
   const [kmGateTicket, setKmGateTicket] = useState<any | null>(null);
   const [catchupTicket, setCatchupTicket] = useState<{ newTicket: any; skipTicketId: string } | null>(null);
@@ -212,15 +195,11 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const [voidModalOpen, setVoidModalOpen] = useState(false);
   const [partIndentOpen, setPartIndentOpen] = useState(false);
 
-  // Estimate Approve/Reject — engineers handle this directly on their own
-  // "Pending Customer Approval" call, same modal admin/WC uses (mirrors
-  // HTML's openApproval()/processApproval()).
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [approvalForm, setApprovalForm] = useState<EstimateForm>(emptyEstimateForm);
   const [approvalInspCharges, setApprovalInspCharges] = useState('300');
   const [approvalProcessing, setApprovalProcessing] = useState(false);
 
-  // Previous Location — mirrors HTML's mcBuildPrevLocMap()/mcConfirmPrevLocation().
   const [prevLocMap, setPrevLocMap] = useState<Record<string, PrevLocation>>({});
   const [prevLocModal, setPrevLocModal] = useState<{ pl: PrevLocation; t: any } | null>(null);
   useEffect(() => {
@@ -237,9 +216,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     if (confirm(msg)) setPrevLocModal({ pl, t });
   };
 
-  // Return to Office / Return to Home — mirrors HTML's startReturnToOffice()/
-  // reachedOffice()/startReturnToHome()/reachedHome(). KM catch-up (skipped
-  // arrival KM) is picked up first, same gate as the next call's Visit Start.
   const [rtoCatchupKind, setRtoCatchupKind] = useState<{ kind: 'office' | 'home'; skipTicketId: string } | null>(null);
   const [rtoClosingKind, setRtoClosingKind] = useState<{ kind: 'office' | 'home'; logId: string } | null>(null);
 
@@ -289,7 +265,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     await finishReturn(logId, kind);
   };
 
-  // New Call / Add Product (Same Customer) — mirrors HTML's openEngNewCall().
   const handleOpenNewCall = () => {
     resetCallForm();
     setGroupBanner(null);
@@ -312,8 +287,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   };
 
   const handleSaveNewCall = async () => {
-    // index.html:5704-5707 — Call Type, then Service Charges for a chargeable
-    // call type, then the core identifying fields.
     if (!callForm.call_type) { alert('⚠️ Call Type is required! Please select Warranty / Non-Warranty / AMC etc.'); return; }
     const chargeableCallType = ['Non-Warranty', 'Non-Warranty Repeat', 'Other'].includes(callForm.call_type);
     if (chargeableCallType && !callForm.service_charges && callForm.service_charges !== 0) {
@@ -322,18 +295,11 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     if (!callForm.model || !callForm.serial || !callForm.cname || !callForm.mobile || !callForm.problem) {
       alert('Fill: Model, Serial, Customer, Mobile, Problem'); return;
     }
-    // Sub-Category is mandatory whenever the selected brand actually HAS
-    // sub-categories to pick from — a missing one lands the call under the
-    // wrong Work Controller. Skipped in the "Add Product (Same Customer)" flow,
-    // where the field isn't reachable and wc_type is copied from the anchor
-    // call instead (index.html:5709-5713).
     if (!groupBanner && callForm.brand_id && subCatsForBrand.length > 0 && !callForm.subcategory_id) {
       alert('⚠️ Sub-Category select karvu farjiyat chhe — jethi call sahi Work Controller ma dekhaay.'); return;
     }
     setNewCallSaving(true);
 
-    // Hard block: a second ACTIVE call must never be logged for the same device
-    // (index.html:5715-5730). Auto-generated NO-SN- placeholders are exempt.
     const openDup = await findOpenCallsForSerial(callForm.serial.trim());
     if (openDup.length > 0) {
       const od = openDup[0];
@@ -342,21 +308,13 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       return;
     }
 
-    // brand_id / subcategory_id are form-only master ids (no such ticket
-    // columns); address2 and subcategory_name are folded in below.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { address2, brand_id, subcategory_id, subcategory_name, ...rest } = callForm;
     const ticketData: any = {
       ...rest,
-      // Address line 1 + line 2 collapse into the single address column (index.html:5687).
       address: `${(callForm.address || '').trim()}${address2.trim() ? ', ' + address2.trim() : ''}`,
-      // Warranty coverage follows the call type (index.html:5699).
       warranty_coverage: (callForm.call_type === 'Warranty' || callForm.call_type === 'Warranty Repeat') ? 'Under Coverage' : 'NA',
-      // Only a chargeable call type carries a service charge (index.html:5677).
       service_charges: chargeableCallType ? (Number(callForm.service_charges) || 0) : 0,
-      // In "Add Product (Same Customer)" mode the Sub-Category field is not
-      // reachable, so the anchor call's own wc_type is kept (HTML copies it
-      // from the anchor best-effort for the same reason, index.html:5713-5716).
       wc_type: groupBanner
         ? (groupBanner.anchor.wc_type || deriveWcType(subcategory_name, callForm.brand_name, roleType, engName))
         : deriveWcType(subcategory_name, callForm.brand_name, roleType, engName),
@@ -393,7 +351,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       conditionType: t.condition_type || '', manualTimeReason: '',
     });
     setOrigVisitTimes({ visitIn: t.visit_in || '', visitOut: t.visit_out || '' });
-    // Preload existing condition photos (index.html:7328-7332).
     let cp = t.condition_photos;
     if (typeof cp === 'string') { try { cp = JSON.parse(cp); } catch { cp = []; } }
     const condSlots: (PhotoSlot | null)[] = [null, null, null];
@@ -402,8 +359,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     const spares: TicketSpare[] = t.spares || [];
     setUpdateSpares(spares);
     fetchSpareConsumableCodes(spares).then(setConsumableCodes);
-    // Preload existing photos: slot 0 = jobsheet, slots 1-2 = extras
-    // (index.html:7319-7322).
     let ex = t.attachments;
     if (typeof ex === 'string') { try { ex = JSON.parse(ex); } catch { ex = []; } }
     const slots: (PhotoSlot | null)[] = [t.jobsheet_photo ? { url: t.jobsheet_photo, isNew: false } : null, null, null];
@@ -421,9 +376,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTicketId]);
 
-  // Warranty/AMC (and not Out of Coverage) calls never bill the customer for a
-  // part — the price shows ₹0 there. EXCEPT a Consumable, which is billed even
-  // under warranty since Canon never covers those (index.html:7650-7656).
   const spareHidesPrice = (s: TicketSpare) => {
     if (!updateTicket) return false;
     if (isChargeableSpare(s, consumableCodes)) return false;
@@ -431,14 +383,11 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     return isW && updateTicket.warranty_coverage !== 'Out of Coverage';
   };
 
-  // index.html:7659 refreshEstimateTotal()
   const sparesPartsTotal = updateSpares.reduce((a, s) => a + (spareHidesPrice(s) ? 0 : (Number(s.qty) || 1) * (Number(s.price) || 0)), 0);
   const estimateTotal = sparesPartsTotal + (Number(updateForm.labour) || 0) + (Number(updateForm.otherCharge) || 0);
 
   const removeUpdateSpare = (i: number) => setUpdateSpares((prev) => prev.filter((_, idx) => idx !== i));
 
-  // Reads a picked file as a data: URL, matching HTML's onJsPhotoPick(). Camera
-  // vs gallery is just the `capture` attribute on the input.
   const onPickPhoto = (slot: number, file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
@@ -448,7 +397,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     reader.readAsDataURL(file);
   };
 
-  // Same picker for the Product Condition slots (index.html:onCondPhotoPick).
   const onPickConditionPhoto = (slot: number, file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
@@ -458,15 +406,11 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     reader.readAsDataURL(file);
   };
 
-  // HTML calls loadMSCCentersDropdown() when the status select hits "Sent to
-  // MSC" (index.html:27665); the datalist is sourced from auto_msc_centers.
   useEffect(() => {
     if (updateForm.newStatus !== 'Sent to MSC' || mscCenters.length) return;
     fetchMSCCenters().then(setMscCenters).catch(() => undefined);
   }, [updateForm.newStatus, mscCenters.length]);
 
-  // Time In/Out hand-edited away from what the modal opened with
-  // (index.html:7757-7761) — the reason box appears and becomes mandatory.
   const isManualTimeEdit = !!updateTicket && updateTicket.service_type === 'On Site'
     && (updateForm.visitIn !== origVisitTimes.visitIn || updateForm.visitOut !== origVisitTimes.visitOut);
 
@@ -476,8 +420,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
   const isClosedView = !!updateTicket && !isTicketActive(updateTicket.status);
 
-  // Refreshes the open modal's ticket in place after a panel action, without
-  // dropping the modal (mirrors EngineerUpdateScreen's reloadSelected()).
   const reloadUpdateTicket = async (id: string) => {
     const fresh = await fetchTicketById(id);
     if (fresh) setUpdateTicket(fresh);
@@ -566,8 +508,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
   const workPanel = updateTicket ? computeWorkPanel(updateTicket) : null;
 
-  // Performs the actual save. Called directly, or from the Payment
-  // Confirmation popup's Confirm button (mirrors HTML's _doSaveEngUpdate).
   const doTicketUpdateSave = async (payment?: PaymentConfirmData) => {
     if (!updateTicket) return;
     setUpdateSaving(true);
@@ -599,14 +539,10 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     if (updateForm.newStatus === 'Closed' && updateTicket.wc_type === 'CSP' && updateForm.pageCountSkip && !updateForm.pageCountSkipReason.trim()) {
       alert('Reason is mandatory when skipping Page Count'); return;
     }
-    // Manual Time In/Out edit needs a reason (index.html:7757-7766).
     if (isManualTimeEdit && !updateForm.manualTimeReason.trim()) {
       alert('⚠️ Please provide a reason for the manual time change.\n(Time In or Time Out was edited manually)'); return;
     }
 
-    // All the close guards (Work Start / unapproved parts / missing physical
-    // stock / CSP job sheet) run before anything is written — a blocked close
-    // leaves the ticket completely untouched (index.html:7710-7803, 7890-7893).
     setUpdateSaving(true);
     const blocked = await validateEngineerUpdate(
       updateTicket, updateForm.newStatus, updateForm.workDone, updateSpares, engName, updatePhotos[0]?.url
@@ -614,9 +550,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     setUpdateSaving(false);
     if (blocked) { alert(blocked); return; }
 
-    // Payment Confirmation popup, when this close involves real money
-    // (index.html:7936-7961). The popup pre-fills from the charges that the
-    // save is about to compute, so it opens filled in rather than blank.
     const charges = computeCloseCharges(updateTicket, updateForm.newStatus, updateSpares, consumableCodes);
     if (needsPaymentConfirmation(updateTicket, updateForm.newStatus, charges)) {
       const parts = paymentPartsCost(updateTicket, updateSpares, consumableCodes);
@@ -643,13 +576,13 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
   const openEstimateApproval = () => {
     if (!updateTicket) return;
-    setApprovalForm({ ...emptyEstimateForm, labourAmt: String(updateTicket.service_charges || updateTicket.labor || 0) });
+    const partsTotal = (updateTicket.spares || []).filter((s: any) => s.requested).reduce((sum: number, sp: any) => sum + (sp.qty || 0) * (sp.price || 0), 0);
+    setApprovalForm({ ...emptyEstimateForm, partsAmt: String(partsTotal), labourAmt: String(updateTicket.service_charges || updateTicket.labor || 0) });
     setApprovalInspCharges(String(updateTicket.service_charges || updateTicket.labor || 300));
     setApprovalOpen(true);
   };
 
-  const { partsAfterDisc: approvalPartsAfterDisc, labourAfterDisc: approvalLabourAfterDisc, final: approvalFinal, saved: approvalSaved } =
-    calcEstimate(approvalForm, (updateTicket?.spares || []) as ApprovalSpare[]);
+  const { final: approvalFinal } = calcEstimate(approvalForm);
 
   const handleApproveEstimate = async () => {
     if (!updateTicket) return;
@@ -687,18 +620,16 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       setApprovalOpen(false); setUpdateTicket(null); await refetch();
     } else {
       setUpdateTicket((t: any) => t ? { ...t, spares: r.spares } : t);
+      const newPartsTotal = (r.spares || []).filter((s: any) => s.requested).reduce((sum: number, sp: any) => sum + (sp.qty || 0) * (sp.price || 0), 0);
+      setApprovalForm((f) => ({ ...f, partsAmt: String(newPartsTotal) }));
     }
   };
 
   const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
   const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
-  // Forces the Daily Report to be shown (skippable) before the punch-out
-  // selfie — mirrors HTML's startPunchOutDailyReport(), auto-skipped if
-  // today's report is already submitted.
   const [forcedDailyReport, setForcedDailyReport] = useState(false);
 
   const handlePunchIn = async () => {
-    // Office/reception logins never punch in/out (index.html:4038,4048).
     if (ATT_EXCLUDED_IDS.includes(engId)) { alert('This account does not require Punch In.'); return; }
     const hasOpening = await hasKmEntryToday(engId, 'opening');
     if (!hasOpening) { setKmCaptureType('opening'); return; }
@@ -733,8 +664,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     }
   }, [punchLog?.punch_in_time, punchLog?.punch_out_time, engId, engName]);
 
-  // 8:30 PM auto punch-out reminder (index.html:5147-5154). One-shot per mount /
-  // punch-state change, same as HTML — it does not nag repeatedly.
   const punchReminderShown = useRef(false);
   useEffect(() => {
     if (punchReminderShown.current) return;
@@ -750,9 +679,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [punchLog?.punch_in_time, punchLog?.punch_out_time]);
 
-  // ── Serial edit for NO-SN- placeholder tickets (index.html:25307-25411) ────
-  // Photo proof + remark are mandatory so the change stays auditable; the edit
-  // applies immediately and is logged in serial_edit_log + the ticket timeline.
   const [serialEditPhoto, setSerialEditPhoto] = useState<PhotoSlot | null>(null);
   const [serialEditRemark, setSerialEditRemark] = useState('');
   const openSerialEdit = (t: any) => {
@@ -821,7 +747,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         lng: data.lng,
       });
       if (result.success) {
-        // Start live GPS tracking for the day (index.html:4359-4361).
         startLocationTracking(engId, engName);
         refetch();
       }
@@ -838,7 +763,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         lateRemark: data.remark,
       });
       if (result.success) {
-        // One final GPS point, then stop tracking (index.html:4742).
         saveLocationEvent(
           'punch_out', null,
           data.lat != null && data.lng != null ? { lat: data.lat, lng: data.lng, accuracy: 0 } : null,
@@ -851,7 +775,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     }
   };
 
-  // ── Derived KPIs ──────────────────────────────────────────────────────────
   const activeTickets = myTickets.filter((t) => isTicketActive(t.status));
   const closedTickets = myTickets.filter((t) => !isTicketActive(t.status));
   const todayDateStr = new Date().toLocaleDateString('en-CA');
@@ -859,9 +782,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     .filter((t) => t.planned_date === todayDateStr && isTicketActive(t.status))
     .sort((a, b) => (a.sequence_no ?? 999) - (b.sequence_no ?? 999));
 
-  // Today's route sequence badge, rendered inline on each call's own card —
-  // engineer-initial + sequence number, e.g. "Y1" (index.html:5139-5144). Keyed
-  // off today's planned_date, so it clears itself the next day.
   const routeSeqMap: Record<string, string> = {};
   const routeOrderMap: Record<string, number> = {};
   todayRoute.forEach((t, i) => {
@@ -871,7 +791,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     routeOrderMap[t.id] = seqN;
   });
 
-  // My Daily Calls chart — mirrors HTML's last7 bar chart in renderMyCalls().
   const dailyCounts: Record<string, number> = {};
   myTickets.forEach((t) => {
     if (!t.created_at) return;
@@ -881,7 +800,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const last7 = Object.entries(dailyCounts).slice(-7);
   const maxDaily = Math.max(...last7.map(([, v]) => v), 1);
 
-  // My Target — mirrors HTML's loadMyTargetWidget() progress bar.
   const targetCalls = myTarget?.target_calls || 0;
   const targetMonth = new Date().toLocaleDateString('en-CA').slice(0, 7);
   const closedThisMonth = myTickets.filter((t) => t.status === 'Closed' && t.updated_at && t.updated_at.slice(0, 7) === targetMonth).length;
@@ -890,10 +808,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const targetEmoji = targetPct >= 100 ? '🏆' : targetPct >= 80 ? '🔥' : targetPct >= 50 ? '💪' : '🎯';
 
   const ticketSearchQ = ticketSearch.trim().toLowerCase();
-  // CSP managers can browse closed calls too (matches HTML's window._isCspMgr
-  // gate); regular engineers only ever see their open calls. A non-empty
-  // search bypasses the status filter entirely (matchS = q||!statusF||...,
-  // index.html:5298) — searching finds a match regardless of the dropdown.
   const statusFilteredTickets = !cspMgr ? activeTickets
     : ticketSearchQ ? myTickets
       : ticketStatusFilter === 'closed' ? closedTickets
@@ -908,9 +822,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       || (t.model || '').toLowerCase().includes(ticketSearchQ)
       || (t.serial || '').toLowerCase().includes(ticketSearchQ);
   }).sort((a, b) => {
-    // Today's route calls come first, in their planned sequence order — once the
-    // route sequence no longer applies (badge gone next day), this falls back to
-    // the normal active-first / newest-id sort (index.html:5237-5249).
     const aSeq = routeOrderMap[a.id];
     const bSeq = routeOrderMap[b.id];
     if (aSeq != null && bSeq != null) return aSeq - bSeq;
@@ -922,7 +833,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     return (b.id || '').localeCompare(a.id || '');
   });
 
-  // ── Loading / Error ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={{ ...styles.loadingText, fontSize: '15px', padding: '60px' }}>
@@ -938,16 +848,12 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       </div>
     );
   }
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '20px', backgroundColor: colors.bg, minHeight: '100vh' }}>
-
-      {/* 1. Header */}
       <div style={{ ...styles.sectionHeader, marginBottom: '20px' }}>
         <h2 style={{ ...styles.sectionTitle, fontSize: '22px' }}>📞 My Calls</h2>
       </div>
 
-      {/* 2. Punch Bar */}
       <div
         style={{
           ...styles.card,
@@ -957,7 +863,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         }}
       >
         {!punchLog?.punch_in_time ? (
-          /* Not punched in */
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <span style={{ fontSize: '16px', fontWeight: 600 }}>🟢 Not Punched In</span>
             <button
@@ -973,7 +878,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
             </button>
           </div>
         ) : !punchLog.punch_out_time ? (
-          /* Punched in — on duty */
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <div style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>
@@ -998,7 +902,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
             </button>
           </div>
         ) : (
-          /* Punched out — day complete */
           <div style={{ fontSize: '16px', fontWeight: 600 }}>
             ✅ {punchLog.punch_in_time} → {punchLog.punch_out_time}
           </div>
@@ -1025,7 +928,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         <PunchModal mode={punchModalMode} onSubmit={handlePunchSubmit} onClose={() => setPunchModalMode(null)} />
       )}
 
-      {/* 2b. Return to Office / Return to Home — mirrors HTML's rtoHtml bar. */}
       {punchLog?.punch_in_time && !punchLog?.punch_out_time && (
         openReturnLog ? (
           <div style={{ background: isReturningToOffice ? '#1e3a5f' : '#3f2d5c', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, borderRadius: 10, flexWrap: 'wrap' }}>
@@ -1071,7 +973,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         />
       )}
 
-      {/* 3. KPI Row */}
       <div
         style={{
           display: 'grid',
@@ -1103,7 +1004,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         ))}
       </div>
 
-      {/* 5. My Daily Calls chart — mirrors HTML's last7 bar chart. */}
       {last7.length > 0 && (
         <div style={{ ...styles.card, marginBottom: '20px' }}>
           <div style={{ ...styles.sectionTitle, fontSize: '15px', marginBottom: '12px' }}>📊 My Daily Calls</div>
@@ -1122,7 +1022,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         </div>
       )}
 
-      {/* 5b. My Target — mirrors HTML's loadMyTargetWidget(). */}
       {targetCalls > 0 && (
         <div style={{ ...styles.card, marginBottom: '20px', borderLeft: `4px solid ${targetColor}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1145,7 +1044,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         </div>
       )}
 
-      {/* 5c. My Tickets — searchable list with Update action */}
       <div style={{ ...styles.card, marginBottom: '20px' }}>
         <div style={{ ...styles.sectionHeader, marginBottom: '12px' }}>
           <span style={{ ...styles.sectionTitle, fontSize: '15px' }}>🎫 My Calls ({visibleTickets.length})</span>
@@ -1193,7 +1091,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                         <div style={{ fontWeight: 800, fontSize: '14px', color: colors.primary }}>
                           {t.id}{' '}
                           {t.priority && <span style={getPriorityBadgeStyle(t.priority)}>{t.priority}</span>}
-                          {/* Warranty / Non-Warranty badge — mirrors HTML's isW ternary (index.html:5259) */}
                           {['Warranty', 'Warranty Repeat', 'AMC'].includes(t.call_type || '') ? (
                             <span style={{ ...styles.badge, backgroundColor: '#dcfce7', color: '#166534', marginLeft: '4px' }}>🛡️ WARRANTY</span>
                           ) : (
@@ -1216,8 +1113,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                       <div>📱 <b style={{ color: colors.text }}>{t.model || '—'}</b></div>
                       <div>
                         🔢 <b style={{ color: colors.text }}>{t.serial || '—'}</b>
-                        {/* Auto-generated "NO-SN-…" placeholder — let whoever is
-                          on site fill in the real serial (index.html:5267). */}
                         {(t.serial || '').startsWith('NO-SN-') && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openSerialEdit(t); }}
@@ -1287,7 +1182,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
           </div>
         )}
       </div>
-
       {serialEditTicket && (
         <Modal
           isOpen
@@ -1843,33 +1737,24 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Parts ₹</label>
+                <input type="number" value={approvalForm.partsAmt} onChange={(e) => setApprovalForm((f) => ({ ...f, partsAmt: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Labour / Service ₹</label>
                 <input type="number" value={approvalForm.labourAmt} onChange={(e) => setApprovalForm((f) => ({ ...f, labourAmt: e.target.value }))} style={styles.formInput} />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Parts Discount %</label>
-                <input type="number" value={approvalForm.partsDisc} onChange={(e) => setApprovalForm((f) => ({ ...f, partsDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Labour Discount %</label>
-                <input type="number" value={approvalForm.labourDisc} onChange={(e) => setApprovalForm((f) => ({ ...f, labourDisc: e.target.value }))} min="0" max="100" style={styles.formInput} />
+                <label style={styles.formLabel}>Discount ₹</label>
+                <input type="number" value={approvalForm.discount} onChange={(e) => setApprovalForm((f) => ({ ...f, discount: e.target.value }))} min="0" style={styles.formInput} />
               </div>
             </div>
 
             <div style={{ background: '#d1fae5', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                <span>Parts (after {approvalForm.partsDisc}% disc)</span>
-                <span>₹{approvalPartsAfterDisc.toFixed(0)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 4 }}>
-                <span>Labour (after {approvalForm.labourDisc}% disc)</span>
-                <span>₹{approvalLabourAfterDisc.toFixed(0)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15, marginTop: 8, borderTop: '1px solid #a7f3d0', paddingTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15 }}>
                 <span>Final Estimate</span>
                 <span style={{ color: '#065f46' }}>₹{approvalFinal.toFixed(0)}</span>
               </div>
-              {approvalSaved > 0 && <div style={{ fontSize: 11, color: '#065f46', marginTop: 4 }}>Customer saves: ₹{approvalSaved.toFixed(0)}</div>}
             </div>
 
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12 }}>

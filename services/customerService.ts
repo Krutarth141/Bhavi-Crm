@@ -1,6 +1,14 @@
 import { supabase } from '@/lib/supabase';
 import { Customer } from '@/types/customers';
 
+// Mirrors HTML's shared autoFillFromMobile() (index.html:2578-2589) — looks
+// up an existing customer by mobile so a form can pre-fill name/address.
+export const fetchCustomerByMobile = async (mobile: string): Promise<Customer | null> => {
+    const { data, error } = await supabase.from('customers').select('*').eq('mobile', mobile).limit(1).maybeSingle();
+    if (error) throw error;
+    return data;
+};
+
 export const fetchAllCustomers = async (): Promise<Customer[]> => {
     let all: Customer[] = [];
     let from = 0;
@@ -45,7 +53,7 @@ export const updateCustomer = async (
         const { error } = await supabase
             .from('customers')
             .update({ ...updates, updated_at: new Date().toISOString() })
-            .eq('serial', serial);   // ✅ was .eq('id', id)
+            .eq('serial', serial);   // was .eq('id', id)
 
         if (error) throw error;
         return { success: true };
@@ -60,7 +68,7 @@ export const deleteCustomer = async (serial: string): Promise<{ success: boolean
         const { error } = await supabase
             .from('customers')
             .delete()
-            .eq('serial', serial);   // ✅ was .eq('id', id)
+            .eq('serial', serial);   // was .eq('id', id)
 
         if (error) throw error;
         return { success: true };
@@ -100,7 +108,7 @@ export const importCustomersFromFile = async (file: File): Promise<{ count: numb
 
                     const { error } = await supabase
                         .from('customers')
-                        .upsert(             // ✅ upsert handles insert-or-update cleanly
+                        .upsert(             // upsert handles insert-or-update cleanly
                             {
                                 serial, model, cname: name, mobile, alt_mobile: alt,
                                 address, city, pin, area, state,

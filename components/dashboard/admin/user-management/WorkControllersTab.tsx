@@ -9,10 +9,9 @@ interface Props {
     onAdd: () => void;
     onEdit: (user: AppUser) => void;
     onToggle: (user: AppUser) => void;
-    onDelete: (user: AppUser) => void;
 }
 
-export default function WorkControllersTab({ workControllers, loading, onAdd, onEdit, onToggle, onDelete }: Props) {
+export default function WorkControllersTab({ workControllers, loading, onAdd, onEdit, onToggle }: Props) {
     const active = workControllers.filter(w => w.is_active).length;
 
     return (
@@ -41,7 +40,7 @@ export default function WorkControllersTab({ workControllers, loading, onAdd, on
                 workControllers.map(u => (
                     <UserCard
                         key={u.id} user={u} type="wc"
-                        onEdit={onEdit} onToggle={onToggle} onDelete={onDelete}
+                        onEdit={onEdit} onToggle={onToggle}
                     />
                 ))
             )}

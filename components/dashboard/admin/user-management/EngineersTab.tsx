@@ -9,10 +9,9 @@ interface Props {
     onAdd: () => void;
     onEdit: (user: AppUser) => void;
     onToggle: (user: AppUser) => void;
-    onDelete: (user: AppUser) => void;
 }
 
-export default function EngineersTab({ engineers, loading, onAdd, onEdit, onToggle, onDelete }: Props) {
+export default function EngineersTab({ engineers, loading, onAdd, onEdit, onToggle }: Props) {
     const active = engineers.filter(e => e.is_active).length;
 
     return (
@@ -41,7 +40,7 @@ export default function EngineersTab({ engineers, loading, onAdd, onEdit, onTogg
                 engineers.map(u => (
                     <UserCard
                         key={u.id} user={u} type="engineer"
-                        onEdit={onEdit} onToggle={onToggle} onDelete={onDelete}
+                        onEdit={onEdit} onToggle={onToggle}
                     />
                 ))
             )}

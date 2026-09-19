@@ -22,3 +22,8 @@ export interface TargetFormData {
 export const emptyTargetForm: TargetFormData = {
     eng_id: '', eng_name: '', month: '', target_calls: '', target_amount: '',
 };
+
+// index.html:15430 uses local time (toLocaleDateString('en-CA')), not UTC —
+// toISOString() lags a full month behind local time for the first ~5.5
+// hours of the 1st of the month in IST.
+export const currentMonth = () => new Date().toLocaleDateString('en-CA').slice(0, 7);

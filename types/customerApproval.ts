@@ -34,25 +34,29 @@ export interface ApprovalSpare {
     warranty_chargeable?: boolean;
 }
 
+// Mirrors HTML's estimate modal (index.html:6868-6874, calcApprovalTotal) —
+// a single flat ₹ discount subtracted from parts+service, not two
+// independent percentage discounts. `partsAmt` is auto-filled from the
+// requested spares total but stays directly editable, same as HTML's
+// #est-parts field.
 export interface EstimateForm {
+    partsAmt: string;
     labourAmt: string;
-    partsDisc: string;
-    labourDisc: string;
+    discount: string;
     remark: string;
 }
 
 export const emptyEstimateForm: EstimateForm = {
+    partsAmt: '0',
     labourAmt: '0',
-    partsDisc: '0',
-    labourDisc: '0',
+    discount: '0',
     remark: '',
 };
 
-export const calcEstimate = (form: EstimateForm, spares: ApprovalSpare[]) => {
-    const partsTotal = spares.filter(s => s.requested).reduce((s, sp) => s + (sp.qty || 0) * (sp.price || 0), 0);
-    const partsAfterDisc = partsTotal * (1 - Number(form.partsDisc) / 100);
-    const labourAfterDisc = Number(form.labourAmt) * (1 - Number(form.labourDisc) / 100);
-    const final = partsAfterDisc + labourAfterDisc;
-    const saved = (partsTotal - partsAfterDisc) + (Number(form.labourAmt) - labourAfterDisc);
-    return { partsTotal, partsAfterDisc, labourAfterDisc, final, saved };
+export const calcEstimate = (form: EstimateForm) => {
+    const parts = Number(form.partsAmt) || 0;
+    const labour = Number(form.labourAmt) || 0;
+    const discount = Number(form.discount) || 0;
+    const final = Math.max(0, parts + labour - discount);
+    return { parts, labour, discount, final };
 };
