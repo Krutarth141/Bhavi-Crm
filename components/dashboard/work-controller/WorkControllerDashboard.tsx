@@ -97,6 +97,7 @@ export default function WorkControllerDashboard() {
     // EngineerDashboard already uses to cross-navigate + hand off a pending
     // action.
     const [pendingNewCall, setPendingNewCall] = useState(false);
+    const [pendingViewTicketId, setPendingViewTicketId] = useState<string | null>(null);
 
     const handleNavClick = (id: WorkControllerTab) => {
         setActiveTab(id);
@@ -105,7 +106,7 @@ export default function WorkControllerDashboard() {
 
     useEffect(() => {
         const onNavigate = (e: Event) => {
-            const detail = (e as CustomEvent<{ tab: WorkControllerTab; openNewCall?: boolean }>).detail;
+            const detail = (e as CustomEvent<{ tab: WorkControllerTab; openNewCall?: boolean; ticketId?: string }>).detail;
             if (detail?.tab === 'tickets') {
                 setActiveTab('tickets');
                 if (detail.openNewCall) setPendingNewCall(true);
@@ -118,7 +119,7 @@ export default function WorkControllerDashboard() {
     const renderContent = () => {
         switch (activeTab) {
             case 'overview': return <DashboardOverview role="work_controller" />;
-            case 'tickets': return <TicketsScreen autoOpenAdd={pendingNewCall} onConsumedAutoOpenAdd={() => setPendingNewCall(false)} />;
+            case 'tickets': return <TicketsScreen autoOpenAdd={pendingNewCall} onConsumedAutoOpenAdd={() => setPendingNewCall(false)} autoOpenTicketId={pendingViewTicketId} onConsumedAutoOpenTicketId={() => setPendingViewTicketId(null)} />;
             case 'pending': return <PendingListScreen />;
             case 'customers': return <CustomersScreen />;
             case 'walkin': return <WalkInScreen />;

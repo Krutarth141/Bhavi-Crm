@@ -120,6 +120,7 @@ export default function AdminDashboard() {
     // EngineerDashboard already uses to cross-navigate + hand off a pending
     // action.
     const [pendingNewCall, setPendingNewCall] = useState(false);
+    const [pendingViewTicketId, setPendingViewTicketId] = useState<string | null>(null);
 
     const handleNavClick = (id: AdminTab) => {
         setActiveTab(id);
@@ -128,10 +129,10 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         const onNavigate = (e: Event) => {
-            const detail = (e as CustomEvent<{ tab: AdminTab; openNewCall?: boolean }>).detail;
+            const detail = (e as CustomEvent<{ tab: AdminTab; openNewCall?: boolean; ticketId?: string }>).detail;
             if (detail?.tab === 'tickets') {
                 setActiveTab('tickets');
-                if (detail.openNewCall) setPendingNewCall(true);
+                if (detail.ticketId) setPendingViewTicketId(detail.ticketId);
             }
         };
         window.addEventListener('bhavi:navigate-tab', onNavigate);
@@ -141,7 +142,7 @@ export default function AdminDashboard() {
     const renderContent = () => {
         switch (activeTab) {
             case 'overview': return <DashboardOverview role="admin" />;
-            case 'tickets': return <TicketsScreen autoOpenAdd={pendingNewCall} onConsumedAutoOpenAdd={() => setPendingNewCall(false)} />;
+            case 'tickets': return <TicketsScreen autoOpenAdd={pendingNewCall} onConsumedAutoOpenAdd={() => setPendingNewCall(false)} autoOpenTicketId={pendingViewTicketId} onConsumedAutoOpenTicketId={() => setPendingViewTicketId(null)} />;
             case 'pending': return <PendingListScreen />;
             case 'inventory': return <InventoryScreen />;
             case 'eng-parts': return <EngPartsScreen />;

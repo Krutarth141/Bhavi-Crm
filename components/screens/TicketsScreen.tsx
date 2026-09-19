@@ -39,9 +39,11 @@ interface Props {
   // parent dashboard switches to this tab and sets this flag; consumed once.
   autoOpenAdd?: boolean;
   onConsumedAutoOpenAdd?: () => void;
+  autoOpenTicketId?: string | null;
+  onConsumedAutoOpenTicketId?: () => void;
 }
 
-export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Props = {}) {
+export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, autoOpenTicketId, onConsumedAutoOpenTicketId }: Props = {}) {
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
   const currentUserId = (session?.user as any)?.email;
@@ -97,6 +99,15 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd }: Pr
     }
     return false;
   };
+
+  useEffect(() => {
+    if (!autoOpenTicketId) return;
+    const t = tickets.find((x) => x.id === autoOpenTicketId);
+    if (t) {
+      handleViewTicket(t);
+      onConsumedAutoOpenTicketId?.();
+    }
+  }, [autoOpenTicketId, tickets]);
 
   const isInvoiceable = (t: Ticket) => (t.call_type === 'Non-Warranty' || t.call_type === 'Non-Warranty Repeat') && ['Closed', 'Delivered', 'Customer Reject'].includes(t.status);
   // index.html:6255 splits these two. `canInv` decides who SEES the invoice

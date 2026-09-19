@@ -76,7 +76,9 @@ export default function TATReminder() {
     };
     const goToTicket = (ticketId: string) => {
         setDismissed(true);
-        try { window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'my-calls', ticketId } })); } catch { /* noop */ }
+        const role = (session?.user as any)?.roleType;
+        const tab = role === 'engineer' ? 'my-calls' : 'tickets';
+        try { window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab, ticketId } })); } catch { /* noop */ }
     };
 
     const row = (t: TatTicket, kind: 'overdue' | 'urgent') => {
