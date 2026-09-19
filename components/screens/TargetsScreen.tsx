@@ -8,7 +8,7 @@ const pct = (actual: number, target: number) => target ? Math.min(Math.round(act
 
 export default function TargetsScreen() {
     const { targets, actual, loading, error, month, setMonth, save } = useTargets();
-    const { engineers } = useEngineers();
+    const { activeEngineers: engineers } = useEngineers();
     const [saving, setSaving] = useState<string | null>(null);
     // Mirrors HTML's "Set Monthly Targets" table — one editable row per
     // active engineer (not just engineers who already have a target).

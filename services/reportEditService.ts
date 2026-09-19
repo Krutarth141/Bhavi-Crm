@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { generateTicketNo } from './ticketService';
 
 export const CALL_TYPES = ['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat', 'Other'];
 export const SERVICE_TYPES = ['Carry In', 'On Site'];
@@ -70,9 +71,10 @@ export const importTickets = async (
     let success = 0, errors = 0;
     for (const r of rows.filter(r => r.valid)) {
         try {
-            const jsNo = 'IMP-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+            const newId = await generateTicketNo();
             const { error } = await supabase.from('tickets').insert([{
-                js_no: jsNo,
+                id: newId,
+                job_sheet: newId,
                 cname: r.cname,
                 mobile: r.mobile,
                 model: r.model || null,

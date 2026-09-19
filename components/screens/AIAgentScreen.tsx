@@ -195,8 +195,8 @@ export default function AIAgentScreen() {
         (async () => {
             try {
                 const [{ count: callsCount }, { count: inqCount }, { count: custCount }] = await Promise.all([
-                    supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('status', 'Open'),
-                    supabase.from('auto_inquiries').select('id', { count: 'exact', head: true }).in('status', ['open', 'followup']),
+                    supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('status', 'Pending Allocation'),
+                    supabase.from('auto_inquiries').select('id', { count: 'exact', head: true }).eq('status', 'Open'),
                     supabase.from('customers').select('id', { count: 'exact', head: true }),
                 ]);
                 setKpi({ pendingCalls: callsCount || 0, pendingInquiries: inqCount || 0, totalCustomers: custCount || 0 });
@@ -208,7 +208,7 @@ export default function AIAgentScreen() {
     }, [hasAccess]);
 
     const loadInquiries = async () => {
-        const { data } = await supabase.from('auto_inquiries').select('*').in('status', ['open', 'followup']).order('followup_date', { ascending: true }).limit(30);
+        const { data } = await supabase.from('auto_inquiries').select('*').eq('status', 'Open').order('followup_date', { ascending: true }).limit(30);
         setInquiries(data || []);
     };
     const loadPayments = async () => {
@@ -216,7 +216,7 @@ export default function AIAgentScreen() {
         setPayments(data || []);
     };
     const loadCalls = async () => {
-        const { data } = await supabase.from('tickets').select('*').eq('status', 'Open').order('created_at', { ascending: false }).limit(30);
+        const { data } = await supabase.from('tickets').select('*').eq('status', 'Pending Allocation').order('created_at', { ascending: false }).limit(30);
         setCalls(data || []);
     };
 
@@ -245,7 +245,7 @@ export default function AIAgentScreen() {
     };
 
     const markInquiryDone = async (id: number) => {
-        await supabase.from('auto_inquiries').update({ status: 'followup', followup_date: new Date().toISOString().slice(0, 10) }).eq('id', id);
+        await supabase.from('auto_inquiries').update({ followup_date: null }).eq('id', id);
         loadInquiries();
     };
 

@@ -26,6 +26,7 @@ export interface UserFormData {
     password: string;
     role_type: RoleType;
     eng_type: EngType;
+    require_meter_photo: boolean;
     is_active: boolean;
 }
 
@@ -36,5 +37,6 @@ export const emptyUserForm: UserFormData = {
     password: '',
     role_type: 'engineer',
     eng_type: 'carryin',
+    require_meter_photo: true,
     is_active: true,
 };

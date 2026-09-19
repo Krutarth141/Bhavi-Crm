@@ -267,7 +267,8 @@ export const addSiteVisitWithMaterial = async (params: {
         const totalSelling = params.materials.reduce((s, m) => s + m.total, 0);
 
         const { error } = await supabase.from('auto_site_visits').insert([{
-            site_id: params.site_id, visit_date: params.visit_date, visit_time: params.visit_time || null,
+            site_id: params.site_id, visit_date: params.visit_date,
+            visit_time: params.visit_time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
             work_done: params.work_done || null,
             material_delivered: matText,
             material_items: params.materials.length ? JSON.stringify(params.materials) : null,

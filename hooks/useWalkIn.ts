@@ -23,13 +23,17 @@ export function useWalkIn(roleType: string, userId: string, userName: string = '
     // WC's own wc_id alongside the relevant SELF_CHECKIN_* rows (QR kiosk
     // check-ins), newest first by created_at/arrival_time.
     const fetchLogsForDate = useCallback(
-        async (date: string): Promise<WalkInEntry[]> => {
+        async (date: string, bothWC = false): Promise<WalkInEntry[]> => {
             try {
                 let query = supabase.from('walkin_log').select('*').eq('visit_date', date);
 
-                if (roleType !== 'admin') {
-                    const [selfId, otherId] = selfCheckinIdsFor(userName, userId);
-                    query = query.or(`wc_id.eq.${userId},wc_id.eq.${selfId},wc_id.eq.${otherId}`);
+                if (!(bothWC && roleType === 'admin')) {
+                    if (roleType === 'admin') {
+                        query = query.or(`wc_id.eq.${userId},wc_id.eq.${SELF_CHECKIN_WC_IDS.ICP},wc_id.eq.${SELF_CHECKIN_WC_IDS.CSP},wc_id.eq.${SELF_CHECKIN_WC_IDS.OTHER}`);
+                    } else {
+                        const [selfId, otherId] = selfCheckinIdsFor(userName, userId);
+                        query = query.or(`wc_id.eq.${userId},wc_id.eq.${selfId},wc_id.eq.${otherId}`);
+                    }
                 }
 
                 query = query

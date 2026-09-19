@@ -27,6 +27,7 @@ export const createUser = async (form: UserFormData): Promise<void> => {
             role: form.role_type === 'work_controller' ? 'admin' : 'engineer',
             role_type: form.role_type,
             eng_type: form.eng_type,
+            require_meter_photo: form.require_meter_photo,
         }),
     });
     if (!res.ok) {

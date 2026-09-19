@@ -11,7 +11,7 @@ const monthStart = () => new Date().toLocaleDateString('en-CA').substring(0, 8) 
 const today = () => new Date().toLocaleDateString('en-CA');
 
 export default function EngDailyReportScreen() {
-    const { engineers } = useEngineers();
+    const { activeEngineers: engineers } = useEngineers();
     const [engFilter, setEngFilter] = useState('');
     const [from, setFrom] = useState(monthStart());
     const [to, setTo] = useState(today());

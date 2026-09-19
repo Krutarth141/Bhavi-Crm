@@ -19,9 +19,18 @@ const TYPE_BADGE: Record<string, { bg: string; color: string; label: string }> =
 export default function InventoryHistoryModal({ item, onClose }: Props) {
     const [logs, setLogs] = useState<AutoInventoryLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchAutoInventoryLogs(item.id).then(l => { setLogs(l); setLoading(false); });
+        fetchAutoInventoryLogs(item.id)
+            .then(l => { setLogs(l); setLoading(false); })
+            .catch((err: any) => {
+                const msg = String(err?.message || err);
+                setError(msg.includes('does not exist') || msg.includes('42P01')
+                    ? 'Log table not found. Please create the auto_inventory_log table in Supabase.'
+                    : 'Error: ' + msg);
+                setLoading(false);
+            });
     }, [item.id]);
 
     const totIn = logs.filter(l => l.type === 'in').reduce((a, l) => a + (l.qty || 0), 0);
@@ -32,6 +41,8 @@ export default function InventoryHistoryModal({ item, onClose }: Props) {
         <Modal isOpen title={`📋 ${item.item_name} — IN/OUT History`} onClose={onClose}>
             {loading ? (
                 <p style={{ textAlign: 'center', color: '#6b7280', padding: 30 }}>Loading...</p>
+            ) : error ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#dc2626' }}>{error}</div>
             ) : !logs.length ? (
                 <div style={{ textAlign: 'center', padding: 40, color: '#6b7280' }}>📭 No transaction records found.<br /><small>Records will appear once stock is updated.</small></div>
             ) : (

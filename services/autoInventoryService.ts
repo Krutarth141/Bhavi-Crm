@@ -2,11 +2,9 @@ import { supabase } from '@/lib/supabase';
 import { AutoInventoryItem, AutoInventoryLog, AutoInventoryForm, StockTxnType, ImportInventoryRow } from '@/types/autoInventory';
 
 export const fetchAutoInventory = async (): Promise<AutoInventoryItem[]> => {
-    try {
-        const { data, error } = await supabase.from('auto_inventory').select('*').order('brand').order('item_name');
-        if (error) throw error;
-        return data || [];
-    } catch (err) { console.error('fetchAutoInventory:', err); return []; }
+    const { data, error } = await supabase.from('auto_inventory').select('*').order('brand').order('item_name');
+    if (error) throw error;
+    return data || [];
 };
 
 const formToRow = (form: AutoInventoryForm) => ({
@@ -116,12 +114,9 @@ export const recordStockTransaction = async (params: {
 };
 
 export const fetchAutoInventoryLogs = async (inventoryId: number): Promise<AutoInventoryLog[]> => {
-    try {
-        const { data, error } = await supabase.from('auto_inventory_log').select('*')
-            .eq('inventory_id', inventoryId).order('created_at', { ascending: false }).limit(100);
-        if (error) throw error;
-        return data || [];
-    } catch (err) { console.error('fetchAutoInventoryLogs:', err); return []; }
+    const { data, error } = await supabase.from('auto_inventory').select('*').order('brand').order('item_name');
+    if (error) throw error;
+    return data || [];
 };
 
 export const bulkStockUpdate = async (params: {

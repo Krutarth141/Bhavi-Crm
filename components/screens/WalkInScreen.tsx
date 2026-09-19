@@ -47,15 +47,16 @@ export default function WalkInScreen() {
   const [histDate, setHistDate] = useState(getToday());
   const [histLogs, setHistLogs] = useState<WalkInEntry[] | null>(null);
   const [histLoading, setHistLoading] = useState(false);
-  const isHistToday = histDate === getToday();
+  const [histBothWC, setHistBothWC] = useState(false);
+  const isHistToday = histDate === getToday() && !histBothWC;
 
   const loadHistView = useCallback(async () => {
-    if (histDate === getToday()) { setHistLogs(null); return; }
+    if (histDate === getToday() && !histBothWC) { setHistLogs(null); return; }
     setHistLoading(true);
-    const logs = await fetchLogsForDate(histDate);
+    const logs = await fetchLogsForDate(histDate, histBothWC);
     setHistLogs(logs);
     setHistLoading(false);
-  }, [histDate, fetchLogsForDate]);
+  }, [histDate, histBothWC, fetchLogsForDate]);
 
   useEffect(() => { loadHistView(); }, [loadHistView]);
 
@@ -254,6 +255,11 @@ export default function WalkInScreen() {
               onChange={(e) => setHistDate(e.target.value)}
               style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 13, outline: 'none', cursor: 'pointer' }}
             />
+            {currentUserRole === 'admin' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                <input type="checkbox" checked={histBothWC} onChange={(e) => setHistBothWC(e.target.checked)} style={{ cursor: 'pointer' }} /> Both WC
+              </label>
+            )}
             <button
               style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}
               onClick={() => loadHistView()}
@@ -265,7 +271,7 @@ export default function WalkInScreen() {
           </div>
         </div>
         <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
-          <b>{displayLogs.length}</b> entries for <b>{histDateLabel}</b>{isHistToday ? ' (Today)' : ''}
+          <b>{displayLogs.length}</b> entries for <b>{histDateLabel}</b>{isHistToday ? ' (Today)' : ''}{histBothWC ? <span style={{ color: '#7c3aed' }}> — Both WC</span> : null}
         </div>
         {displayLoading ? (
           <div style={styles.loadingText}>Loading...</div>

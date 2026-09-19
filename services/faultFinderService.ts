@@ -2,18 +2,13 @@ import { supabase } from '@/lib/supabase';
 import { FaultKnowledge, FaultKnowledgeForm } from '@/types/faultFinder';
 
 export const fetchFaultKnowledge = async (): Promise<FaultKnowledge[]> => {
-    try {
-        const { data, error } = await supabase
-            .from('fault_knowledge')
-            .select('*')
-            .order('model_name')
-            .limit(2000);
-        if (error) throw error;
-        return data || [];
-    } catch (err) {
-        console.error('Failed to fetch fault knowledge:', err);
-        return [];
-    }
+    const { data, error } = await supabase
+        .from('fault_knowledge')
+        .select('*')
+        .order('model_name')
+        .limit(2000);
+    if (error) throw error;
+    return data || [];
 };
 
 export const createFaultKnowledge = async (

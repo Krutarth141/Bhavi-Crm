@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useEngineers } from '@/hooks/useEngineers';
 import { useEngineerUpdate } from '@/hooks/useEngineerUpdate';
 import Modal from '@/components/Modal';
 import { EngineerTicket, UpdateForm } from '@/types/engineerUpdate';
@@ -131,7 +132,9 @@ export default function EngineerUpdateScreen() {
     const roleType = (session?.user as any)?.roleType ?? '';
 
     const [statusFilter, setStatusFilter] = useState<'active' | 'closed' | 'all'>('active');
-    const { tickets, loading, error, active, closed, update, refetch } = useEngineerUpdate(userName, statusFilter);
+    const { activeEngineers } = useEngineers();
+    const [engFilterName, setEngFilterName] = useState('');
+    const { tickets, loading, error, active, closed, update, refetch } = useEngineerUpdate(engFilterName, statusFilter);
 
     const [selected, setSelected] = useState<EngineerTicket | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
@@ -282,7 +285,7 @@ export default function EngineerUpdateScreen() {
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
             {/* Filter tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                 {([
                     { id: 'active', label: `🔵 Active (${active})` },
                     { id: 'closed', label: `✅ Closed (${closed})` },
@@ -292,6 +295,10 @@ export default function EngineerUpdateScreen() {
                         {tab.label}
                     </button>
                 ))}
+                <select value={engFilterName} onChange={(e) => setEngFilterName(e.target.value)} style={{ padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, marginLeft: 'auto' }}>
+                    <option value="">👷 All Engineers</option>
+                    {(activeEngineers as any[]).map((e: any) => <option key={e.user_id} value={e.name}>{e.name}</option>)}
+                </select>
             </div>
 
             {loading ? <p style={{ textAlign: 'center', color: '#6b7280', padding: 40 }}>Loading...</p>

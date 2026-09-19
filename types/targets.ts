@@ -22,5 +22,3 @@ export interface TargetFormData {
 export const emptyTargetForm: TargetFormData = {
     eng_id: '', eng_name: '', month: '', target_calls: '', target_amount: '',
 };
-
-export const currentMonth = () => new Date().toISOString().slice(0, 7);

@@ -79,13 +79,19 @@ export default function SwSurveyScreen({ initialSiteId, initialSiteName, onConsu
     // silently creating a duplicate blank one. Only when there is none does the
     // form stay on "new", pre-filled from the site.
     const handleSiteSelect = async (id: string) => {
-        skipAutosaveRef.current = true;
-        setSiteSurveyNote('');
         if (!id) {
+            skipAutosaveRef.current = true;
+            setSiteSurveyNote('');
             setSiteId(null);
             return;
         }
         const numId = Number(id);
+        const hasUnsavedData = editId == null && (clientName.trim() || siteName.trim() || swSurveyTotal({ rooms }) > 0);
+        if (hasUnsavedData && !confirm('Switching site will replace the survey data you\'ve already entered with that site\'s saved survey (or a blank one). Continue?')) {
+            return;
+        }
+        skipAutosaveRef.current = true;
+        setSiteSurveyNote('');
         setSiteId(numId);
         const site = sites.find((x) => x.id === numId);
         const existing = await fetchSwSurveysBySite(numId);

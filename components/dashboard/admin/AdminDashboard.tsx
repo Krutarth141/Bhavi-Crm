@@ -96,7 +96,7 @@ const NAV_ITEMS: { id: AdminTab; label: string }[] = [
     { id: 'auto-visits-report', label: '📋 Visit Report' },
     { id: 'ai-agent', label: '🤖 Virtual AI Agent' },
     { id: 'ai-analysis', label: '🤖 AI Analysis' },
-    { id: 'report-edit', label: '✏️ Report Edit' },
+    { id: 'report-edit', label: '📥 Import Calls' },
     { id: 'customer-approval', label: '✅ Customer Approval' },
     { id: 'engineer-update', label: '🛠️ Engineer Update' },
     { id: 'part-request', label: '🧰 Part Request' },

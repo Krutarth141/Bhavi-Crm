@@ -38,6 +38,7 @@ export default function UserFormModal({ isOpen, editingUser, modalType, onClose,
                 password: '',
                 role_type: editingUser.role_type,
                 eng_type: editingUser.eng_type || 'carryin',
+                require_meter_photo: editingUser.require_meter_photo !== false,
                 is_active: editingUser.is_active,
             });
         } else {
@@ -152,6 +153,16 @@ export default function UserFormModal({ isOpen, editingUser, modalType, onClose,
                                 </button>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {modalType === 'engineer' && form.eng_type !== 'carryin' && (
+                    <div>
+                        <label style={labelStyle}>Meter Photo</label>
+                        <select value={String(form.require_meter_photo)} onChange={e => set('require_meter_photo', e.target.value === 'true')} style={fieldStyle}>
+                            <option value="true">📷 Compulsory</option>
+                            <option value="false">📷 Optional</option>
+                        </select>
                     </div>
                 )}
 
