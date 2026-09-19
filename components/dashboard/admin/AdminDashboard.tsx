@@ -132,6 +132,7 @@ export default function AdminDashboard() {
             const detail = (e as CustomEvent<{ tab: AdminTab; openNewCall?: boolean; ticketId?: string }>).detail;
             if (detail?.tab === 'tickets') {
                 setActiveTab('tickets');
+                if (detail.openNewCall) setPendingNewCall(true);
                 if (detail.ticketId) setPendingViewTicketId(detail.ticketId);
             }
         };

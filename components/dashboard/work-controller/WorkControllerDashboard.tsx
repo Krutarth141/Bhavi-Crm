@@ -110,6 +110,7 @@ export default function WorkControllerDashboard() {
             if (detail?.tab === 'tickets') {
                 setActiveTab('tickets');
                 if (detail.openNewCall) setPendingNewCall(true);
+                if (detail.ticketId) setPendingViewTicketId(detail.ticketId);
             }
         };
         window.addEventListener('bhavi:navigate-tab', onNavigate);
