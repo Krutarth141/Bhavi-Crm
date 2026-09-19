@@ -3,13 +3,11 @@
 import { useState } from 'react';
 import Modal from '@/components/Modal';
 import { PunchLog } from '@/types/attendance';
-import { EmployeeShift } from '@/types/settings';
 import { to24h } from '@/utils/attendanceCalc';
 import { saveAttendanceEdit } from '@/services/attendanceService';
 
 interface Props {
     log: PunchLog;
-    shift?: EmployeeShift;
     onClose: () => void;
     onDone: () => void;
 }
@@ -17,7 +15,7 @@ interface Props {
 const fieldStyle = { width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', boxSizing: 'border-box' as const };
 const labelStyle = { fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 3 };
 
-export default function AttEditModal({ log, shift, onClose, onDone }: Props) {
+export default function AttEditModal({ log, onClose, onDone }: Props) {
     const [inTime, setInTime] = useState(to24h(log.punch_in_time));
     const [outTime, setOutTime] = useState(to24h(log.punch_out_time));
     const [remark, setRemark] = useState('');
@@ -25,7 +23,7 @@ export default function AttEditModal({ log, shift, onClose, onDone }: Props) {
 
     const handleSave = async () => {
         setSaving(true);
-        const r = await saveAttendanceEdit(log, inTime, outTime, remark.trim(), shift);
+        const r = await saveAttendanceEdit(log, inTime, outTime, remark.trim());
         setSaving(false);
         if (r.success) onDone();
         else alert('Error: ' + r.error);

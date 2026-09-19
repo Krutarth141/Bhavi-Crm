@@ -271,7 +271,14 @@ export const useInventory = () => {
             await fetchInventory();
             return { success: true };
         } catch (err: any) {
-            return { success: false, error: err.message };
+            const msg = String(err?.message || err);
+            if (err?.code === '23503' || msg.toLowerCase().includes('foreign key')) {
+                return {
+                    success: false,
+                    error: '⚠️ This part cannot be deleted because it has usage/movement history.\n\nYou can:\n• Set stock to 0 using the 📦 adjust button\n• Or keep it and just stop using it',
+                };
+            }
+            return { success: false, error: msg };
         }
     };
 

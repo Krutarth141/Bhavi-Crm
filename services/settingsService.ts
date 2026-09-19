@@ -63,6 +63,11 @@ export const saveEmployeeShift = async (shift: EmployeeShift): Promise<void> => 
     }
 };
 
+export const fetchEmployeeShift = async (empId: string): Promise<EmployeeShift | undefined> => {
+    const { data } = await supabase.from('shift_settings').select('*').eq('emp_id', empId).limit(1).maybeSingle();
+    return data || undefined;
+};
+
 // Used by attendance computations (next step): shift lookup keyed by emp_id.
 export const fetchShiftMap = async (): Promise<Record<string, EmployeeShift>> => {
     const { data } = await supabase.from('shift_settings').select('*');

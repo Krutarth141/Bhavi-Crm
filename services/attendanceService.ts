@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { PunchLog, ATT_EXCLUDED_IDS } from '@/types/attendance';
+import { fetchEmployeeShift } from '@/services/settingsService';
 import { EmployeeShift } from '@/types/settings';
 import { computeAttExtras, computeWorkAndOvertime, fmtAttMin, to12h, PendingEdit } from '@/utils/attendanceCalc';
 import * as XLSX from 'xlsx';
@@ -225,8 +226,9 @@ export const addAttendance = async (params: {
 };
 
 // Admin direct edit — recomputes minutes, marks verified, clears pending edit.
-export const saveAttendanceEdit = async (log: PunchLog, inTime24: string, outTime24: string, remark: string, shift?: EmployeeShift): Promise<{ success: boolean; error?: string }> => {
+export const saveAttendanceEdit = async (log: PunchLog, inTime24: string, outTime24: string, remark: string): Promise<{ success: boolean; error?: string }> => {
     try {
+        const shift = await fetchEmployeeShift(log.eng_id || '');
         const newIn = inTime24 ? to12h(inTime24) : log.punch_in_time;
         const newOut = outTime24 ? to12h(outTime24) : log.punch_out_time;
         const { working, overtime } = computeWorkAndOvertime(newIn, newOut, shift);
@@ -256,8 +258,9 @@ export const submitAttEditRequest = async (logId: string, requestedBy: string, r
     } catch (err) { return { success: false, error: String(err) }; }
 };
 
-export const approveAttEdit = async (log: PunchLog, pe: PendingEdit, shift?: EmployeeShift): Promise<{ success: boolean; error?: string }> => {
+export const approveAttEdit = async (log: PunchLog, pe: PendingEdit): Promise<{ success: boolean; error?: string }> => {
     try {
+        const shift = await fetchEmployeeShift(log.eng_id || '');
         const newIn = pe.new_in || log.punch_in_time;
         const newOut = pe.new_out || log.punch_out_time;
         const { working, overtime } = computeWorkAndOvertime(newIn, newOut, shift);

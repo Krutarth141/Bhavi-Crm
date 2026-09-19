@@ -84,7 +84,7 @@ export default function AttendanceScreen() {
         const pe = parsePendingEdit(log.pending_edit);
         if (!pe) { alert('No pending request'); return; }
         if (!confirm(`Approve edit request from ${log.eng_name}?`)) return;
-        const r = await approveAttEdit(log, pe, log.eng_id ? shiftMap[log.eng_id] : undefined);
+        const r = await approveAttEdit(log, pe);
         if (r.success) { alert('✅ Attendance edit approved!'); await load(); }
         else alert('Error: ' + r.error);
     };
@@ -267,7 +267,7 @@ export default function AttendanceScreen() {
                 <AttAddModal employees={addEmployees} shiftMap={shiftMap} onClose={() => setAddOpen(false)} onDone={async () => { setAddOpen(false); await refetch(); }} />
             )}
             {editLog && (
-                <AttEditModal log={editLog} shift={editLog.eng_id ? shiftMap[editLog.eng_id] : undefined} onClose={() => setEditLog(null)} onDone={async () => { setEditLog(null); await refetch(); }} />
+                <AttEditModal log={editLog} onClose={() => setEditLog(null)} onDone={async () => { setEditLog(null); await refetch(); }} />
             )}
             {requestLog && (
                 <AttEditRequestModal log={requestLog} requestedBy={adminName} onClose={() => setRequestLog(null)} onDone={async () => { setRequestLog(null); await refetch(); }} />

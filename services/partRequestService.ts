@@ -8,28 +8,23 @@ import { advancePendingEngineerStockTickets } from './engPartsService';
 // RETURN show). There is no way to browse Approved/Rejected/All here — that
 // matches HTML exactly, which never offers one on this view.
 export const fetchPartRequests = async (typeFilter?: 'RETURN'): Promise<PartRequest[]> => {
-    try {
-        let all: PartRequest[] = [];
-        let from = 0;
-        const PAGE = 1000;
-        while (true) {
-            let query = supabase
-                .from('eng_part_requests')
-                .select('*')
-                .eq('status', 'PENDING')
-                .order('created_at', { ascending: true });
-            if (typeFilter) query = query.eq('type', typeFilter);
-            const { data: page, error } = await query.range(from, from + PAGE - 1);
-            if (error) throw error;
-            all = all.concat(page || []);
-            if (!page || page.length < PAGE) break;
-            from += PAGE;
-        }
-        return all;
-    } catch (err) {
-        console.error('fetchPartRequests:', err);
-        return [];
+    let all: PartRequest[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        let query = supabase
+            .from('eng_part_requests')
+            .select('*')
+            .eq('status', 'PENDING')
+            .order('created_at', { ascending: true });
+        if (typeFilter) query = query.eq('type', typeFilter);
+        const { data: page, error } = await query.range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(page || []);
+        if (!page || page.length < PAGE) break;
+        from += PAGE;
     }
+    return all;
 };
 
 // Engineer self-service: submit a new Request/Return, pending admin approval.

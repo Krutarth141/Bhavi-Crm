@@ -65,6 +65,13 @@ export default function ProblemTypesTab({ brands, problemTypes, onAdd, onEdit, o
         catch (e: any) { alert(e.message); }
     };
 
+    const handleToggle = async (p: ProblemType) => {
+        const verb = p.is_active ? 'deactivate' : 'activate';
+        if (!confirm(`Are you sure you want to ${verb} "${p.problem}"?${p.is_active ? '\n\nThis will hide it from ticket creation everywhere.' : ''}`)) return;
+        try { await onToggle(p.id, !p.is_active); }
+        catch (e: any) { alert(e.message); }
+    };
+
     const displayed = showInactive ? problemTypes : problemTypes.filter(p => p.is_active);
 
     return (
@@ -137,7 +144,7 @@ export default function ProblemTypesTab({ brands, problemTypes, onAdd, onEdit, o
                                                     borderRadius: 4, padding: '2px 8px', fontSize: 11,
                                                     cursor: 'pointer', fontWeight: 500,
                                                 }}
-                                                onClick={() => onToggle(p.id, !p.is_active)}
+                                                onClick={() => handleToggle(p)}
                                                 title="Click to toggle"
                                             >
                                                 {p.is_active ? '✅ Active' : '❌ Inactive'}

@@ -20,31 +20,35 @@ export const uploadCrmPhoto = async (dataUrl: string, fname: string): Promise<st
     return supabase.storage.from(PHOTO_BUCKET).getPublicUrl(fname).data.publicUrl;
 };
 
+const isMissingColumnError = (err: any) => err?.code === '42703' || /column .* does not exist/i.test(String(err?.message || ''));
+
 export const fetchEngineerTickets = async (
     engineerName: string,
     statusFilter: 'active' | 'closed' | 'all'
 ): Promise<EngineerTicket[]> => {
     try {
-        let query = supabase
-            .from('tickets')
-            .select(TICKET_COLUMNS)
-            .order('updated_at', { ascending: false })
-            .limit(100);
+        const build = (columns: string) => {
+            let query = supabase
+                .from('tickets')
+                .select(columns)
+                .order('updated_at', { ascending: false })
+                .limit(100);
+            if (engineerName) query = query.eq('assigned_name', engineerName);
+            if (statusFilter === 'active') {
+                query = query
+                    .neq('status', 'Closed')
+                    .neq('status', 'Call Cancel')
+                    .neq('status', 'Customer Reject');
+            } else if (statusFilter === 'closed') {
+                query = query.in('status', ['Closed', 'Call Cancel', 'Customer Reject']);
+            }
+            return query;
+        };
 
-        if (engineerName) query = query.eq('assigned_name', engineerName);
-
-        if (statusFilter === 'active') {
-            query = query
-                .neq('status', 'Closed')
-                .neq('status', 'Call Cancel')
-                .neq('status', 'Customer Reject');
-        } else if (statusFilter === 'closed') {
-            query = query.in('status', ['Closed', 'Call Cancel', 'Customer Reject']);
-        }
-
-        const { data, error } = await query;
+        let { data, error } = await build(TICKET_COLUMNS);
+        if (error && isMissingColumnError(error)) ({ data, error } = await build('*'));
         if (error) throw error;
-        return data || [];
+        return (data as any) || [];
     } catch (err) {
         console.error('fetchEngineerTickets:', err);
         return [];
@@ -55,12 +59,10 @@ export const fetchEngineerTickets = async (
 // Update modal can reflect the fresh timeline without a full list reload.
 export const fetchTicketById = async (id: string): Promise<EngineerTicket | null> => {
     try {
-        const { data, error } = await supabase
-            .from('tickets')
-            .select(TICKET_COLUMNS)
-            .eq('id', id).maybeSingle();
+        let { data, error } = await supabase.from('tickets').select(TICKET_COLUMNS).eq('id', id).maybeSingle();
+        if (error && isMissingColumnError(error)) ({ data, error } = await supabase.from('tickets').select('*').eq('id', id).maybeSingle());
         if (error) throw error;
-        return data;
+        return data as any;
     } catch (err) {
         console.error('fetchTicketById:', err);
         return null;

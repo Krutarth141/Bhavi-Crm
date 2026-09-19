@@ -175,7 +175,7 @@ export default function InventoryScreen() {
             supplier: '',
             invoice: '',
             customer: '',
-            sell_price: 0,
+            sell_price: item.unit_price || 0,
         });
         setTransactionType('in');
     };
