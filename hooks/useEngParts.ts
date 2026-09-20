@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { EngStock, EngMovement } from '@/types/engParts';
 import { InventoryItem } from '@/types/inventory';
 import { PartRequest } from '@/types/partRequest';
+import { fetchPartRequests } from '@/services/partRequestService';
 
 // index.html:11226 — "My Requests" (self-service) is scoped server-side to
 // the logged-in engineer via ?engineer_id=eq.<id>&limit=100, distinct from
@@ -49,24 +50,23 @@ export function useEngParts(engineerId?: string) {
 
             const [
                 { data: movementsData, error: movementsError },
-                { data: requestsData, error: requestsError },
+                requestsData,
                 myRequestsResult,
             ] = await Promise.all([
                 supabase.from('eng_movements').select('*').order('created_at', { ascending: false }).limit(500),
-                supabase.from('eng_part_requests').select('*').order('created_at', { ascending: false }).limit(200),
+                fetchPartRequests(),
                 engineerId
                     ? supabase.from('eng_part_requests').select('*').eq('engineer_id', engineerId).order('created_at', { ascending: false }).limit(100)
                     : Promise.resolve({ data: [] as PartRequest[], error: null }),
             ]);
 
             if (movementsError) throw movementsError;
-            if (requestsError) throw requestsError;
             if (myRequestsResult.error) throw myRequestsResult.error;
 
             setInventory(inv);
             setEngStock(stock);
             setMovements(movementsData ?? []);
-            setRequests(requestsData ?? []);
+            setRequests(requestsData);
             setMyRequests(myRequestsResult.data ?? []);
 
             // Derive unique sorted engineer names from eng_stock.owner
@@ -82,10 +82,7 @@ export function useEngParts(engineerId?: string) {
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
-    // Pending requests = status 'PENDING'
-    const pendingRequests = requests.filter(
-        (r) => r.status === 'PENDING'
-    );
+    const pendingRequests = requests;
 
     return {
         inventory,

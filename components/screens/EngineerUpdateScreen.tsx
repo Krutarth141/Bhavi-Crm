@@ -135,6 +135,7 @@ export default function EngineerUpdateScreen() {
     const { activeEngineers } = useEngineers();
     const [engFilterName, setEngFilterName] = useState('');
     const { tickets, loading, error, active, closed, update, refetch } = useEngineerUpdate(engFilterName, statusFilter);
+    const isAdminOrWC = roleType === 'admin' || roleType === 'work_controller';
 
     const [selected, setSelected] = useState<EngineerTicket | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
@@ -241,13 +242,21 @@ export default function EngineerUpdateScreen() {
 
     const openUpdate = (ticket: EngineerTicket) => {
         setSelected(ticket);
-        const allowed = getAllowedStatuses(ticket.status, 'engineer', ticket.service_type, ticket.call_type, ticket.warranty_coverage);
+        const allowed = getAllowedStatuses(ticket.status, isAdminOrWC ? 'admin' : 'engineer', ticket.service_type, ticket.call_type, ticket.warranty_coverage);
         setForm({ newStatus: allowed[0] || '', note: '', labour: String(ticket.labor || ticket.service_charges || ''), faultCode: ticket.fault_code || '' });
         setModalOpen(true);
     };
 
     const handleSave = async () => {
         if (!selected || !form.newStatus) { alert('Select new status'); return; }
+        if (['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'].includes(selected.status || '')) {
+            alert('❌ This call is closed — no updates allowed.');
+            return;
+        }
+        if (!form.note.trim()) {
+            alert('❌ Action Taken is required.\nPlease describe what was done.');
+            return;
+        }
 
         let note = form.note;
         if (form.newStatus === 'Call Cancel') {
@@ -263,7 +272,7 @@ export default function EngineerUpdateScreen() {
         setSaving(false);
     };
 
-    const allowed = getAllowedStatuses(selected?.status, 'engineer', selected?.service_type, selected?.call_type, selected?.warranty_coverage);
+    const allowed = getAllowedStatuses(selected?.status, isAdminOrWC ? 'admin' : 'engineer', selected?.service_type, selected?.call_type, selected?.warranty_coverage);
     const workPanel = selected ? computeWorkPanel(selected) : null;
 
     const modalFooter = (
@@ -307,7 +316,7 @@ export default function EngineerUpdateScreen() {
                         <div style={{ display: 'grid', gap: 10 }}>
                             {tickets.map(t => {
                                 const sc = statusColor[t.status || ''] || { bg: '#f3f4f6', color: '#374151' };
-                                const canUpdate = getAllowedStatuses(t.status, 'engineer', t.service_type, t.call_type, t.warranty_coverage).length > 0;
+                                const canUpdate = getAllowedStatuses(t.status, isAdminOrWC ? 'admin' : 'engineer', t.service_type, t.call_type, t.warranty_coverage).length > 0;
                                 return (
                                     <div key={t.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

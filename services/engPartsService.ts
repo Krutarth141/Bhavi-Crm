@@ -411,3 +411,28 @@ export const fetchConsumableCodes = async (codes: string[]): Promise<Set<string>
         return new Set((data || []).filter((r: any) => r.is_consumable).map((r: any) => String(r.part_code).toUpperCase()));
     } catch { return new Set(); }
 };
+
+export const adjustStock = async (
+    owner: string, partId: string, currentQty: number, newQty: number, remark: string, createdBy: string
+): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const delta = newQty - currentQty;
+        if (owner === 'MAIN') {
+            await invQtyAdjust(partId, delta);
+        } else {
+            await engStockAdjust(owner, partId, delta);
+        }
+        await logMovement({
+            type: 'ADJUST',
+            part_id: partId,
+            qty: Math.abs(delta),
+            from_owner: delta > 0 ? 'CORRECTION' : owner,
+            to_owner: delta > 0 ? owner : 'CORRECTION',
+            notes: `Stock correction: ${currentQty}→${newQty} | Reason: ${remark}`,
+            created_by: createdBy,
+        });
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};

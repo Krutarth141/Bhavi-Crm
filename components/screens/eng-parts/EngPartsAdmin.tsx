@@ -15,7 +15,9 @@ import {
   engineerReturn,
   warrantyReturn,
   directWarrantyIssue,
+  adjustStock,
 } from '@/services/engPartsService';
+import AdjustStockModal from './AdjustStockModal';
 import { approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
@@ -49,6 +51,7 @@ export default function EngPartsAdmin({
   const [activeTab, setActiveTab] = useState<AdminTabType>(cspManagerMode ? 'pending' : 'overview');
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [search, setSearch] = useState('');
+  const [adjustTarget, setAdjustTarget] = useState<{ owner: string; partId: string; ownerLabel: string; partLabel: string; currentQty: number } | null>(null);
 
   // ── KPI values ───────────────────────────────────────────────────────────
   const officeStockValue = inventory.reduce(
@@ -119,6 +122,13 @@ export default function EngPartsAdmin({
     part_id: string; eng_name: string; qty: number; job_sheet: string; note?: string;
   }) => {
     await directWarrantyIssue(params);
+    onRefetch();
+  };
+
+  const handleAdjustSave = async (newQty: number, remark: string) => {
+    if (!adjustTarget) return;
+    const r = await adjustStock(adjustTarget.owner, adjustTarget.partId, adjustTarget.currentQty, newQty, remark, approvedBy);
+    if (!r.success) alert('Error: ' + r.error);
     onRefetch();
   };
 
@@ -246,7 +256,11 @@ export default function EngPartsAdmin({
                       <tr key={item.id} style={styles.tableRow}>
                         <td style={styles.tableCell}>{item.part_code ?? item.item_code}</td>
                         <td style={styles.tableCell}>{item.item_name}</td>
-                        <td style={{ ...styles.tableCell, color: stockColor(item), fontWeight: 600 }}>
+                        <td
+                          style={{ ...styles.tableCell, color: stockColor(item), fontWeight: 600, cursor: 'pointer' }}
+                          title="Click to correct stock"
+                          onClick={() => setAdjustTarget({ owner: 'MAIN', partId: item.id, ownerLabel: '🏢 Office Stock', partLabel: `${item.part_code ?? item.item_code ?? ''} ${item.item_name}`.trim(), currentQty: item.qty_in_stock })}
+                        >
                           {item.qty_in_stock}
                         </td>
                         <td style={styles.tableCell}>{item.min_stock}</td>
@@ -254,7 +268,12 @@ export default function EngPartsAdmin({
                         {engineers.map(eng => {
                           const stock = engStock.find(s => s.owner === eng && s.part_id === item.id);
                           return (
-                            <td key={eng} style={styles.tableCell}>
+                            <td
+                              key={eng}
+                              style={{ ...styles.tableCell, cursor: 'pointer' }}
+                              title="Click to correct stock"
+                              onClick={() => setAdjustTarget({ owner: eng, partId: item.id, ownerLabel: `👷 ${eng}`, partLabel: `${item.part_code ?? item.item_code ?? ''} ${item.item_name}`.trim(), currentQty: stock ? stock.qty : 0 })}
+                            >
                               {stock ? stock.qty : 0}
                             </td>
                           );
@@ -489,6 +508,15 @@ export default function EngPartsAdmin({
           inventory={inventory}
           onSave={handleDirectWarrantyIssueSave}
           onClose={() => setActiveModal(null)}
+        />
+      )}
+      {adjustTarget && (
+        <AdjustStockModal
+          ownerLabel={adjustTarget.ownerLabel}
+          partLabel={adjustTarget.partLabel}
+          currentQty={adjustTarget.currentQty}
+          onSave={handleAdjustSave}
+          onClose={() => setAdjustTarget(null)}
         />
       )}
     </div>

@@ -24,7 +24,7 @@ import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
 import { approveTicket, rejectTicket, markDeliveredAfterReject, markDeliveredWithPayment, DeliveryPaymentData } from '@/services/customerApprovalService';
 import {
-  computeCloseCharges, needsPaymentConfirmation, deliveryPaymentPrefill, fetchSpareConsumableCodes,
+  computeCloseCharges, needsPaymentConfirmation, deliveryPaymentPrefill, fetchSpareConsumableCodes, deductTicketParts,
 } from '@/services/engineerUpdateService';
 import { EstimateForm, emptyEstimateForm, calcEstimate, ApprovalSpare } from '@/types/customerApproval';
 import { fetchProblemTypes, fetchBrands, fetchSubCategories } from '@/services/masterService';
@@ -285,6 +285,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     // are always available on the ticket view (not gated behind a separate
     // edit mode). Only include them in the update when actually changed.
     const updates: Record<string, any> = { remarks: formData.remarks };
+    let forceReason: string | null = null;
     if (formData.status && formData.status !== selectedTicket.status) {
       // Carry-In device handover (Repaired → Delivered, or a Customer Reject
       // pickup) bills & collects payment before anything else — checked
@@ -304,6 +305,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
       const label = isCancel ? 'Cancel reason' : 'Status change reason';
       updates.remarks = updates.remarks ? `${updates.remarks}\n\n${label}: ${reason}` : `${label}: ${reason}`;
       updates.status = formData.status;
+      forceReason = reason;
     }
     if (formData.assigned_to !== undefined && formData.assigned_to !== selectedTicket.assigned_to) {
       updates.assigned_to = formData.assigned_to || null;
@@ -313,6 +315,18 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     try {
       const result = await updateTicket(selectedTicket.id, updates);
       if (result.success) {
+        if (updates.status && forceReason) {
+          const byUser = (session?.user as any)?.name || currentUserRole || '';
+          try {
+            const { data: fresh } = await supabase.from('tickets').select('timeline').eq('id', selectedTicket.id).single();
+            await supabase.from('tickets').update({
+              timeline: [...(fresh?.timeline || []), { action: `Force Status → ${updates.status}`, by: byUser, at: new Date().toISOString(), note: `Reason: ${forceReason}` }],
+            }).eq('id', selectedTicket.id);
+          } catch { /* best-effort audit trail */ }
+          if (['Closed', 'Resolved By Phone', 'Repaired', 'Pending for Delivery'].includes(updates.status)) {
+            try { await deductTicketParts(selectedTicket.id, byUser); } catch { /* best-effort */ }
+          }
+        }
         alert('✅ Changes saved!');
         setModalOpen(false);
         await fetchTickets();
@@ -342,6 +356,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     try {
       const result = await closeTicket(selectedTicket.id, formData.remarks, (session?.user as any)?.name || currentUserRole || '');
       if (result.success) {
+        try { await deductTicketParts(selectedTicket.id, (session?.user as any)?.name || currentUserRole || ''); } catch { /* best-effort */ }
         alert('✅ Ticket closed!');
         setModalOpen(false);
         resetForm();

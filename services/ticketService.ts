@@ -388,7 +388,7 @@ export const approveReportEdit = async (
         const ch = pe.changes || {};
         const now = new Date().toISOString();
         const patch: Record<string, any> = { pending_edit: null, updated_at: now };
-        ['cname', 'mobile', 'alt_mobile', 'city', 'address', 'area', 'pin', 'call_type', 'service_type', 'problem', 'description', 'model', 'serial', 'condition', 'se_call_id', 'labor', 'brand_name'].forEach(f => {
+        ['cname', 'mobile', 'alt_mobile', 'city', 'state', 'address', 'area', 'pin', 'call_type', 'service_type', 'problem', 'description', 'model', 'serial', 'condition', 'se_call_id', 'labor', 'brand_name'].forEach(f => {
             if (ch[f]) patch[f] = ch[f].new;
         });
         const tl = ticket.timeline || [];

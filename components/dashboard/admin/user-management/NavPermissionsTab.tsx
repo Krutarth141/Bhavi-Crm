@@ -5,6 +5,36 @@ import { useUsers } from '@/hooks/useUsers';
 import { WC_NAV_ITEMS, ENGINEER_NAV_ITEMS } from '@/types/navPermissions';
 import { fetchNavPermissions, saveNavPermissionsForUser, resetNavPermissionsForUser } from '@/services/navPermissionsService';
 
+const NAV_DEFAULTS: Record<string, { eng: boolean; wc: boolean }> = {
+    'tickets': { eng: false, wc: true },
+    'pending': { eng: false, wc: true },
+    'customers': { eng: false, wc: true },
+    'walkin': { eng: false, wc: true },
+    'walkin-report': { eng: false, wc: false },
+    'courier': { eng: false, wc: true },
+    'courier-report': { eng: false, wc: false },
+    'reports': { eng: false, wc: false },
+    'inquiries': { eng: true, wc: true },
+    'attendance': { eng: true, wc: true },
+    'work-log': { eng: true, wc: true },
+    'work-log-report': { eng: false, wc: true },
+    'sales': { eng: false, wc: true },
+    'route-planning': { eng: false, wc: true },
+    'my-calls': { eng: true, wc: false },
+    'my-report': { eng: true, wc: false },
+    'payment-collection': { eng: true, wc: false },
+    'field-tasks': { eng: true, wc: true },
+    'parts-catalog': { eng: false, wc: false },
+    'fault-finder': { eng: false, wc: false },
+    'eng-parts': { eng: false, wc: false },
+    'amc': { eng: false, wc: false },
+    'auto-sites': { eng: false, wc: false },
+    'auto-visits-report': { eng: false, wc: false },
+    'auto-inventory': { eng: false, wc: false },
+};
+const navDefault = (id: string, isEngineer: boolean) =>
+    NAV_DEFAULTS[id] ? (isEngineer ? NAV_DEFAULTS[id].eng : NAV_DEFAULTS[id].wc) : true;
+
 export default function NavPermissionsTab() {
     const { workControllers, engineers } = useUsers();
     const employees = [...engineers, ...workControllers].filter((u) => u.is_active);
@@ -25,7 +55,10 @@ export default function NavPermissionsTab() {
             const next: Record<string, boolean> = {};
             // Stored keys carry HTML's "nav-" prefix (e.g. "nav-auto-sites") —
             // strip it back off for this component's internal unprefixed state.
-            items.forEach((item) => { next[item.id] = userOverride ? userOverride[`nav-${item.id}`] !== false : true; });
+            items.forEach((item) => {
+                const stored = userOverride ? userOverride[`nav-${item.id}`] : undefined;
+                next[item.id] = stored !== undefined ? stored !== false : navDefault(item.id, isEng);
+            });
             setChecks(next);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,7 +88,7 @@ export default function NavPermissionsTab() {
         if (!confirm('Reset to role defaults?')) return;
         await resetNavPermissionsForUser(String(selected.id));
         const next: Record<string, boolean> = {};
-        items.forEach((item) => { next[item.id] = true; });
+        items.forEach((item) => { next[item.id] = navDefault(item.id, isEng); });
         setChecks(next);
         showMsg('↩ Reset to default!');
     };

@@ -208,7 +208,7 @@ export default function AIAgentScreen() {
     }, [hasAccess]);
 
     const loadInquiries = async () => {
-        const { data } = await supabase.from('auto_inquiries').select('*').eq('status', 'Open').order('followup_date', { ascending: true }).limit(30);
+        const { data } = await supabase.from('auto_inquiries').select('*').eq('status', 'Open').not('followup_date', 'is', null).order('followup_date', { ascending: true }).limit(30);
         setInquiries(data || []);
     };
     const loadPayments = async () => {
