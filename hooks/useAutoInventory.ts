@@ -64,8 +64,7 @@ export const useAutoInventory = () => {
 
     const brands = [...new Set(items.map(i => i.brand).filter(Boolean))].sort() as string[];
     const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort() as string[];
-    const lowStock = items.filter(i => (i.stock_qty || 0) <= 2).length;
     const totalValue = items.reduce((s, i) => s + ((i.stock_qty || 0) * (i.purchase_price || 0)), 0);
 
-    return { items, loading, error, brands, categories, lowStock, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport, refetch: load };
+    return { items, loading, error, brands, categories, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport, refetch: load };
 };

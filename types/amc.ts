@@ -50,8 +50,8 @@ export const todayStr = () => new Date().toLocaleDateString('en-CA');
 export const isExpired = (d?: string) => !!d && d < todayStr();
 export const isExpiringSoon = (d?: string) => {
     if (!d) return false;
-    const diff = (new Date(d).getTime() - Date.now()) / 86400000;
-    return diff >= 0 && diff <= 30;
+    const days = daysUntil(d);
+    return days >= 0 && days <= 30;
 };
 // index.html:15659-15690 — daysLeft=Math.ceil((endDate-today)/86400000), with
 // both dates at midnight.

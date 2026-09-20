@@ -53,6 +53,17 @@ export default function EngPartsAdmin({
   const [search, setSearch] = useState('');
   const [adjustTarget, setAdjustTarget] = useState<{ owner: string; partId: string; ownerLabel: string; partLabel: string; currentQty: number } | null>(null);
 
+  // ── Engineer Analysis filters (index.html:10213-10358) ───────────────────
+  const [analysisPartQ, setAnalysisPartQ] = useState('');
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [analysisEngFilter, setAnalysisEngFilter] = useState('');
+
+  // ── Log tab filters (index.html:10606-10640) ──────────────────────────────
+  const [logSearch, setLogSearch] = useState('');
+  const [logTypeFilter, setLogTypeFilter] = useState('');
+  const [logFrom, setLogFrom] = useState('');
+  const [logTo, setLogTo] = useState('');
+
   // ── KPI values ───────────────────────────────────────────────────────────
   const officeStockValue = inventory.reduce(
     (sum, i) => sum + (i.qty_in_stock || 0) * (i.unit_price || 0),
@@ -83,8 +94,14 @@ export default function EngPartsAdmin({
   };
 
   // ── Filtered inventory for overview ─────────────────────────────────────
-  const filteredInventory = inventory.filter(item =>
-    item.item_name.toLowerCase().includes(search.toLowerCase())
+  // index.html:10367-10368,10383 — only items with tracked eng_stock or
+  // current office stock are listed, and search matches part_code too.
+  const trackedPartIds = new Set(engStock.map(s => s.part_id));
+  const overviewItems = inventory.filter(item => trackedPartIds.has(item.id) || item.qty_in_stock > 0);
+  const searchQ = search.toLowerCase();
+  const filteredInventory = overviewItems.filter(item =>
+    item.item_name.toLowerCase().includes(searchQ) ||
+    (item.part_code ?? item.item_code ?? '').toLowerCase().includes(searchQ)
   );
 
   // ── Modal save handlers ──────────────────────────────────────────────────
@@ -294,61 +311,159 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Engineer Analysis ── */}
-          {!cspManagerMode && activeTab === 'analysis' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-              {engineers.map(eng => {
-                const parts = engStock.filter(s => s.owner === eng);
-                const totalValue = parts.reduce((sum, s) => {
-                  const inv = inventory.find(i => i.id === s.part_id);
-                  return sum + s.qty * (inv?.unit_price || 0);
-                }, 0);
-                const initials = eng.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+          {!cspManagerMode && activeTab === 'analysis' && (() => {
+            const selectedPart = selectedPartId ? inventory.find(i => i.id === selectedPartId) : null;
+            const partMatches = analysisPartQ
+              ? inventory.filter(i =>
+                i.item_name.toLowerCase().includes(analysisPartQ.toLowerCase()) ||
+                (i.part_code ?? i.item_code ?? '').toLowerCase().includes(analysisPartQ.toLowerCase()))
+                .slice(0, 10)
+              : [];
+            const clearFilters = () => { setAnalysisPartQ(''); setSelectedPartId(null); setAnalysisEngFilter(''); };
 
-                return (
-                  <div key={eng} style={styles.card}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                      <div style={{
-                        width: '40px', height: '40px', borderRadius: '50%',
-                        backgroundColor: colors.primary, color: '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '14px', fontWeight: 700, flexShrink: 0,
-                      }}>
-                        {initials}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '14px', color: colors.text }}>{eng}</div>
-                        <div style={{ fontSize: '12px', color: colors.textMuted }}>
-                          Field Value: ₹{totalValue.toFixed(0)}
-                        </div>
-                      </div>
-                    </div>
-                    {parts.length === 0 ? (
-                      <div style={{ fontSize: '12px', color: colors.textMuted }}>No parts assigned</div>
-                    ) : (
-                      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {parts.map(s => {
-                          const inv = inventory.find(i => i.id === s.part_id);
+            return (
+              <div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '16px', alignItems: 'flex-start' }}>
+                  <div style={{ position: 'relative' as const }}>
+                    <input
+                      style={styles.filterInput}
+                      placeholder="🔍 Filter by part code or name..."
+                      value={analysisPartQ}
+                      onChange={e => { setAnalysisPartQ(e.target.value); setSelectedPartId(null); }}
+                    />
+                    {analysisPartQ && !selectedPartId && partMatches.length > 0 && (
+                      <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${colors.border}`, borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '220px', overflowY: 'auto' as const, marginTop: '2px' }}>
+                        {partMatches.map(p => {
+                          const engCount = new Set(engStock.filter(s => s.part_id === p.id && s.qty > 0).map(s => s.owner)).size;
                           return (
-                            <li key={s.id} style={{
-                              display: 'flex', justifyContent: 'space-between',
-                              padding: '4px 0', borderBottom: `1px solid ${colors.border}`,
-                              fontSize: '12px', color: colors.text,
-                            }}>
-                              <span>{inv?.item_name ?? s.part_id}</span>
-                              <span style={{ fontWeight: 600 }}>{s.qty}</span>
-                            </li>
+                            <div key={p.id} onClick={() => { setSelectedPartId(p.id); setAnalysisPartQ(`${p.part_code ?? p.item_code ?? ''} ${p.item_name}`.trim()); }}
+                              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: `1px solid ${colors.border}` }}
+                              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#fff')}
+                            >
+                              {p.part_code ?? p.item_code} — {p.item_name} <span style={{ color: colors.textMuted }}>({engCount} eng)</span>
+                            </div>
                           );
                         })}
-                      </ul>
+                      </div>
                     )}
                   </div>
-                );
-              })}
-              {engineers.length === 0 && (
-                <div style={styles.emptyMessage}>No engineers found</div>
-              )}
-            </div>
-          )}
+                  <select value={analysisEngFilter} onChange={e => setAnalysisEngFilter(e.target.value)} style={styles.filterInput}>
+                    <option value="">Filter by Engineer — All</option>
+                    {engineers.map(eng => <option key={eng} value={eng}>{eng}</option>)}
+                  </select>
+                  {(analysisPartQ || selectedPartId || analysisEngFilter) && (
+                    <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={clearFilters}>✕ Clear Filters</button>
+                  )}
+                </div>
+
+                {selectedPart ? (() => {
+                  const officeQty = selectedPart.qty_in_stock || 0;
+                  const rows = engineers
+                    .map(eng => ({ eng, qty: engStock.find(s => s.owner === eng && s.part_id === selectedPart.id)?.qty || 0 }))
+                    .filter(r => r.qty > 0)
+                    .sort((a, b) => b.qty - a.qty);
+                  const engTotal = rows.reduce((s, r) => s + r.qty, 0);
+                  const grandTotal = officeQty + engTotal;
+                  return (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ ...styles.card, textAlign: 'center' as const, cursor: 'pointer' }} onClick={() => setAdjustTarget({ owner: 'MAIN', partId: selectedPart.id, ownerLabel: '🏢 Office Stock', partLabel: `${selectedPart.part_code ?? selectedPart.item_code ?? ''} ${selectedPart.item_name}`.trim(), currentQty: officeQty })}>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{officeQty}</div>
+                          <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>Office Stock</div>
+                        </div>
+                        <div style={{ ...styles.card, textAlign: 'center' as const }}>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{engTotal}</div>
+                          <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>With Engineers</div>
+                        </div>
+                        <div style={{ ...styles.card, textAlign: 'center' as const }}>
+                          <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{grandTotal}</div>
+                          <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>Total Stock</div>
+                        </div>
+                      </div>
+                      <div style={{ overflowX: 'auto' as const }}>
+                        <table style={styles.table}>
+                          <thead><tr><th style={styles.tableHeader}>Engineer</th><th style={styles.tableHeader}>Qty</th><th style={styles.tableHeader}>% of Total</th></tr></thead>
+                          <tbody>
+                            {rows.map(r => (
+                              <tr key={r.eng} style={styles.tableRow}>
+                                <td style={styles.tableCell}>{r.eng}</td>
+                                <td style={{ ...styles.tableCell, fontWeight: 600, cursor: 'pointer' }} title="Click to correct stock" onClick={() => setAdjustTarget({ owner: r.eng, partId: selectedPart.id, ownerLabel: `👷 ${r.eng}`, partLabel: `${selectedPart.part_code ?? selectedPart.item_code ?? ''} ${selectedPart.item_name}`.trim(), currentQty: r.qty })}>{r.qty}</td>
+                                <td style={styles.tableCell}>{grandTotal > 0 ? Math.round(r.qty / grandTotal * 100) : 0}%</td>
+                              </tr>
+                            ))}
+                            {rows.length === 0 && (
+                              <tr><td colSpan={3} style={styles.emptyMessage}>No engineers currently hold this part</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+                    {engineers
+                      .filter(eng => !analysisEngFilter || eng === analysisEngFilter)
+                      .map(eng => {
+                        const parts = engStock.filter(s => s.owner === eng);
+                        const totalValue = parts.reduce((sum, s) => {
+                          const inv = inventory.find(i => i.id === s.part_id);
+                          return sum + s.qty * (inv?.unit_price || 0);
+                        }, 0);
+                        return { eng, parts, totalValue };
+                      })
+                      // index.html:10358 — engineer cards sorted by descending field value.
+                      .sort((a, b) => b.totalValue - a.totalValue)
+                      .map(({ eng, parts, totalValue }) => {
+                        const initials = eng.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                        return (
+                          <div key={eng} style={styles.card}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                              <div style={{
+                                width: '40px', height: '40px', borderRadius: '50%',
+                                backgroundColor: colors.primary, color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '14px', fontWeight: 700, flexShrink: 0,
+                              }}>
+                                {initials}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '14px', color: colors.text }}>{eng}</div>
+                                <div style={{ fontSize: '12px', color: colors.textMuted }}>
+                                  Field Value: ₹{totalValue.toFixed(0)}
+                                </div>
+                              </div>
+                            </div>
+                            {parts.length === 0 ? (
+                              <div style={{ fontSize: '12px', color: colors.textMuted }}>No parts assigned</div>
+                            ) : (
+                              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                                {parts.map(s => {
+                                  const inv = inventory.find(i => i.id === s.part_id);
+                                  return (
+                                    <li key={s.id} style={{
+                                      display: 'flex', justifyContent: 'space-between',
+                                      padding: '4px 0', borderBottom: `1px solid ${colors.border}`,
+                                      fontSize: '12px', color: colors.text,
+                                    }}>
+                                      <span>{inv?.item_name ?? s.part_id}</span>
+                                      <span style={{ fontWeight: 600 }}>{s.qty}</span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {engineers.length === 0 && (
+                      <div style={styles.emptyMessage}>No engineers found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Pending Approvals ── */}
           {(cspManagerMode || activeTab === 'pending') && (
@@ -417,50 +532,82 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Log ── */}
-          {!cspManagerMode && activeTab === 'log' && (
-            <div style={{ overflowX: 'auto' as const }}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.tableHeader}>Date</th>
-                    <th style={styles.tableHeader}>Type</th>
-                    <th style={styles.tableHeader}>Part</th>
-                    <th style={styles.tableHeader}>Qty</th>
-                    <th style={styles.tableHeader}>From</th>
-                    <th style={styles.tableHeader}>To</th>
-                    <th style={styles.tableHeader}>Job Sheet</th>
-                    <th style={styles.tableHeader}>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movements.map(mv => {
-                    const part = inventory.find(i => i.id === mv.part_id);
-                    return (
-                      <tr key={mv.id} style={styles.tableRow}>
-                        <td style={styles.tableCell}>
-                          {mv.created_at ? new Date(mv.created_at).toLocaleDateString() : '—'}
-                        </td>
-                        <td style={styles.tableCell}>
-                          <span style={movementBadgeStyle(mv.type)}>{mv.type}</span>
-                        </td>
-                        <td style={styles.tableCell}>{part?.item_name ?? mv.part_id}</td>
-                        <td style={styles.tableCell}>{mv.qty}</td>
-                        <td style={styles.tableCell}>{mv.from_owner ?? '—'}</td>
-                        <td style={styles.tableCell}>{mv.to_owner ?? '—'}</td>
-                        <td style={styles.tableCell}>{mv.job_sheet ?? '—'}</td>
-                        <td style={styles.tableCell}>{mv.notes ?? '—'}</td>
+          {!cspManagerMode && activeTab === 'log' && (() => {
+            const q = logSearch.toLowerCase();
+            const filteredMovements = movements.filter(mv => {
+              if (logTypeFilter && mv.type !== logTypeFilter) return false;
+              const d = (mv.created_at || '').slice(0, 10);
+              if (logFrom && d < logFrom) return false;
+              if (logTo && d > logTo) return false;
+              if (q) {
+                const part = inventory.find(i => i.id === mv.part_id);
+                const hay = [part?.item_name, mv.from_owner, mv.to_owner, mv.job_sheet, mv.notes, mv.created_by]
+                  .filter(Boolean).join(' ').toLowerCase();
+                if (!hay.includes(q)) return false;
+              }
+              return true;
+            });
+            return (
+              <>
+                <div style={{ ...styles.filterBar, marginBottom: '12px' }}>
+                  <input style={styles.filterInput} placeholder="Search part, owner, job sheet, notes..." value={logSearch} onChange={e => setLogSearch(e.target.value)} />
+                  <select style={styles.filterInput} value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)}>
+                    <option value="">All Types</option>
+                    <option value="ISSUE">ISSUE</option>
+                    <option value="USE">USE</option>
+                    <option value="ENG_RETURN">ENG_RETURN</option>
+                    <option value="WARRANTY_RETURN">WARRANTY_RETURN</option>
+                    <option value="WARRANTY_DIRECT_IN">WARRANTY_DIRECT_IN</option>
+                    <option value="ADJUST">ADJUST</option>
+                  </select>
+                  <input type="date" style={styles.filterInput} value={logFrom} onChange={e => setLogFrom(e.target.value)} />
+                  <input type="date" style={styles.filterInput} value={logTo} onChange={e => setLogTo(e.target.value)} />
+                </div>
+                <div style={{ overflowX: 'auto' as const }}>
+                  <table style={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={styles.tableHeader}>Date</th>
+                        <th style={styles.tableHeader}>Type</th>
+                        <th style={styles.tableHeader}>Part</th>
+                        <th style={styles.tableHeader}>Qty</th>
+                        <th style={styles.tableHeader}>From</th>
+                        <th style={styles.tableHeader}>To</th>
+                        <th style={styles.tableHeader}>Job Sheet</th>
+                        <th style={styles.tableHeader}>Notes</th>
                       </tr>
-                    );
-                  })}
-                  {movements.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={styles.emptyMessage}>No log entries</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    </thead>
+                    <tbody>
+                      {filteredMovements.map(mv => {
+                        const part = inventory.find(i => i.id === mv.part_id);
+                        return (
+                          <tr key={mv.id} style={styles.tableRow}>
+                            <td style={styles.tableCell}>
+                              {mv.created_at ? new Date(mv.created_at).toLocaleDateString() : '—'}
+                            </td>
+                            <td style={styles.tableCell}>
+                              <span style={movementBadgeStyle(mv.type)}>{mv.type}</span>
+                            </td>
+                            <td style={styles.tableCell}>{part?.item_name ?? mv.part_id}</td>
+                            <td style={styles.tableCell}>{mv.qty}</td>
+                            <td style={styles.tableCell}>{mv.from_owner ?? '—'}</td>
+                            <td style={styles.tableCell}>{mv.to_owner ?? '—'}</td>
+                            <td style={styles.tableCell}>{mv.job_sheet ?? '—'}</td>
+                            <td style={styles.tableCell}>{mv.notes ?? '—'}</td>
+                          </tr>
+                        );
+                      })}
+                      {filteredMovements.length === 0 && (
+                        <tr>
+                          <td colSpan={8} style={styles.emptyMessage}>No log entries</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 

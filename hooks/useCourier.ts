@@ -22,7 +22,7 @@ export function useCourier() {
                 .select('*')
                 .gte('entry_date', cutoffDate)
                 .order('entry_date', { ascending: false })
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }).limit(500);
 
             if (fetchError) throw fetchError;
             setEntries(data || []);

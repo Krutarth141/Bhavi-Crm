@@ -100,6 +100,7 @@ export const approveTicket = async (
 
         const now = new Date().toISOString();
         const existing = ticket.timeline || [];
+        const approvalNote = `Estimate ₹${finalAmount.toFixed(0)} — Approved: ${remark}`;
         const { error } = await supabase.from('tickets').update({
             status: newStatus,
             spares: approvedSpares,
@@ -107,6 +108,7 @@ export const approveTicket = async (
             labor: labour,
             updated_at: now,
             last_status_by: approvedBy,
+            remarks: (ticket.remarks ? ticket.remarks + ' | ' : '') + approvalNote,
             timeline: [...existing,
             { action: 'Customer Approved Estimate', by: approvedBy, at: now, note: remark, estimate: finalAmount },
             { action: `Auto → ${newStatus}`, by: 'System', at: now, note: statusNote },
@@ -131,12 +133,14 @@ export const rejectTicket = async (
 ): Promise<{ success: boolean; error?: string }> => {
     try {
         const existing = ticket.timeline || [];
+        const rejectNote = `Estimate ₹${inspectionCharges.toFixed(0)} — Rejected: ${remark}`;
         const { error } = await supabase.from('tickets').update({
             status: 'Customer Reject',
             final_charges: inspectionCharges,
             labor: inspectionCharges,
             updated_at: new Date().toISOString(),
             last_status_by: rejectedBy,
+            remarks: (ticket.remarks ? ticket.remarks + ' | ' : '') + rejectNote,
             timeline: [...existing, {
                 action: 'Customer Rejected',
                 by: rejectedBy,

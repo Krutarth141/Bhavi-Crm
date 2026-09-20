@@ -3,6 +3,7 @@ export interface ReorderItem {
     item_name?: string;
     part_code?: string | null;
     category?: string | null;
+    supplier?: string | null;
     qty_in_stock: number;
     min_stock: number;
 }

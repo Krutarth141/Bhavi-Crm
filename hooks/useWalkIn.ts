@@ -76,7 +76,7 @@ export function useWalkIn(roleType: string, userId: string, userName: string = '
                     .gte('visit_date', from)
                     .lte('visit_date', to)
                     .order('visit_date', { ascending: false })
-                    .order('token_no', { ascending: true });
+                    .order('arrival_time', { ascending: false });
 
                 if (fetchError) throw fetchError;
 

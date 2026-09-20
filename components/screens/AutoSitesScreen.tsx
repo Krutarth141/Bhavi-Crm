@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useAutoSites } from '@/hooks/useAutoSites';
+import { fetchCustomerByMobile } from '@/services/customerService';
 import Modal from '@/components/Modal';
 import { SiteFormData, emptySiteForm, AutoSite, AutoSiteItem, AutoSitePayment, AutoSiteDispatch, SiteContact, SiteItemForm, PaymentForm, ContactForm } from '@/types/autoSites';
 import {
@@ -45,6 +46,19 @@ export default function AutoSitesScreen() {
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
     const [form, setForm] = useState<SiteFormData>(emptySiteForm);
+    const handleSiteMobileChange = (value: string) => {
+        setForm(f => ({ ...f, mobile: value }));
+        if (value.length === 10) {
+            fetchCustomerByMobile(value).then((c) => {
+                if (!c) return;
+                setForm(f => ({
+                    ...f,
+                    client_name: f.client_name.trim() ? f.client_name : (c.cname || f.client_name),
+                    address: f.address.trim() ? f.address : (c.address || f.address),
+                }));
+            }).catch(() => { /* best-effort */ });
+        }
+    };
     const [addVisitModalOpen, setAddVisitModalOpen] = useState(false);
     const [itemFormOpen, setItemFormOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<AutoSiteItem | null>(null);
@@ -348,7 +362,7 @@ export default function AutoSitesScreen() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Site Name *</label><input type="text" value={form.site_name} onChange={e => setForm(f => ({ ...f, site_name: e.target.value }))} style={fieldStyle} /></div>
                         <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Client Name *</label><input type="text" value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))} style={fieldStyle} /></div>
-                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Mobile</label><input type="tel" value={form.mobile} onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} style={fieldStyle} /></div>
+                        <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Mobile</label><input type="tel" value={form.mobile} onChange={e => handleSiteMobileChange(e.target.value)} style={fieldStyle} /></div>
                     </div>
                     <div><label style={{ fontSize: 14, fontWeight: 500, display: 'block', marginBottom: 4 }}>Address</label><textarea value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} rows={2} style={{ ...fieldStyle, resize: 'vertical' }} /></div>
                 </div>

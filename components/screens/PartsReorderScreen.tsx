@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ReorderItem } from '@/types/reorder';
 import { fetchReorderInventory, setMinStock } from '@/services/reorderService';
+import { fetchCompanyInfo } from '@/services/settingsService';
 
 export default function PartsReorderScreen() {
     const [items, setItems] = useState<ReorderItem[]>([]);
@@ -36,9 +37,10 @@ export default function PartsReorderScreen() {
         if (r.success) { setMinModal(null); await load(); } else alert('Error: ' + r.error);
     };
 
-    const shareReorderList = () => {
+    const shareReorderList = async () => {
         if (!reorderList.length) { alert('No reorder needed!'); return; }
-        let msg = `📦 *Parts Reorder List*\n📅 ${new Date().toLocaleDateString('en-IN')}\n\n`;
+        const ci = await fetchCompanyInfo();
+        let msg = `📦 *Parts Reorder List*\n${ci?.company_name ? `*${ci.company_name}*\n` : ''}📅 ${new Date().toLocaleDateString('en-IN')}\n\n`;
         if (critical.length) {
             msg += '🔴 *CRITICAL — Order Immediately:*\n';
             critical.forEach(p => { msg += `• ${p.item_name || ''} (Stock: ${p.qty_in_stock || 0}, Min: ${p.min_stock || 0})\n`; });
@@ -103,6 +105,7 @@ export default function PartsReorderScreen() {
                                                 <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{pct}% of reorder level</div>
                                             </div>
                                         </div>
+                                        {p.supplier && <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>🏪 {p.supplier}</div>}
                                         <button onClick={() => openMinModal(p)} style={{ marginTop: 8, padding: '4px 10px', border: '1px solid #7c3aed', borderRadius: 6, color: '#7c3aed', background: '#fff', cursor: 'pointer', fontSize: 12 }}>⚙️ Set Min Stock</button>
                                     </div>
                                 );

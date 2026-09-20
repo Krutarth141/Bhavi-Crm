@@ -45,8 +45,6 @@ export default function TokenBoard({ nowServing, queue, onCallNext, onCallAgain 
     setSavedVoiceName(name);
   };
 
-  const maxToken = queue.length > 0 ? Math.max(...queue.map((q) => q.token)) : 0;
-  const allServed = queue.length > 0 && nowServing > maxToken;
   const currentEntry = queue.find((q) => q.token === nowServing);
 
   return (
@@ -66,17 +64,11 @@ export default function TokenBoard({ nowServing, queue, onCallNext, onCallAgain 
           <div style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', opacity: 0.85, marginBottom: '6px' }}>
             Now Serving
           </div>
-          {allServed ? (
-            <div style={{ fontSize: '28px', fontWeight: 800 }}>All served ✅</div>
-          ) : (
-            <>
-              <div style={{ fontSize: '64px', fontWeight: 900, lineHeight: 1 }}>{nowServing > 0 ? nowServing : '—'}</div>
-              {currentEntry && (
-                <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '8px', opacity: 0.9 }}>
-                  {currentEntry.name}
-                </div>
-              )}
-            </>
+          <div style={{ fontSize: '64px', fontWeight: 900, lineHeight: 1 }}>{nowServing > 0 ? nowServing : '—'}</div>
+          {currentEntry && (
+            <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '8px', opacity: 0.9 }}>
+              {currentEntry.name}
+            </div>
           )}
         </div>
 
@@ -100,7 +92,7 @@ export default function TokenBoard({ nowServing, queue, onCallNext, onCallAgain 
             <button
               onClick={onCallAgain}
               style={{
-                flex: allServed ? 1 : undefined, padding: '10px 14px', background: '#eff6ff', color: '#1d4ed8',
+                padding: '10px 14px', background: '#eff6ff', color: '#1d4ed8',
                 border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
               }}
             >

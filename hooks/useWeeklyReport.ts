@@ -26,6 +26,7 @@ export const useWeeklyReport = () => {
     const [wcReports, setWCReports] = useState<WCDailyReport[]>([]);
     const [tickets, setTickets] = useState<WeeklyTicket[]>([]);
     const [prevTickets, setPrevTickets] = useState<WeeklyTicket[]>([]);
+    const [prevEngReports, setPrevEngReports] = useState<DailyReport[]>([]);
     const [presentDays, setPresentDays] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -34,18 +35,20 @@ export const useWeeklyReport = () => {
         setLoading(true); setError(null);
         try {
             const prev = prevRangeOf(filter.from, filter.to);
-            const [eng, wc, tix, prevTix, present] = await Promise.all([
+            const [eng, wc, tix, prevTix, present, prevEng] = await Promise.all([
                 fetchDailyReportsRange(filter.from, filter.to),
                 fetchWCDailyReportsRange(filter.from, filter.to),
                 fetchTicketsRange(filter.from, filter.to),
                 fetchTicketsRange(prev.from, prev.to),
                 fetchPunchCountRange(filter.from, filter.to),
+                fetchDailyReportsRange(prev.from, prev.to),
             ]);
             setEngReports(eng);
             setWCReports(wc);
             setTickets(tix);
             setPrevTickets(prevTix);
             setPresentDays(present);
+            setPrevEngReports(prevEng);
         } catch (err) { setError((err as any).message); }
         finally { setLoading(false); }
     }, [filter.from, filter.to]);
@@ -58,6 +61,7 @@ export const useWeeklyReport = () => {
     const prevRevenue = prevClosedList.reduce((s, t) => s + revenueOf(t), 0);
     const newTicketsList = tickets.filter(t => t.created_at && t.created_at.slice(0, 10) >= filter.from && t.created_at.slice(0, 10) <= filter.to);
     const collected = engReports.reduce((s, r) => s + (parseFloat(String(r.total_amount || 0)) || 0), 0);
+    const prevCollected = prevEngReports.reduce((s, r) => s + (parseFloat(String(r.total_amount || 0)) || 0), 0);
     const totalKm = engReports.reduce((s, r) => s + (parseFloat(String(r.petrol_km || 0)) || 0), 0);
 
     // Engineer scorecard — closed calls + revenue from tickets (matches HTML's renderWeekly)
@@ -89,7 +93,7 @@ export const useWeeklyReport = () => {
         closed: closedList.length, prevClosed: prevClosedList.length,
         revenue, prevRevenue,
         newTickets: newTicketsList.length,
-        collected, totalKm, presentDays,
+        collected, prevCollected, totalKm, presentDays,
         engScorecard, dayLabels, dayVals,
         refetch: load,
     };

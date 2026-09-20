@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { WalkInEntry } from '@/types/walkin';
 import { useWalkIn } from '@/hooks/useWalkIn';
 import { updateWalkIn, deleteWalkIn } from '@/services/walkInService';
+import { fetchBrands } from '@/services/masterService';
+import { resolveBrandName } from '@/utils/brandDisplay';
 import { colors, styles } from '@/styles/ticketsStyles';
 import CreateJobModal from './walkin/CreateJobModal';
 
@@ -43,12 +45,14 @@ export default function WalkInReportScreen() {
   const [results, setResults] = useState<WalkInEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [brandsById, setBrandsById] = useState<Map<string, string>>(new Map());
 
   // WC filter dropdown — mirrors HTML's renderWalkInReport() WC fetch.
   useEffect(() => {
     supabase.from('users').select('user_id, name')
       .or('role_type.eq.work_controller,role.eq.work_controller').eq('is_active', true).order('name')
       .then(({ data }) => setWcs(data || []));
+    fetchBrands().then(brands => setBrandsById(new Map(brands.map(b => [b.id, b.name]))));
   }, []);
 
   const handleSearch = async () => {
@@ -166,7 +170,7 @@ export default function WalkInReportScreen() {
             const secVal = p.type === 'Purchase' ? (p.subtype || '') : p.type === 'For Checking Only' ? (p.subtype || p.warranty || '') : (p.warranty || '');
             rows.push({
               Date: fmtExcelDate(l.visit_date), Customer: l.customer_name, Mobile: l.mobile,
-              Arrival: l.arrival_time, Departure: l.departure_time || '', Brand: p.brand || '',
+              Arrival: l.arrival_time, Departure: l.departure_time || '', Brand: resolveBrandName(p.brand, brandsById) || p.brand || '',
               Model: p.model || '', Type: p.type || '', 'Warranty/Sub-type': secVal, Remarks: p.remarks || '', WC: l.wc_name || '',
             });
           });

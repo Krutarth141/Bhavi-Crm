@@ -22,7 +22,7 @@ export default function KmTrackingScreen() {
     const myEngId = (session?.user as any)?.email ?? '';
     const myName = (session?.user as any)?.name ?? '';
 
-    const { engineers } = useEngineers();
+    const { activeEngineers } = useEngineers();
 
     const [from, setFrom] = useState(todayStr());
     const [to, setTo] = useState(todayStr());
@@ -183,7 +183,7 @@ export default function KmTrackingScreen() {
                         <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Engineer</label>
                         <select value={engFilter} onChange={(e) => setEngFilter(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 10px', fontSize: 13, minWidth: 160 }}>
                             <option value="">All Engineers</option>
-                            {engineers.map((e) => <option key={e.id} value={e.user_id}>{e.name}</option>)}
+                            {activeEngineers.map((e) => <option key={e.id} value={e.user_id}>{e.name}</option>)}
                         </select>
                     </div>
                 )}

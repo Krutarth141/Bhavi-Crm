@@ -12,6 +12,7 @@ import {
   mergeWalkInProducts,
 } from '@/services/walkInService';
 import { announceToken } from '@/utils/tokenVoice';
+import { fetchBrands } from '@/services/masterService';
 import TokenBoard from './walkin/TokenBoard';
 import WalkInForm from './walkin/WalkInForm';
 import WalkInList from './walkin/WalkInList';
@@ -39,6 +40,11 @@ export default function WalkInScreen() {
   const [nextToken, setNextToken] = useState(1);
   const [showQR, setShowQR] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [brandsById, setBrandsById] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    fetchBrands().then(brands => setBrandsById(new Map(brands.map(b => [b.id, b.name]))));
+  }, []);
 
   // Walk-in History date navigator — mirrors HTML's "📋 Walk-in History"
   // card + loadWIDateView() (index.html:16615-16679). Defaults to today, in
@@ -278,6 +284,7 @@ export default function WalkInScreen() {
         ) : (
           <WalkInList
             entries={displayLogs}
+            brandsById={brandsById}
             onEdit={handleEditEntry}
             onDeparture={handleDeparture}
             onJobCreated={refreshLists}

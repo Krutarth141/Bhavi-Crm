@@ -10,6 +10,8 @@ export default function FaultFinderScreen() {
     // index.html:28460 — Edit/Delete gate is a strict role==='admin' check, not
     // the broader isCspMgr/isAdminOrWC notions used elsewhere in this app.
     const isAdmin = (session?.user as any)?.role === 'admin';
+    const isEng = (session?.user as any)?.role === 'engineer';
+    const canManageKB = isAdmin || isEng;
     const myName = (session?.user as any)?.name ?? '';
     const { faults, ticketModels, loading, error, addFault, editFault, removeFault, refetch } = useFaultFinder();
     const [search, setSearch] = useState('');
@@ -184,13 +186,15 @@ export default function FaultFinderScreen() {
             )}
 
             {/* Knowledge Base table — index.html:28452+, always visible, independent of guided search */}
-            <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
-                {loading ? (
-                    <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
-                ) : (
-                    <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} currentUserName={myName} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
-                )}
-            </div>
+            {canManageKB && (
+                <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
+                    {loading ? (
+                        <p style={{ textAlign: 'center', color: '#6b7280', padding: 32 }}>Loading...</p>
+                    ) : (
+                        <FaultKnowledgeTab faults={filteredFaults} isAdmin={isAdmin} currentUserName={myName} onAdd={addFault} onEdit={editFault} onDelete={removeFault} onRefetch={refetch} />
+                    )}
+                </div>
+            )}
         </div>
     );
 }

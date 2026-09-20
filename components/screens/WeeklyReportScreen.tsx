@@ -17,7 +17,7 @@ export default function WeeklyReportScreen() {
         engReports, wcReports,
         loading, error,
         closed, prevClosed, revenue, prevRevenue, newTickets,
-        collected, totalKm, presentDays,
+        collected, totalKm, presentDays, prevCollected,
         engScorecard, dayLabels, dayVals,
     } = useWeeklyReport();
 
@@ -88,7 +88,7 @@ export default function WeeklyReportScreen() {
                             { icon: '🎫', label: 'Calls Closed', curr: closed, prev: prevClosed },
                             { icon: '📥', label: 'New Tickets', curr: newTickets, prev: null },
                             { icon: '💰', label: 'Revenue ₹', curr: '₹' + Math.round(revenue).toLocaleString('en-IN'), prev: prevRevenue, currRaw: revenue },
-                            { icon: '💵', label: 'Collected ₹', curr: '₹' + Math.round(collected).toLocaleString('en-IN'), prev: null },
+                            { icon: '💵', label: 'Collected ₹', curr: '₹' + Math.round(collected).toLocaleString('en-IN'), prev: prevCollected, currRaw: collected },
                             { icon: '🚗', label: 'Total KM', curr: totalKm + ' km', prev: null },
                             { icon: '👷', label: 'Present Days', curr: presentDays, prev: null },
                         ].map(c => {

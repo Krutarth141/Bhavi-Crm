@@ -19,6 +19,7 @@ export interface ApprovalTicket {
     final_charges?: number;
     spares?: ApprovalSpare[];
     timeline?: any[];
+    remarks?: string;
     created_at?: string;
     updated_at?: string;
 }

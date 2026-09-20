@@ -1245,11 +1245,9 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                       ⏱ Set TAT
                     </button>
                   )}
-                  {isInvoiceable(selectedTicket!) && (
-                    <button style={{ ...styles.btn, background: '#7c3aed', color: 'white' }} onClick={() => generateInvoice(selectedTicket!)}>
-                      🧾 Invoice
-                    </button>
-                  )}
+                  <button style={{ ...styles.btn, background: '#7c3aed', color: 'white' }} onClick={() => generateInvoice(selectedTicket!)}>
+                    🧾 Invoice
+                  </button>
                   {isInvoiceable(selectedTicket!) && canSeeInvoiceStatus && (
                     selectedTicket!.invoice_done ? (
                       // Already invoiced — everyone with visibility may correct the number.

@@ -212,7 +212,7 @@ export default function AIAgentScreen() {
         setInquiries(data || []);
     };
     const loadPayments = async () => {
-        const { data } = await supabase.from('tickets').select('*').in('status', ['Completed', 'Closed']).not('call_type', 'in', '(Warranty,Warranty Repeat)').eq('invoice_done', false).order('updated_at', { ascending: false }).limit(30);
+        const { data } = await supabase.from('tickets').select('*').eq('status', 'Closed').not('call_type', 'in', '(Warranty,Warranty Repeat)').eq('invoice_done', false).order('updated_at', { ascending: false }).limit(30);
         setPayments(data || []);
     };
     const loadCalls = async () => {

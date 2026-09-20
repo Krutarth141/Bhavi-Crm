@@ -9,7 +9,7 @@ export const fetchReorderInventory = async (): Promise<ReorderItem[]> => {
         while (true) {
             const { data: page, error } = await supabase
                 .from('inventory')
-                .select('id, item_name, part_code, category, qty_in_stock, min_stock')
+                .select('id, item_name, part_code, category, supplier, qty_in_stock, min_stock')
                 .order('item_name', { ascending: true })
                 .range(from, from + PAGE - 1);
             if (error) throw error;

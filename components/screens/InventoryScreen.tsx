@@ -149,7 +149,7 @@ export default function InventoryScreen() {
                 brand_id: null,
                 category: '',
                 qty_in_stock: 0,
-                min_stock: 0,
+                min_stock: 2,
                 purchase_price: 0,
                 unit_price: 0,
                 gst_pct: 18,

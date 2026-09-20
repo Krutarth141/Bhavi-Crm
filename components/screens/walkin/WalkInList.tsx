@@ -5,9 +5,11 @@ import { WalkInEntry } from '@/types/walkin';
 import { colors, styles } from '@/styles/ticketsStyles';
 import { updateWalkIn } from '@/services/walkInService';
 import CreateJobModal from './CreateJobModal';
+import { resolveBrandName } from '@/utils/brandDisplay';
 
 interface WalkInListProps {
   entries: WalkInEntry[];
+  brandsById?: Map<string, string>;
   onEdit: (entry: WalkInEntry) => void;
   onDeparture: (entry: WalkInEntry) => void;
   onJobCreated: () => Promise<void>;
@@ -22,7 +24,8 @@ const TYPE_COLORS: Record<string, string> = {
 // Departure / Create Job actions with each product's brand/model/type/
 // warranty shown inline (no Delete here; that lives only in the Walk-in
 // Report screen).
-export default function WalkInList({ entries, onEdit, onDeparture, onJobCreated, busyId }: WalkInListProps) {
+export default function WalkInList({ entries, brandsById, onEdit, onDeparture, onJobCreated, busyId }: WalkInListProps) {
+  const brandDisplay = (brand?: string | null) => resolveBrandName(brand, brandsById || new Map());
   const [jobEntry, setJobEntry] = useState<WalkInEntry | null>(null);
 
   // Click-to-edit customer name — mirrors HTML's viewWalkInCustomer /
@@ -132,7 +135,7 @@ export default function WalkInList({ entries, onEdit, onDeparture, onJobCreated,
                 const isPositive = wLabel === 'In Warranty' || wLabel === 'Warranty';
                 return (
                   <div key={idx} style={{ background: '#fff', border: `1px solid ${colors.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>{p.brand ? `${p.brand} ` : ''}{p.model}</span>{' '}
+                    <span style={{ fontWeight: 600 }}>{brandDisplay(p.brand) ? `${brandDisplay(p.brand)} ` : ''}{p.model}</span>{' '}
                     <span style={{ background: '#e0f2fe', color: typeColor, padding: '1px 6px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>
                       {p.type}
                     </span>

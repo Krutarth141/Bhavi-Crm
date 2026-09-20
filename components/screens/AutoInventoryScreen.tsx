@@ -17,7 +17,7 @@ export default function AutoInventoryScreen() {
     const { data: session } = useSession();
     const userName = (session?.user as any)?.name || '';
 
-    const { items, loading, error, brands, lowStock, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport } = useAutoInventory();
+    const { items, loading, error, brands, totalValue, add, update, remove, restore, stockTxn, bulkStock, bulkImport } = useAutoInventory();
 
     const [search, setSearch] = useState('');
     const [brandFilter, setBrandFilter] = useState('');
@@ -103,11 +103,10 @@ export default function AutoInventoryScreen() {
 
             {error && <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#dc2626', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>Error: {error}</div>}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
                 {[
                     { label: 'Total Items', value: items.length, color: '#185FA5' },
                     { label: 'Brands', value: brands.length, color: '#7c3aed' },
-                    { label: '⚠️ Low Stock', value: lowStock, color: '#dc2626' },
                     { label: 'Stock Value', value: '₹' + totalValue.toLocaleString('en-IN'), color: '#059669' },
                 ].map(s => (
                     <div key={s.label} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px', textAlign: 'center' }}>
