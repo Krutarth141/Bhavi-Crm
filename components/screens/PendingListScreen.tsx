@@ -422,6 +422,21 @@ export default function PendingListScreen() {
     reader.readAsDataURL(file);
   };
 
+  // Pick several photos from the gallery in one go — fills the next empty
+  // slots in order, up to however many are free (index.html:28536).
+  const onPickFullPhotoMulti = (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const emptySlots: number[] = [];
+    fullPhotos.forEach((p, i) => { if (!p) emptySlots.push(i); });
+    if (!emptySlots.length) { alert('📎 All attachment slots are full — remove one first, then add another.'); return; }
+    Array.from(files).slice(0, emptySlots.length).forEach((file, idx) => {
+      const slot = emptySlots[idx];
+      const reader = new FileReader();
+      reader.onload = () => { setFullPhotos((prev) => { const next = [...prev]; next[slot] = { url: String(reader.result), isNew: true }; return next; }); };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const doFullUpdateSave = async (payment?: PaymentConfirmData) => {
     if (!fullTicket) return;
     setFullSaving(true);
@@ -925,6 +940,10 @@ export default function PendingListScreen() {
                     <span style={{ fontSize: 11, fontWeight: 400, color: '#64748b' }}>
                       {' '}— Job Sheet photo{fullTicket.wc_type === 'CSP' ? ' is mandatory to Close (CSP call)' : ' (optional, ICP call)'}. Up to 2 extra photos.
                     </span>
+                  </label>
+                  <label style={{ display: 'block', marginTop: 8, width: '100%', textAlign: 'center', background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    📁 Select Multiple Photos at Once (Gallery)
+                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { onPickFullPhotoMulti(e.target.files); e.target.value = ''; }} />
                   </label>
                   {[0, 1, 2].map((slot) => (
                     <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>

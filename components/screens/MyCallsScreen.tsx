@@ -417,6 +417,39 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
     reader.readAsDataURL(file);
   };
 
+  // Pick several photos from the gallery in one go — first empty slot gets
+  // filled first, any remaining files fill the next empty slots in order,
+  // up to however many slots are actually free (index.html:28536).
+  const onPickPhotoMulti = (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const emptySlots: number[] = [];
+    updatePhotos.forEach((p, i) => { if (!p) emptySlots.push(i); });
+    if (!emptySlots.length) { alert('📎 All attachment slots are full — remove one first, then add another.'); return; }
+    Array.from(files).slice(0, emptySlots.length).forEach((file, idx) => {
+      const slot = emptySlots[idx];
+      const reader = new FileReader();
+      reader.onload = () => {
+        setUpdatePhotos((prev) => { const next = [...prev]; next[slot] = { url: String(reader.result), isNew: true }; return next; });
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const onPickConditionPhotoMulti = (files: FileList | null) => {
+    if (!files || !files.length) return;
+    const emptySlots: number[] = [];
+    conditionPhotos.forEach((p, i) => { if (!p) emptySlots.push(i); });
+    if (!emptySlots.length) { alert('📎 All photo slots are full — remove one first, then add another.'); return; }
+    Array.from(files).slice(0, emptySlots.length).forEach((file, idx) => {
+      const slot = emptySlots[idx];
+      const reader = new FileReader();
+      reader.onload = () => {
+        setConditionPhotos((prev) => { const next = [...prev]; next[slot] = { url: String(reader.result), isNew: true }; return next; });
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   useEffect(() => {
     if (updateForm.newStatus !== 'Sent to MSC' || mscCenters.length) return;
     fetchMSCCenters().then(setMscCenters).catch(() => undefined);
@@ -1509,6 +1542,10 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                     {' '}— Job Sheet photo{updateTicket.wc_type === 'CSP' ? ' is mandatory to Close (CSP call)' : ' (optional, ICP call)'}. Up to 2 extra photos (printer report etc.).
                   </span>
                 </label>
+                <label style={{ display: 'block', marginTop: 8, width: '100%', textAlign: 'center', background: '#7c3aed', color: '#fff', borderRadius: 6, padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  📁 Select Multiple Photos at Once (Gallery)
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { onPickPhotoMulti(e.target.files); e.target.value = ''; }} />
+                </label>
                 {[0, 1, 2].map((slot) => (
                   <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
                     <span style={{ width: 92, fontWeight: 700, color: '#0369a1' }}>{slot === 0 ? '📄 Job Sheet' : `📎 Extra ${slot}`}</span>
@@ -1561,6 +1598,10 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                   <option value="Missing Parts">Missing Parts</option>
                   <option value="Other">Other</option>
                 </select>
+                <label style={{ display: 'block', marginTop: 8, width: '100%', textAlign: 'center', background: '#b91c1c', color: '#fff', borderRadius: 6, padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  📁 Select Multiple Photos at Once (Gallery)
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { onPickConditionPhotoMulti(e.target.files); e.target.value = ''; }} />
+                </label>
                 {[0, 1, 2].map((slot) => (
                   <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12 }}>
                     <span style={{ width: 92, fontWeight: 700, color: '#991b1b' }}>📷 Photo {slot + 1}</span>
