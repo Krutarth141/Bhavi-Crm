@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #f3f4f6;
+  background-color: var(--bg);
 }
 
 .dashboard-main {
@@ -11,26 +11,31 @@
   overflow-y: auto;
 }
 
-/* Dashboard Header */
+/* Dashboard Header — matches HTML's flat #topbar (index.html:371) */
 .dashboard-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  color: var(--text);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
 }
 
 .header-content h1 {
-  font-size: 1.5rem;
+  font-size: 18px;
   margin: 0;
   font-weight: 700;
+  color: var(--text);
 }
 
 .user-info {
@@ -40,30 +45,33 @@
 }
 
 .user-name {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
 }
 
+/* Matches HTML's sidebar .user-role — a plain muted label, not a pill
+   (index.html:21: #sidebar-user .user-role{color:#90a4ae}) */
 .user-role {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  text-transform: capitalize;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
+/* Matches HTML's .btn-logout (index.html:25) */
 .logout-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: white;
-  padding: 0.5rem 1rem;
+  background: rgba(240, 82, 82, 0.15);
+  border: none;
+  color: var(--danger);
+  padding: 6px 14px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(240, 82, 82, 0.25);
 }
 
 /* Dashboard Layout */
@@ -74,10 +82,11 @@
   height: calc(100vh - 80px);
 }
 
+/* Matches HTML's dark-navy #sidebar (index.html:9-16) */
 .dashboard-sidebar {
-  width: 250px;
-  background: white;
-  border-right: 1px solid #e5e7eb;
+  width: 220px;
+  background: var(--sidebar-bg);
+  border-right: none;
   overflow-y: auto;
 }
 
@@ -88,10 +97,12 @@
 }
 
 .dashboard-nav h2 {
-  font-size: 1.1rem;
-  padding: 1.5rem 1rem 1rem;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 5px 16px 3px;
   margin: 0;
-  color: #374151;
+  color: #546e7a;
   font-weight: 700;
 }
 
@@ -102,36 +113,38 @@
 }
 
 .dashboard-nav li {
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* Matches HTML's .nav-item (index.html:10-13) */
 .dashboard-nav a,
 .dashboard-nav button {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
-  padding: 1rem;
+  padding: 9px 16px;
   text-align: left;
   border: none;
+  border-left: 3px solid transparent;
   background: none;
-  color: #6b7280;
+  color: var(--sidebar-text);
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.95rem;
+  font-size: 13px;
   text-decoration: none;
 }
 
 .dashboard-nav a:hover,
 .dashboard-nav button:hover {
-  background: #f3f4f6;
-  color: #111827;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
 }
 
 .dashboard-nav a.active,
 .dashboard-nav button.active {
-  background: #ede9fe;
-  color: #667eea;
-  border-left: 4px solid #667eea;
-  padding-left: calc(1rem - 4px);
+  background: rgba(29, 78, 216, 0.15);
+  color: #fff;
+  border-left-color: var(--primary);
   font-weight: 600;
 }
 
@@ -220,22 +233,14 @@
 }
 
 .stat-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-left: 4px solid #667eea;
-  border-radius: 8px;
+  background: var(--card);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 1.5rem;
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-icon {
@@ -305,8 +310,8 @@
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
 }
 
 /* Tables */
@@ -400,35 +405,33 @@
   background: #10b981;
 }
 
-/* Buttons */
+/* Buttons — same flat primary as the rest of the app (styles/global.css) */
 .btn-primary,
 .btn-small {
-  padding: 0.75rem 1.5rem;
+  padding: 8px 16px;
   border: none;
-  border-radius: 6px;
-  background: #667eea;
+  border-radius: 8px;
+  background: var(--primary);
   color: white;
   cursor: pointer;
   font-weight: 600;
   transition: all 0.2s;
-  font-size: 0.95rem;
+  font-size: 13px;
 }
 
 .btn-primary:hover,
 .btn-small:hover {
-  background: #5568d3;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  background: var(--primary-dark);
 }
 
 .btn-small {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  padding: 5px 10px;
+  font-size: 12px;
   margin-right: 0.5rem;
 }
 
 .btn-danger {
-  background: #ef4444;
+  background: var(--danger);
 }
 .btn-danger:hover {
   background: #dc2626;
@@ -442,9 +445,9 @@
 
 .filter-buttons button {
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -452,14 +455,14 @@
 }
 
 .filter-buttons button.active {
-  background: #667eea;
+  background: var(--primary);
   color: white;
-  border-color: #667eea;
+  border-color: var(--primary);
 }
 
 .filter-buttons button:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* Tasks List */
@@ -470,16 +473,10 @@
 }
 
 .task-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 1.5rem;
-  transition: all 0.2s;
-}
-
-.task-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
 }
 
 .task-header {
@@ -555,8 +552,8 @@
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #667eea;
+  border: 4px solid var(--border);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
