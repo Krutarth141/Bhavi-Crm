@@ -1,20 +1,20 @@
 .auth-container {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--primary) 0%, #0d47a1 100%);
+  background: linear-gradient(135deg, var(--sidebar-bg) 0%, var(--primary) 100%);
   padding: 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
 .login-card {
   background: white;
-  border-radius: 16px;
-  padding: 40px;
+  border-radius: 20px;
+  padding: 36px;
   width: 100%;
-  max-width: 420px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 380px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
 }
 
 .login-logo {
@@ -65,7 +65,7 @@
 .form-input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.1);
 }
 
 .alert {

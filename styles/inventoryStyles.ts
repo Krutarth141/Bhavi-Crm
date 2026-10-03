@@ -1,16 +1,16 @@
 export const inventoryColors = {
-    primary: '#3b82f6',
-    primaryDark: '#2563eb',
+    primary: '#1d4ed8',
+    primaryDark: '#1e40af',
     primaryLight: '#eff6ff',
-    success: '#10b981',
-    danger: '#ef4444',
-    warning: '#f59e0b',
-    bg: '#f8fafc',
+    success: '#0e9f6e',
+    danger: '#f05252',
+    warning: '#ff9800',
+    bg: '#f4f6fb',
     card: '#fff',
     border: '#e2e8f0',
-    text: '#1f2937',
+    text: '#1a202c',
     textMuted: '#64748b',
-    shadow: '0 1px 3px rgba(0,0,0,0.1)',
+    shadow: '0 2px 8px rgba(0,0,0,0.08)',
 };
 
 export const inventoryStyles = {
