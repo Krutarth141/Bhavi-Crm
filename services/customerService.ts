@@ -9,6 +9,24 @@ export const fetchCustomerByMobile = async (mobile: string): Promise<Customer | 
     return data;
 };
 
+// Mirrors HTML's searchCustomerLive() — Point 9 multi-field customer search
+// on the New Call form (index.html:5481-5503): matches mobile, name, serial
+// or alt mobile, dedupes by mobile+name, caps at 5 results.
+export const searchCustomersLive = async (q: string): Promise<Customer[]> => {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const like = `*${term}*`;
+    const [byMobile, byName, bySerial, byAlt] = await Promise.all([
+        supabase.from('customers').select('*').ilike('mobile', like).limit(3),
+        supabase.from('customers').select('*').ilike('cname', like).limit(3),
+        supabase.from('customers').select('*').ilike('serial', like).limit(3),
+        supabase.from('customers').select('*').ilike('alt_mobile', like).limit(3),
+    ]);
+    const all = [...(byMobile.data || []), ...(byName.data || []), ...(bySerial.data || []), ...(byAlt.data || [])];
+    const unique = all.filter((c, i, arr) => arr.findIndex((x) => x.mobile === c.mobile && x.cname === c.cname) === i);
+    return unique.slice(0, 5);
+};
+
 export const fetchAllCustomers = async (): Promise<Customer[]> => {
     let all: Customer[] = [];
     let from = 0;

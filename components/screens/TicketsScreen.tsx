@@ -32,6 +32,7 @@ import { Brand, SubCategory } from '@/types/masters';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import Modal from '@/components/Modal';
+import CustomerSearchBox from './shared/CustomerSearchBox';
 
 interface Props {
   // "+ New Call" fired from elsewhere (e.g. the Dashboard's Recent Tickets
@@ -884,6 +885,16 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
               {modalMode === 'add' && groupBanner && (
                 <div style={{ background: '#ecfdf5', border: '1.5px solid #6ee7b7', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#065f46' }}>
                   🔗 Linked to Call Group <b>{groupBanner.groupId}</b> — Customer/Address/Brand same as {groupBanner.anchor.id} used (no need to re-check). Just fill in Model No, Serial No, Call Type, Problem, Description &amp; Engineer — Save creates a new ticket ID under the same group.
+                </div>
+              )}
+              {modalMode === 'add' && !groupBanner && (
+                <div style={{ marginBottom: 14 }}>
+                  <CustomerSearchBox
+                    onSelect={(c) => setFormValues({
+                      serial: c.serial ?? '', cname: c.cname ?? '', mobile: c.mobile ?? '', address: c.address ?? '',
+                      model: c.model ?? '', alt_mobile: c.alt_mobile ?? '', pin: c.pin ?? '', city: c.city ?? '', area: c.area ?? '', state: c.state ?? '',
+                    })}
+                  />
                 </div>
               )}
               {modalMode === 'view' && selectedTicket?.pending_edit && (currentUserRole === 'admin' || cspMgr) && (

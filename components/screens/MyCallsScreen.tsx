@@ -16,6 +16,7 @@ import { tatLabel } from '@/utils/tatHelpers';
 import { computeHolidayAwareTat } from '@/utils/holidayCalc';
 import { fetchExtraHolidaySet } from '@/services/holidaysService';
 import Modal from '@/components/Modal';
+import CustomerSearchBox from './shared/CustomerSearchBox';
 import { getAllowedStatuses, isTicketActive, isTicketClosed } from '@/types/ticketStatus';
 import { ATT_EXCLUDED_IDS } from '@/types/attendance';
 import {
@@ -1973,6 +1974,14 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
               <div style={{ background: '#ecfdf5', border: '1.5px solid #6ee7b7', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#065f46' }}>
                 🔗 Linked to Call Group <b>{groupBanner.groupId}</b> — Customer/Address/Brand same as {groupBanner.anchor.id} used. Just fill in Model No, Serial No, Call Type &amp; Problem — Save creates a new ticket ID under the same group.
               </div>
+            )}
+            {!groupBanner && (
+              <CustomerSearchBox
+                onSelect={(c) => setCallFormValues({
+                  serial: c.serial ?? '', cname: c.cname ?? '', mobile: c.mobile ?? '', address: c.address ?? '',
+                  model: c.model ?? '', alt_mobile: c.alt_mobile ?? '', pin: c.pin ?? '', city: c.city ?? '', area: c.area ?? '', state: c.state ?? '',
+                })}
+              />
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={styles.formGroup}>
