@@ -168,12 +168,31 @@ export const ftReached = async (
     } catch (err) { return { success: false, error: (err as any).message }; }
 };
 
+// index.html:26182-26225 doFtDone/_ftFinishDone — a paid task (Cart Delivery,
+// Payment Collection, Cheque Collection, etc.) needs the same Payment
+// Confirmation capture a Non-Warranty call's delivery gets, so it shows up
+// in Payment Collection instead of silently completing with no record of
+// how it was paid. `payment` is omitted for tasks with no amount due.
 export const ftDone = async (
-    id: number, engId: string, engName: string, memberRole: string, task?: FieldTask
+    id: number, engId: string, engName: string, memberRole: string, task?: FieldTask,
+    payment?: { payment_mode: string; payment_notes?: string }
 ): Promise<{ success: boolean; error?: string }> => {
     try {
         const now = new Date();
-        const { error } = await supabase.from('field_tasks').update({ status: 'Done', done_at: now.toISOString(), done_date: now.toLocaleDateString('en-CA'), updated_at: now.toISOString() }).eq('id', id);
+        const patch: any = { status: 'Done', done_at: now.toISOString(), done_date: now.toLocaleDateString('en-CA'), updated_at: now.toISOString() };
+        if (payment) {
+            patch.payment_mode = payment.payment_mode;
+            patch.payment_collected_by = engName;
+            patch.payment_collected_by_id = engId;
+            if (payment.payment_notes) patch.notes = (task?.notes ? task.notes + '\n' : '') + 'Payment notes: ' + payment.payment_notes;
+        }
+        let { error } = await supabase.from('field_tasks').update(patch).eq('id', id);
+        if (error) {
+            const msg = String((error as any)?.message || error);
+            if (msg.includes('payment_collected_by_id')) { delete patch.payment_collected_by_id; delete patch.payment_collected_by; ({ error } = await supabase.from('field_tasks').update(patch).eq('id', id)); }
+            else if (msg.includes('payment_collected_by')) { delete patch.payment_collected_by; ({ error } = await supabase.from('field_tasks').update(patch).eq('id', id)); }
+            else if (patch.payment_mode && msg.includes('payment_mode')) { delete patch.payment_mode; ({ error } = await supabase.from('field_tasks').update(patch).eq('id', id)); }
+        }
         if (error) throw error;
         await ftAutoWorkLog(id, task, 'done', '✅ Task Done', engId, engName, memberRole);
         return { success: true };

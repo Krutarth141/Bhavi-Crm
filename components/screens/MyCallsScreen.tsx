@@ -21,13 +21,14 @@ import { ATT_EXCLUDED_IDS } from '@/types/attendance';
 import {
   updateTicketStatus, fetchTicketById, validateEngineerUpdate, computeCloseCharges,
   needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, uploadCrmPhoto,
+  fetchRemarkHistory, RemarkHistoryEntry,
 } from '@/services/engineerUpdateService';
 import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import {
   fetchDailyReportAutofill, saveDailyReportSelf, fetchPastDailyReports, hasDailyReportToday,
-  fetchDrAutoOfficeWork, formatDailyReportWA, waArr, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
-  DrCallSummary, DailyReportRecord, DrOfficeWork, DrAutoOfficeWork, DrPayment, DrGoogleReview,
+  fetchDrAutoOfficeWork, fetchDrPcSales, formatDailyReportWA, waArr, DR_OFFICE_WORK_TYPES, DR_PAYMENT_MODES,
+  DrCallSummary, DailyReportRecord, DrOfficeWork, DrAutoOfficeWork, DrPayment, DrGoogleReview, DrPcSaleRow,
 } from '@/services/engDailyReportService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel } from '@/services/visitStartService';
 import { WorkPanel, VISIT_BLOCKED_STATUSES } from './EngineerUpdateScreen';
@@ -191,6 +192,16 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const [holdTicket, setHoldTicket] = useState<any | null>(null);
   const [holdRemark, setHoldRemark] = useState('');
   const [holdSaving, setHoldSaving] = useState(false);
+  // index.html:5336,5952-5975 — WC Remark badge + history popup on a ticket card.
+  const [remarkHistoryTicketId, setRemarkHistoryTicketId] = useState<string | null>(null);
+  const [remarkHistory, setRemarkHistory] = useState<RemarkHistoryEntry[]>([]);
+  const [remarkHistoryLoading, setRemarkHistoryLoading] = useState(false);
+  const openRemarkHistory = async (id: string) => {
+    setRemarkHistoryTicketId(id);
+    setRemarkHistoryLoading(true);
+    setRemarkHistory(await fetchRemarkHistory(id));
+    setRemarkHistoryLoading(false);
+  };
   const [warrantyModalOpen, setWarrantyModalOpen] = useState(false);
   const [voidModalOpen, setVoidModalOpen] = useState(false);
   const [partIndentOpen, setPartIndentOpen] = useState(false);
@@ -1106,6 +1117,15 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                         {t.problem && (
                           <div style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', marginTop: '2px' }}>🔧 {t.problem}</div>
                         )}
+                        {t.remarks && (
+                          <div
+                            onClick={(e) => { e.stopPropagation(); openRemarkHistory(t.id); }}
+                            style={{ cursor: 'pointer', fontSize: '11px', fontWeight: 700, color: '#92400e', background: '#fef3c7', borderRadius: '6px', padding: '3px 8px', marginTop: '4px' }}
+                            title="Click to see remark history"
+                          >
+                            📝 WC Remark: {t.remarks}
+                          </div>
+                        )}
                       </div>
                       <span style={getStatusBadgeStyle(t.status)}>{t.status}</span>
                     </div>
@@ -1835,6 +1855,36 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         </div>
       )}
 
+      {remarkHistoryTicketId && (
+        <Modal
+          isOpen
+          size="sm"
+          onClose={() => setRemarkHistoryTicketId(null)}
+          title={`📝 Remark History — ${remarkHistoryTicketId}`}
+          footer={
+            <button onClick={() => setRemarkHistoryTicketId(null)} style={{ padding: '8px 16px', border: `1px solid ${colors.border}`, background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+              Close
+            </button>
+          }
+        >
+          {remarkHistoryLoading ? (
+            <p style={{ textAlign: 'center', color: '#6b7280', padding: 20 }}>Loading...</p>
+          ) : remarkHistory.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 20, color: '#9ca3af' }}>No remark history found.</div>
+          ) : (
+            remarkHistory.map((e, i) => (
+              <div key={i} style={{ background: i === 0 ? '#fef3c7' : '#f9fafb', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: i === 0 ? '1.5px solid #f59e0b' : undefined }}>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>
+                  {i === 0 && <><b style={{ color: '#92400e' }}>📝 Latest</b> — </>}
+                  {e.by || ''} | {e.at ? new Date(e.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                </div>
+                <div style={{ fontSize: 13 }}>{e.note}</div>
+              </div>
+            ))
+          )}
+        </Modal>
+      )}
+
       {prevLocModal && (
         <Modal
           isOpen
@@ -2117,6 +2167,8 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
   // shown read-only (index.html:14257 + 14235).
   const [officeWork, setOfficeWork] = useState<DrOfficeWork[]>([]);
   const [autoOfficeWork, setAutoOfficeWork] = useState<DrAutoOfficeWork[]>([]);
+  // index.html:1011-1017,16899-16930 — read-only auto-fill, not a form field.
+  const [pcSales, setPcSales] = useState<DrPcSaleRow[]>([]);
   // Payment rows — HTML seeds three blank ones and caps at 5 (index.html:14098, 14319).
   const [payments, setPayments] = useState<DrPayment[]>([
     { customer: '', amount: 0, mode: '' }, { customer: '', amount: 0, mode: '' }, { customer: '', amount: 0, mode: '' },
@@ -2135,7 +2187,8 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
       setLoading(false);
     });
     fetchDrAutoOfficeWork(engId, date).then(setAutoOfficeWork).catch(() => setAutoOfficeWork([]));
-  }, [engId, date]);
+    fetchDrPcSales(engName, date).then(setPcSales).catch(() => setPcSales([]));
+  }, [engId, engName, date]);
 
   const setField = (key: keyof DrCallSummary, v: string) => {
     setCs((prev) => (prev ? { ...prev, [key]: parseInt(v, 10) || 0 } : prev));
@@ -2267,6 +2320,26 @@ export function DailyReportModal({ engId, engName, memberRole, onClose, forcedHi
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>🏗️ Automation Site Visits completed today (auto-filled)</label>
                 <input type="number" min={0} value={cs.auto_site_visits} readOnly style={{ ...styles.formInput, background: colors.bg, color: colors.textMuted }} />
+              </div>
+            )}
+
+            {/* Printer/Camera Sales — read-only auto-fill (index.html:1011-1017,16899-16930) */}
+            {pcSales.length > 0 && (
+              <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 4, borderLeft: `4px solid ${colors.primary}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: colors.primary, margin: 0 }}>🖨️📷 Printer / Camera Sales Today (Auto)</h3>
+                  <span style={{ fontSize: 12, color: colors.primary, fontWeight: 600 }}>
+                    ₹{pcSales.reduce((s, r) => s + r.amount, 0).toFixed(0)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12.5, color: '#1e3a8a' }}>
+                  {pcSales.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #dbeafe' }}>
+                      <span>{r.kind} — {r.part_name || r.part_code} ×{r.qty}</span>
+                      <span style={{ fontWeight: 700 }}>₹{r.amount.toFixed(0)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

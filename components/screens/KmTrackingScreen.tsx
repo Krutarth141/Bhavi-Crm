@@ -278,7 +278,15 @@ export default function KmTrackingScreen() {
                                                     </td>
                                                     <td style={{ padding: 8, textAlign: 'right', fontWeight: 700, color: '#0d9488' }}>{l.segmentKm == null ? '—' : `+${l.segmentKm} km`}</td>
                                                     <td style={{ padding: 8, textAlign: 'center' }}>{l.photo_url ? <button title="View odometer photo" onClick={() => setLightboxSrc(l.photo_url as string)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>👁️</button> : '—'}</td>
-                                                    <td style={{ padding: 8, textAlign: 'center' }}>{l.lat && l.lng ? <a href={`https://maps.google.com/?q=${l.lat},${l.lng}`} target="_blank" rel="noreferrer">📍</a> : '—'}</td>
+                                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                                        {l.lat && l.lng ? (
+                                                            l.prevLat && l.prevLng ? (
+                                                                <a href={`https://www.google.com/maps/dir/?api=1&origin=${l.prevLat},${l.prevLng}&destination=${l.lat},${l.lng}&travelmode=driving`} target="_blank" rel="noreferrer" title="Directions from previous point to here">📍➡️</a>
+                                                            ) : (
+                                                                <a href={`https://maps.google.com/?q=${l.lat},${l.lng}`} target="_blank" rel="noreferrer" title="Open in Google Maps">📍</a>
+                                                            )
+                                                        ) : '—'}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>

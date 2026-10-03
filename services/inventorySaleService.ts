@@ -49,3 +49,46 @@ export const saveManualSale = async (params: {
         return { success: false, error: (err as any).message };
     }
 };
+
+// Mirrors HTML's saveEngRecordSale (index.html:13491-13517) — a counter sale
+// recorded by the engineer/staff themselves (e.g. a Printer/Camera counter
+// sale), straight from OFFICE stock (qty_in_stock), always sale_type
+// 'customer', with a mandatory Invoice/Bill No so accounting can trace it.
+// Available to BOTH plain engineers (openEngRecordSale button, index.html:13437)
+// and admin/CSP-manager (same button, index.html:12043) — same function in HTML.
+export const saveEngRecordSale = async (params: {
+    date: string;
+    partId: string;
+    partCode: string;
+    partName: string;
+    availStock: number;
+    qty: number;
+    price: number;
+    customer: string;
+    invoiceNo: string;
+    addedBy: string;
+}): Promise<{ success: boolean; error?: string }> => {
+    try {
+        if (params.qty > params.availStock) return { success: false, error: `Insufficient stock! Available: ${params.availStock}` };
+
+        await supabase.from('inventory_sales').insert([{
+            sale_date: params.date, part_code: params.partCode, part_name: params.partName,
+            sale_type: 'customer', customer_name: params.customer,
+            qty: params.qty, unit_price: params.price, total_amount: params.qty * params.price,
+            reference: params.invoiceNo, added_by: params.addedBy,
+        }]);
+
+        const newQty = Math.max(0, params.availStock - params.qty);
+        await supabase.from('inventory').update({
+            qty_in_stock: newQty, updated_at: new Date().toISOString(),
+        }).eq('id', params.partId);
+        await supabase.from('inventory_log').insert([{
+            inventory_id: params.partId, type: 'out', qty: params.qty,
+            note: `Sale to ${params.customer} INV:${params.invoiceNo}`, done_by: params.addedBy,
+        }]).then(() => { }, () => { });
+
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as any).message };
+    }
+};

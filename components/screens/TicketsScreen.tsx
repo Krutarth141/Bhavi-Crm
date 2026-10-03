@@ -1266,7 +1266,8 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                       </span>
                     )
                   )}
-                  {selectedTicket?.status !== 'Closed' && currentUserRole === 'work_controller' && !selectedTicket?.pending_edit && (
+                  {/* index.html:6458 — WC OR CSP Manager, not work_controller only. */}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'work_controller' || cspMgr) && !selectedTicket?.pending_edit && (
                     <button style={{ ...styles.btn, background: '#0ea5e9', color: 'white' }} onClick={() => setReportEditTicket(selectedTicket)}>
                       ✏️ Edit Report
                     </button>

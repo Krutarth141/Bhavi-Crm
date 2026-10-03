@@ -19,11 +19,13 @@ import {
 } from '@/services/engPartsService';
 import AdjustStockModal from './AdjustStockModal';
 import SelfRequestModal from './SelfRequestModal';
+import RecordSaleModal from './RecordSaleModal';
 import { approvePartRequest, rejectPartRequest, submitPartRequest } from '@/services/partRequestService';
+import { saveEngRecordSale } from '@/services/inventorySaleService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log' | 'warranty-pending' | 'my-requests';
-type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | 'selfReceive' | 'selfReturn' | null;
+type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | 'selfReceive' | 'selfReturn' | 'recordSale' | null;
 
 interface Props {
   inventory: InventoryItem[];
@@ -169,6 +171,17 @@ export default function EngPartsAdmin({
     onRefetch();
   };
 
+  // index.html:12043 — Record Sale, offered to Admin AND CSP Manager alike.
+  const handleRecordSaleSave = async (params: {
+    date: string; partId: string; partCode: string; partName: string; availStock: number;
+    qty: number; price: number; customer: string; invoiceNo: string;
+  }) => {
+    const r = await saveEngRecordSale({ ...params, addedBy: approvedBy });
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    onRefetch();
+    alert(`✅ Sale recorded — ₹${(params.qty * params.price).toFixed(0)}.`);
+  };
+
   const tabs: { key: AdminTabType; label: string }[] = [
     { key: 'overview', label: 'Stock Overview' },
     { key: 'analysis', label: 'Engineer Analysis' },
@@ -239,6 +252,12 @@ export default function EngPartsAdmin({
           onClick={() => setActiveModal('directWarranty')}
         >
           🎁 Direct Warranty Issue
+        </button>
+        <button
+          style={{ ...styles.btn, backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setActiveModal('recordSale')}
+        >
+          🛒 Record Sale
         </button>
         {/* index.html:12044 — CSP-Manager-only self-service extras */}
         {cspManagerMode && (
@@ -730,6 +749,13 @@ export default function EngPartsAdmin({
           engineers={engineers}
           inventory={inventory}
           onSave={handleDirectWarrantyIssueSave}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {activeModal === 'recordSale' && (
+        <RecordSaleModal
+          inventory={inventory}
+          onSave={handleRecordSaleSave}
           onClose={() => setActiveModal(null)}
         />
       )}

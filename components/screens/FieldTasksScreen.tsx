@@ -166,10 +166,35 @@ export default function FieldTasksScreen() {
             await load();
         }
     };
+    // index.html:26182-26193 doFtDone — a paid task (amount>0, no payment_mode
+    // yet) needs the same Payment Confirmation capture a Non-Warranty call's
+    // delivery gets, before it's marked Done.
+    const [paymentPromptTask, setPaymentPromptTask] = useState<FieldTask | null>(null);
+    const [paymentMode, setPaymentMode] = useState('');
+    const [paymentNotes, setPaymentNotes] = useState('');
+    const [paymentSaving, setPaymentSaving] = useState(false);
+
     const handleDone = async (t: FieldTask) => {
+        if ((t.amount || 0) > 0 && !t.payment_mode) {
+            setPaymentPromptTask(t);
+            setPaymentMode('');
+            setPaymentNotes('');
+            return;
+        }
         const r = await ftDone(t.id, myId, myName, memberRole, t);
         if (!r.success) alert('Error: ' + r.error);
         else { alert('✅ Task Done — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })); await load(); }
+    };
+    const handleConfirmPayment = async () => {
+        if (!paymentPromptTask) return;
+        if (!paymentMode) { alert('Please select a payment mode.'); return; }
+        setPaymentSaving(true);
+        const r = await ftDone(paymentPromptTask.id, myId, myName, memberRole, paymentPromptTask, { payment_mode: paymentMode, payment_notes: paymentNotes || undefined });
+        setPaymentSaving(false);
+        if (!r.success) { alert('Error: ' + r.error); return; }
+        setPaymentPromptTask(null);
+        alert('✅ Task Done — ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+        await load();
     };
     const handleCancel = async (t: FieldTask) => {
         if (!confirm(`Cancel this task?\n\n${t.customer_name} — ${t.task_type}`)) return;
@@ -296,6 +321,43 @@ export default function FieldTasksScreen() {
                             {filtered(cancelled).length > 0 && <><h3 style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', borderLeft: '4px solid #6b7280', paddingLeft: 10, marginTop: 18 }}>🚫 Cancelled ({filtered(cancelled).length})</h3>{filtered(cancelled).map(renderCard)}</>}
                         </>
                     )}
+
+            {paymentPromptTask && (
+                <div onClick={() => setPaymentPromptTask(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420 }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h2 style={{ margin: 0, fontSize: 17 }}>💳 Payment Confirmation</h2>
+                            <button onClick={() => setPaymentPromptTask(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                        </div>
+                        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12, borderLeft: '4px solid #15803d' }}>
+                                <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700 }}>{paymentPromptTask.customer_name}</div>
+                                <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>₹{(paymentPromptTask.amount || 0).toFixed(0)}</div>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: 12, fontWeight: 700 }}>Payment Mode *</label>
+                                <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} style={fieldStyle}>
+                                    <option value="">— Select —</option>
+                                    <option value="Cash">💵 Cash</option>
+                                    <option value="Online">💻 Online</option>
+                                    <option value="Check">📋 Cheque</option>
+                                    <option value="Card">💳 Card</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: 12, fontWeight: 700 }}>Additional Notes</label>
+                                <textarea value={paymentNotes} onChange={e => setPaymentNotes(e.target.value)} rows={2} placeholder="Optional notes..." style={{ ...fieldStyle, resize: 'vertical' as const }} />
+                            </div>
+                        </div>
+                        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setPaymentPromptTask(null)} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+                            <button onClick={handleConfirmPayment} disabled={paymentSaving} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, opacity: paymentSaving ? 0.6 : 1 }}>
+                                {paymentSaving ? 'Saving...' : '✅ Confirm & Done'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {modalOpen && (
                 <div onClick={() => setModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>

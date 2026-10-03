@@ -4,6 +4,8 @@ import { PartRequest } from '@/types/partRequest';
 import { InventoryItem } from '@/types/inventory';
 import { EngStock } from '@/types/engParts';
 import { submitPartRequest } from '@/services/partRequestService';
+import { saveEngRecordSale } from '@/services/inventorySaleService';
+import RecordSaleModal from './RecordSaleModal';
 import { colors, styles } from '@/styles/ticketsStyles';
 
 type EngTabType = 'my-stock' | 'my-requests' | 'self-service' | 'return-parts';
@@ -20,6 +22,7 @@ interface Props {
 export default function EngPartsEngineer({ engName, engineerId, inventory, myStock, myRequests, onRefetch }: Props) {
   const [activeTab, setActiveTab] = useState<EngTabType>('my-stock');
   const [search, setSearch] = useState('');
+  const [recordSaleOpen, setRecordSaleOpen] = useState(false);
 
   // Self-service cart state — part_id -> requested qty
   const [requestQtys, setRequestQtys] = useState<Record<string, number>>({});
@@ -163,8 +166,27 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
     }
   };
 
+  const handleRecordSaleSave = async (params: {
+    date: string; partId: string; partCode: string; partName: string; availStock: number;
+    qty: number; price: number; customer: string; invoiceNo: string;
+  }) => {
+    const r = await saveEngRecordSale({ ...params, addedBy: engName });
+    if (!r.success) { alert('Error: ' + r.error); return; }
+    onRefetch();
+    alert(`✅ Sale recorded — ₹${(params.qty * params.price).toFixed(0)} under your name.`);
+  };
+
   return (
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
+      {/* index.html:13437 — Record Sale, alongside the self-service request buttons */}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '12px' }}>
+        <button
+          style={{ ...styles.btn, backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setRecordSaleOpen(true)}
+        >
+          🛒 Record Sale
+        </button>
+      </div>
       <div style={styles.card}>
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
@@ -422,6 +444,13 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
           )}
         </div>
       </div>
+      {recordSaleOpen && (
+        <RecordSaleModal
+          inventory={inventory}
+          onSave={handleRecordSaleSave}
+          onClose={() => setRecordSaleOpen(false)}
+        />
+      )}
     </div>
   );
 }

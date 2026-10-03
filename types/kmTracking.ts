@@ -20,6 +20,11 @@ export interface KmLog {
 export interface KmReportEntry extends KmLog {
     area?: string;
     segmentKm?: number | null;
+    // index.html:28207,28234 — the previous entry's own GPS point in the same
+    // day's trail, if any, so the GPS link can route FROM there TO here
+    // instead of just dropping a single pin.
+    prevLat?: number | null;
+    prevLng?: number | null;
 }
 
 export interface KmDayGroup {

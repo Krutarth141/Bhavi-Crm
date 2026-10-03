@@ -55,6 +55,24 @@ export const fetchEngineerTickets = async (
     }
 };
 
+export interface RemarkHistoryEntry { by?: string; at?: string; note?: string; }
+
+// Mirrors HTML's showRemarkHistory (index.html:5952-5975) — `remarks` gets
+// fully overwritten every time someone adds a new one via openAdminEdit, but
+// each change is also logged as its own "...Remark..." timeline entry, so
+// this surfaces that history instead of it only being findable by scrolling
+// the whole timeline.
+export const fetchRemarkHistory = async (id: string): Promise<RemarkHistoryEntry[]> => {
+    try {
+        const { data } = await supabase.from('tickets').select('id, remarks, timeline').eq('id', id).maybeSingle();
+        if (!data) return [];
+        const tl: any[] = Array.isArray(data.timeline) ? data.timeline : [];
+        return tl.filter(e => e.action && String(e.action).includes('Remark') && e.note).reverse();
+    } catch {
+        return [];
+    }
+};
+
 // Re-fetches a single ticket after a Visit/Work/Hold panel action so the open
 // Update modal can reflect the fresh timeline without a full list reload.
 export const fetchTicketById = async (id: string): Promise<EngineerTicket | null> => {

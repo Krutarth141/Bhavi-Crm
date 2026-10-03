@@ -21,7 +21,9 @@ export const fetchPaymentCollectionTickets = async (
         if (!canManage) q = q.or(`assigned_to.eq.${myId},payment_collected_by_id.eq.${myId}`);
         const { data, error } = await q;
         if (error) throw error;
-        return { tickets: data || [], setupNeeded: false };
+        const tickets = data || [];
+        await mergeFieldTaskPayments(tickets, myId, canManage);
+        return { tickets, setupNeeded: false };
     } catch (err: any) {
         const msg = String(err?.message || '');
         if (msg.indexOf('payment_collected_by') !== -1) {
@@ -33,7 +35,9 @@ export const fetchPaymentCollectionTickets = async (
                 if (!canManage) q2 = q2.eq('assigned_to', myId);
                 const { data, error: err2 } = await q2;
                 if (err2) throw err2;
-                return { tickets: data || [], setupNeeded: false };
+                const tickets = data || [];
+                await mergeFieldTaskPayments(tickets, myId, canManage);
+                return { tickets, setupNeeded: false };
             } catch (err2: any) {
                 console.error('fetchPaymentCollectionTickets (fallback):', err2);
                 return { tickets: [], setupNeeded: false, error: String(err2?.message || 'Unknown error') };
@@ -45,6 +49,32 @@ export const fetchPaymentCollectionTickets = async (
         console.error('fetchPaymentCollectionTickets:', err);
         return { tickets: [], setupNeeded: false, error: msg || 'Unknown error' };
     }
+};
+
+// index.html:11784-11800 — "Other Work" (field_tasks) that collected payment
+// in the field is exactly like a Non-Warranty call's Delivered handover: real
+// money needing the same Pending/Received tracking. Best-effort (mirrors
+// HTML's own `.catch(()=>[])`) — never fails the main ticket list.
+const mergeFieldTaskPayments = async (tickets: PaymentTicket[], myId: string, canManage: boolean): Promise<void> => {
+    try {
+        let q = supabase.from('field_tasks')
+            .select('id, customer_name, mobile, task_type, amount, payment_mode, payment_splits, payment_received, payment_received_at, payment_received_by, payment_collected_by, payment_collected_by_id, assigned_to, assigned_name, updated_at')
+            .not('payment_mode', 'is', null)
+            .order('updated_at', { ascending: false });
+        if (!canManage) q = q.or(`assigned_to.eq.${myId},payment_collected_by_id.eq.${myId}`);
+        const { data } = await q;
+        (data || []).forEach((ft: any) => {
+            tickets.push({
+                id: `FT-${ft.id}`, _isFt: true, _ftRealId: ft.id,
+                cname: ft.customer_name, mobile: ft.mobile, area: '-', model: `🚚 ${ft.task_type || 'Other Work'}`,
+                final_charges: ft.amount || 0, spares: [], labor: 0, other_charge: 0,
+                payment_mode: ft.payment_mode, payment_splits: ft.payment_splits,
+                payment_received: ft.payment_received, payment_received_at: ft.payment_received_at, payment_received_by: ft.payment_received_by,
+                payment_collected_by: ft.payment_collected_by, payment_collected_by_id: ft.payment_collected_by_id,
+                assigned_to: ft.assigned_to, assigned_name: ft.assigned_name, updated_at: ft.updated_at,
+            });
+        });
+    } catch { /* best-effort, matches HTML's silent catch here */ }
 };
 
 // Same fallback chain as HTML's _pcBreakdown(): final_charges wins when set,
@@ -59,14 +89,18 @@ export const pcBreakdown = (t: PaymentTicket): PcBreakdown => {
 
 export const pcAmount = (t: PaymentTicket): number => pcBreakdown(t).total;
 
+// index.html:11915-11917 — an _isFt row PATCHes field_tasks by its real id,
+// not the tickets table (t.id there is the synthetic 'FT-<id>' label).
 export const markPaymentReceived = async (
-    ticketId: string, received: boolean, receivedBy: string
+    ticketId: string, received: boolean, receivedBy: string, ftRealId?: number
 ): Promise<{ success: boolean; error?: string; setupNeeded?: boolean }> => {
     try {
         const patch = received
             ? { payment_received: true, payment_received_at: new Date().toISOString(), payment_received_by: receivedBy }
             : { payment_received: false, payment_received_at: null, payment_received_by: null };
-        const { error } = await supabase.from('tickets').update(patch).eq('id', ticketId);
+        const { error } = ftRealId != null
+            ? await supabase.from('field_tasks').update(patch).eq('id', ftRealId)
+            : await supabase.from('tickets').update(patch).eq('id', ticketId);
         if (error) throw error;
         return { success: true };
     } catch (err: any) {

@@ -83,7 +83,7 @@ export default function PaymentCollectionScreen() {
             const amt = pcAmount(t).toFixed(0);
             if (!confirm(`Confirm payment received?\n\nTicket: ${t.id}${t.cname ? `\nCustomer: ${t.cname}` : ''}\nAmount: ₹${amt}\n\nThis marks it as collected/handed over to office.`)) return;
         }
-        const r = await markPaymentReceived(t.id, received, myName);
+        const r = await markPaymentReceived(t.id, received, myName, t._ftRealId);
         if (!r.success) {
             alert(r.setupNeeded
                 ? '⚠️ Setup needed: the payment_received columns don\'t exist on the tickets table yet. Run the Payment Collection setup SQL in Supabase first.'
@@ -200,9 +200,11 @@ export default function PaymentCollectionScreen() {
                                                         <tr key={t.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                             <td style={{ padding: '6px 8px' }}>{t.updated_at ? new Date(t.updated_at).toLocaleDateString('en-IN') : '-'}</td>
                                                             <td style={{ padding: '6px 8px', fontWeight: 700 }}>
-                                                                {canManage
-                                                                    ? <button onClick={() => setViewTicketId(t.id)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>{t.id}</button>
-                                                                    : t.id}
+                                                                {t._isFt
+                                                                    ? <b style={{ color: '#7c3aed' }}>{t.id}</b>
+                                                                    : canManage
+                                                                        ? <button onClick={() => setViewTicketId(t.id)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>{t.id}</button>
+                                                                        : t.id}
                                                             </td>
                                                             <td style={{ padding: '6px 8px' }}>{t.cname || '-'}</td>
                                                             <td style={{ padding: '6px 8px' }}>{t.mobile || '-'}</td>
@@ -211,9 +213,17 @@ export default function PaymentCollectionScreen() {
                                                             <td style={{ padding: '6px 8px' }}>
                                                                 <button onClick={() => showBreakdown(t)} style={{ background: 'none', border: 'none', color: '#185FA5', fontWeight: 700, textDecoration: 'underline dotted', cursor: 'pointer', padding: 0, fontSize: 12 }}>₹{amt.toFixed(0)}</button>
                                                             </td>
-                                                            <td style={{ padding: '6px 8px' }}>{t.payment_mode || '-'}</td>
+                                                            <td style={{ padding: '6px 8px' }}>
+                                                                {Array.isArray(t.payment_splits) && t.payment_splits.length > 1 ? (
+                                                                    <span title={t.payment_splits.map(s => `${s.mode}: ₹${s.amount}`).join(' | ')} style={{ textDecoration: 'underline dotted', cursor: 'help' }}>
+                                                                        {t.payment_mode || '-'}
+                                                                    </span>
+                                                                ) : (t.payment_mode || '-')}
+                                                            </td>
                                                             <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                                                                {t.invoice_done ? (
+                                                                {t._isFt ? (
+                                                                    <span style={{ color: '#9ca3af' }}>— N/A</span>
+                                                                ) : t.invoice_done ? (
                                                                     <>
                                                                         <div style={{ color: '#0e9f6e', fontWeight: 700, fontSize: 12 }}>✅ #{t.invoice_no || ''}</div>
                                                                         {canManage && <button onClick={() => openInvoice(t)} style={{ marginTop: 4, padding: '2px 8px', fontSize: 10, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 6, cursor: 'pointer' }}>✏️ Edit</button>}

@@ -26,6 +26,11 @@ export interface PaymentTicket {
     invoice_done?: boolean;
     invoice_no?: string | null;
     timeline?: any[];
+    // index.html:11780-11802 — "Other Work" (field_tasks) rows that collected
+    // payment in the field get merged into this same list, tagged FT-<id>.
+    _isFt?: boolean;
+    _ftRealId?: number;
+    payment_splits?: { mode: string; amount: number }[] | null;
 }
 
 export interface PcBreakdown {

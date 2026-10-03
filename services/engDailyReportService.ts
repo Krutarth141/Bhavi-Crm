@@ -245,6 +245,30 @@ export const fetchDrAutoSiteVisitCount = async (engId: string, date: string): Pr
     } catch (err) { console.error('fetchDrAutoSiteVisitCount:', err); return 0; }
 };
 
+export interface DrPcSaleRow { kind: string; part_code: string; part_name: string; qty: number; amount: number }
+
+// Auto-fill "Printer/Camera Sales Today" from Inventory Sales, matched by
+// this engineer's name in `added_by` (the same field the manual/bulk/
+// engineer-self sale forms all save) and classified via the sold part's
+// inventory category (index.html:16899-16930 drAutoFillPrinterCameraSales).
+export const fetchDrPcSales = async (engName: string, date: string): Promise<DrPcSaleRow[]> => {
+    try {
+        const { data: sales } = await supabase.from('inventory_sales').select('*').eq('sale_date', date).eq('added_by', engName);
+        if (!sales || !sales.length) return [];
+        const codes = Array.from(new Set(sales.map((s: any) => s.part_code).filter(Boolean)));
+        const { data: inv } = codes.length
+            ? await supabase.from('inventory').select('part_code, category').in('part_code', codes)
+            : { data: [] as any[] };
+        const catByCode = new Map((inv || []).map((i: any) => [String(i.part_code || '').toUpperCase(), (i.category || '').toLowerCase()]));
+        return (sales as any[]).reduce<DrPcSaleRow[]>((rows, s) => {
+            const cat = catByCode.get(String(s.part_code || '').toUpperCase()) || '';
+            const kind = cat.includes('printer') ? '🖨️ Printer' : cat.includes('camera') ? '📷 Camera' : null;
+            if (kind) rows.push({ kind, part_code: s.part_code, part_name: s.part_name, qty: s.qty || 0, amount: (s.qty || 0) * (s.unit_price || 0) });
+            return rows;
+        }, []);
+    } catch (err) { console.error('fetchDrPcSales:', err); return []; }
+};
+
 export interface DailyReportRecord {
     id: number;
     eng_id: string;

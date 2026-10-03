@@ -134,6 +134,9 @@ export const fetchKmReport = async (from: string, to: string, engId?: string): P
         let opening: number | null = null, closing: number | null = null, prev: number | null = null, maxRead: number | null = null;
         let openingLoc: { lat: number; lng: number } | null = null, closingLoc: { lat: number; lng: number } | null = null;
         let dayKm = 0;
+        // index.html:28207,28244 — the trail's running "previous GPS point",
+        // carried across entries regardless of entry_type.
+        let prevLoc: { lat: number; lng: number } | null = null;
         g.entries.forEach((l) => {
             const kmN = parseFloat(String(l.odometer_km));
             if (l.entry_type === 'opening' && opening === null && !isNaN(kmN)) opening = kmN;
@@ -144,6 +147,9 @@ export const fetchKmReport = async (from: string, to: string, engId?: string): P
             l.segmentKm = (prev !== null && !isNaN(kmN) && kmN >= prev) ? kmN - prev : null;
             if (l.segmentKm !== null && l.segmentKm > 0) dayKm += l.segmentKm;
             if (!isNaN(kmN)) prev = kmN;
+            l.prevLat = prevLoc?.lat ?? null;
+            l.prevLng = prevLoc?.lng ?? null;
+            if (l.lat && l.lng) prevLoc = { lat: Number(l.lat), lng: Number(l.lng) };
         });
         // Falls back to the sum of positive trip segments when there's no usable
         // opening reading for the day (matches HTML: still gives a best-effort

@@ -37,6 +37,9 @@ export interface FieldTask {
     assigned_to?: string | null;
     assigned_name?: string | null;
     notes?: string | null;
+    payment_mode?: string | null;
+    payment_collected_by?: string | null;
+    payment_collected_by_id?: string | null;
     status: FieldTaskStatus;
     task_date?: string;
     created_by?: string;
