@@ -96,24 +96,32 @@
   padding: 2rem;
 }
 
-.dashboard-nav h2 {
+/* Mobile-drawer title bar (holds the close button) — not a section label */
+.dashboard-nav-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+/* Matches HTML's .nav-section / .nav-section-title (index.html:24-26) */
+.nav-section {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nav-section-title {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  padding: 5px 16px 3px;
-  margin: 0;
   color: #546e7a;
-  font-weight: 700;
+  padding: 5px 16px 3px;
 }
 
 .dashboard-nav ul {
   list-style: none;
   padding: 0;
   margin: 0;
-}
-
-.dashboard-nav li {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* Matches HTML's .nav-item (index.html:10-13) */

@@ -40,30 +40,37 @@ type WorkControllerTab =
     | 'reports' | 'inquiries' | 'attendance' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'tat-report'
     | 'part-request' | 'inventory' | 'work-log' | 'work-log-report' | 'master' | 'sales' | 'route-planning';
 
-const NAV_ITEMS: { id: WorkControllerTab; label: string }[] = [
-    { id: 'overview', label: '📊 Overview' },
-    { id: 'tickets', label: '🎫 All Tickets' },
-    { id: 'pending', label: '📋 Pending List' },
-    { id: 'customers', label: '👥 Customers' },
-    { id: 'walkin', label: '🚶 Walk-in' },
-    { id: 'walkin-report', label: '🚶 Walk-in Report' },
-    { id: 'courier', label: '📦 Courier' },
-    { id: 'courier-report', label: '📦 Courier Register' },
-    { id: 'reports', label: '📈 Reports' },
-    { id: 'inquiries', label: '🔍 Inquiries' },
-    { id: 'attendance', label: '🗓️ Attendance' },
-    { id: 'km-report', label: '🛣️ KM Tracking' },
-    { id: 'payment-collection', label: '💰 Payment Collection' },
-    { id: 'inventory', label: '🗃️ Inventory' },
-    { id: 'field-tasks', label: '🚚 Other Work' },
-    { id: 'site-visits', label: '🏗️ Site Visits' },
-    { id: 'tat-report', label: '⏱️ TAT Compliance' },
-    { id: 'part-request', label: '🧰 Part Requests' },
-    { id: 'work-log', label: '🗒️ Work Log' },
-    { id: 'work-log-report', label: '📋 Work Log Report' },
-    { id: 'master', label: '🗂️ Master Data' },
-    { id: 'sales', label: '💼 Sales' },
-    { id: 'route-planning', label: '🗺️ Route Planning' },
+type NavSection = 'Main' | 'Management' | 'Automation';
+const SECTION_ORDER: NavSection[] = ['Main', 'Management', 'Automation'];
+
+// `section` mirrors which of HTML's three sidebar <div class="nav-section">
+// groups (index.html:310-361) each item lives in. Part Requests has no
+// direct HTML sidebar equivalent and is bucketed under Management, matching
+// HTML's own catch-all for back-office tools.
+const NAV_ITEMS: { id: WorkControllerTab; label: string; section: NavSection }[] = [
+    { id: 'overview', label: '📊 Overview', section: 'Main' },
+    { id: 'tickets', label: '🎫 All Tickets', section: 'Main' },
+    { id: 'walkin', label: '🚶 Walk-in', section: 'Main' },
+    { id: 'courier', label: '📦 Courier', section: 'Main' },
+    { id: 'km-report', label: '🛣️ KM Tracking', section: 'Main' },
+    { id: 'payment-collection', label: '💰 Payment Collection', section: 'Main' },
+    { id: 'field-tasks', label: '🚚 Other Work', section: 'Main' },
+    { id: 'site-visits', label: '🏗️ Site Visits', section: 'Main' },
+    { id: 'work-log', label: '🗒️ Work Log', section: 'Main' },
+    { id: 'pending', label: '📋 Pending List', section: 'Management' },
+    { id: 'customers', label: '👥 Customers', section: 'Management' },
+    { id: 'walkin-report', label: '🚶 Walk-in Report', section: 'Management' },
+    { id: 'courier-report', label: '📦 Courier Register', section: 'Management' },
+    { id: 'reports', label: '📈 Reports', section: 'Management' },
+    { id: 'inquiries', label: '🔍 Inquiries', section: 'Management' },
+    { id: 'attendance', label: '🗓️ Attendance', section: 'Management' },
+    { id: 'inventory', label: '🗃️ Inventory', section: 'Management' },
+    { id: 'tat-report', label: '⏱️ TAT Compliance', section: 'Management' },
+    { id: 'part-request', label: '🧰 Part Requests', section: 'Management' },
+    { id: 'work-log-report', label: '📋 Work Log Report', section: 'Management' },
+    { id: 'master', label: '🗂️ Master Data', section: 'Management' },
+    { id: 'sales', label: '💼 Sales', section: 'Management' },
+    { id: 'route-planning', label: '🗺️ Route Planning', section: 'Management' },
 ];
 
 // index.html:2914-2916 (setupNav's isWC branch) hides Reports, Walk-in Report,
@@ -161,36 +168,54 @@ export default function WorkControllerDashboard() {
             <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
-                        <h2 style={{ margin: 0 }}>Work Controller Menu</h2>
+                        <h2 className="dashboard-nav-title">Work Controller Menu</h2>
                         <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
                     </div>
-                    <ul>
-                        {visibleNavItems.map(item => (
-                            <li key={item.id}>
-                                <button
-                                    className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => handleNavClick(item.id)}
-                                >
-                                    {item.label}
-                                </button>
-                            </li>
-                        ))}
-                        <li>
-                            <button onClick={() => { setShowWCReport(true); setSidebarOpen(false); }}>
-                                📋 WC Report
-                            </button>
-                        </li>
-                        <li>
-                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
-                                💳 Payment QR
-                            </button>
-                        </li>
-                        <li>
-                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
-                                📱 Customer Portal
-                            </button>
-                        </li>
-                    </ul>
+                    {SECTION_ORDER.map((section) => {
+                        const items = visibleNavItems.filter((item) => item.section === section);
+                        if (!items.length) return null;
+                        return (
+                            <div className="nav-section" key={section}>
+                                <div className="nav-section-title">{section}</div>
+                                <ul>
+                                    {items.map(item => (
+                                        <li key={item.id}>
+                                            <button
+                                                className={activeTab === item.id ? 'active' : ''}
+                                                onClick={() => handleNavClick(item.id)}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        </li>
+                                    ))}
+                                    {/* Payment QR sits with the rest of Main (index.html:315) */}
+                                    {section === 'Main' && (
+                                        <li>
+                                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
+                                                💳 Payment QR
+                                            </button>
+                                        </li>
+                                    )}
+                                    {/* WC Report + Customer Portal sit with the rest of Management
+                                        (index.html:333, 351) */}
+                                    {section === 'Management' && (
+                                        <>
+                                            <li>
+                                                <button onClick={() => { setShowWCReport(true); setSidebarOpen(false); }}>
+                                                    📋 WC Report
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
+                                                    📱 Customer Portal
+                                                </button>
+                                            </li>
+                                        </>
+                                    )}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </nav>
             </div>
 

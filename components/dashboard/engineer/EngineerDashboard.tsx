@@ -41,45 +41,50 @@ type EngineerTab = 'overview' | 'my-calls' | 'work-log' | 'my-report' | 'reports
     | 'tickets' | 'eng-parts' | 'pending' | 'route-planning' | 'customers' | 'inventory' | 'amc' | 'work-log-report'
     | 'auto-sites' | 'sw-survey' | 'auto-visits-report' | 'auto-inventory';
 
+type NavSection = 'Main' | 'Management' | 'Automation';
+const SECTION_ORDER: NavSection[] = ['Main', 'Management', 'Automation'];
+
 // Base items every engineer gets — mirrors HTML's setupNav() regular-engineer
-// branch (sv('nav-tickets',false); sv('nav-eng-parts',false) there).
-const NAV_ITEMS: { id: EngineerTab; label: string }[] = [
-    { id: 'overview', label: '📊 Overview' },
-    { id: 'my-calls', label: '📞 My Calls' },
-    { id: 'work-log', label: '🕐 Work Log' },
-    { id: 'my-report', label: '📊 My Report' },
-    { id: 'attendance', label: '🗓️ Attendance' },
-    { id: 'km-report', label: '🛣️ KM Tracking' },
-    { id: 'payment-collection', label: '💰 Payment Collection' },
-    { id: 'inquiries', label: '🔍 Inquiries' },
-    { id: 'field-tasks', label: '🚚 Other Work' },
+// branch (sv('nav-tickets',false); sv('nav-eng-parts',false) there). `section`
+// mirrors which of HTML's three sidebar <div class="nav-section"> groups
+// (index.html:310-361) each item actually lives in.
+const NAV_ITEMS: { id: EngineerTab; label: string; section: NavSection }[] = [
+    { id: 'overview', label: '📊 Overview', section: 'Main' },
+    { id: 'my-calls', label: '📞 My Calls', section: 'Main' },
+    { id: 'work-log', label: '🕐 Work Log', section: 'Main' },
+    { id: 'my-report', label: '📊 My Report', section: 'Main' },
+    { id: 'km-report', label: '🛣️ KM Tracking', section: 'Main' },
+    { id: 'payment-collection', label: '💰 Payment Collection', section: 'Main' },
+    { id: 'field-tasks', label: '🚚 Other Work', section: 'Main' },
+    { id: 'attendance', label: '🗓️ Attendance', section: 'Management' },
+    { id: 'inquiries', label: '🔍 Inquiries', section: 'Management' },
     // HTML setupNav(): `if(isEng){sv('nav-parts-catalog',true);sv('nav-fault-finder',true);}`
     // — every engineer gets these two, regardless of CSP-manager status.
-    { id: 'parts-catalog', label: '🔩 Parts Catalog' },
-    { id: 'fault-finder', label: '🔍 Fault Finder' },
-    { id: 'eng-parts', label: '🧰 Eng. Parts' },
+    { id: 'parts-catalog', label: '🔩 Parts Catalog', section: 'Management' },
+    { id: 'fault-finder', label: '🔍 Fault Finder', section: 'Management' },
+    { id: 'eng-parts', label: '🧰 Eng. Parts', section: 'Management' },
 ];
 
 // CSP Manager (ENG001) only — mirrors HTML's isCspMgr nav extras, which is
 // also where HTML turns nav-tickets back on.
-const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
-    { id: 'reports', label: '📈 Reports' },
-    { id: 'tickets', label: '🎫 All Tickets' },
-    { id: 'pending', label: '📋 Pending List' },
-    { id: 'route-planning', label: '🗺️ Route Planning' },
-    { id: 'customers', label: '👥 Customers' },
-    { id: 'inventory', label: '🗃️ Inventory' },
-    { id: 'work-log-report', label: '📋 Work Log Report' },
-    { id: 'amc', label: '🔄 AMC' },
+const CSP_EXTRA_ITEMS: { id: EngineerTab; label: string; section: NavSection }[] = [
+    { id: 'tickets', label: '🎫 All Tickets', section: 'Main' },
+    { id: 'reports', label: '📈 Reports', section: 'Management' },
+    { id: 'pending', label: '📋 Pending List', section: 'Management' },
+    { id: 'route-planning', label: '🗺️ Route Planning', section: 'Management' },
+    { id: 'customers', label: '👥 Customers', section: 'Management' },
+    { id: 'inventory', label: '🗃️ Inventory', section: 'Management' },
+    { id: 'work-log-report', label: '📋 Work Log Report', section: 'Management' },
+    { id: 'amc', label: '🔄 AMC', section: 'Management' },
 ];
 
 // "Auto engineer" accounts (ENG002/ENG008) — mirrors HTML's isAutoEng nav
 // gate, granted independent of CSP-manager status.
-const AUTO_EXTRA_ITEMS: { id: EngineerTab; label: string }[] = [
-    { id: 'auto-sites', label: '🏗️ Auto Sites' },
-    { id: 'sw-survey', label: '🔌 SW Survey' },
-    { id: 'auto-visits-report', label: '📋 Visit Report' },
-    { id: 'auto-inventory', label: '📦 Auto Inventory' },
+const AUTO_EXTRA_ITEMS: { id: EngineerTab; label: string; section: NavSection }[] = [
+    { id: 'auto-sites', label: '🏗️ Auto Sites', section: 'Automation' },
+    { id: 'sw-survey', label: '🔌 SW Survey', section: 'Automation' },
+    { id: 'auto-visits-report', label: '📋 Visit Report', section: 'Automation' },
+    { id: 'auto-inventory', label: '📦 Auto Inventory', section: 'Automation' },
 ];
 
 export default function EngineerDashboard() {
@@ -170,31 +175,46 @@ export default function EngineerDashboard() {
             <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
-                        <h2 style={{ margin: 0 }}>Engineer Menu</h2>
+                        <h2 className="dashboard-nav-title">Engineer Menu</h2>
                         <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
                     </div>
-                    <ul>
-                        {visibleNavItems.map(item => (
-                            <li key={item.id}>
-                                <button
-                                    className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => handleNavClick(item.id)}
-                                >
-                                    {item.label}
-                                </button>
-                            </li>
-                        ))}
-                        <li>
-                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
-                                💳 Payment QR
-                            </button>
-                        </li>
-                        <li>
-                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
-                                📱 Customer Portal
-                            </button>
-                        </li>
-                    </ul>
+                    {SECTION_ORDER.map((section) => {
+                        const items = visibleNavItems.filter((item) => item.section === section);
+                        if (!items.length) return null;
+                        return (
+                            <div className="nav-section" key={section}>
+                                <div className="nav-section-title">{section}</div>
+                                <ul>
+                                    {items.map(item => (
+                                        <li key={item.id}>
+                                            <button
+                                                className={activeTab === item.id ? 'active' : ''}
+                                                onClick={() => handleNavClick(item.id)}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        </li>
+                                    ))}
+                                    {/* Payment QR sits with the rest of Main (index.html:315) */}
+                                    {section === 'Main' && (
+                                        <li>
+                                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
+                                                💳 Payment QR
+                                            </button>
+                                        </li>
+                                    )}
+                                    {/* Customer Portal sits with the rest of Management (index.html:351) */}
+                                    {section === 'Management' && (
+                                        <li>
+                                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
+                                                📱 Customer Portal
+                                            </button>
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </nav>
             </div>
 

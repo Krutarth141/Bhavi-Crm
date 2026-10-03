@@ -64,50 +64,58 @@ type AdminTab =
     | 'report-edit' | 'customer-approval' | 'engineer-update' | 'part-request' | 'peon-activity'
     | 'followup' | 'reorder' | 'km-report' | 'payment-collection' | 'field-tasks' | 'site-visits' | 'sw-survey' | 'eng-daily-report';
 
-const NAV_ITEMS: { id: AdminTab; label: string }[] = [
-    { id: 'overview', label: '📊 Overview' },
-    { id: 'tickets', label: '🎫 All Tickets' },
-    { id: 'pending', label: '📋 Pending List' },
-    { id: 'inventory', label: '🗃️ Inventory' },
-    { id: 'eng-parts', label: '🧰 Eng. Parts' },
-    { id: 'customers', label: '👥 Customers' },
-    { id: 'walkin', label: '🚶 Walk-in' },
-    { id: 'walkin-report', label: '🚶 Walk-in Report' },
-    { id: 'courier', label: '📦 Courier' },
-    { id: 'courier-report', label: '📦 Courier Register' },
-    { id: 'reports', label: '📈 Reports' },
-    { id: 'worklogs', label: '🕒 Work Logs' },
-    { id: 'engineers', label: '👷 Engineers' },
-    { id: 'master', label: '🗂️ Master Data' },
-    { id: 'settings', label: '⚙️ Settings' },
-    { id: 'live-map', label: '📍 Live Map' },
-    { id: 'attendance', label: '🗓️ Attendance' },
-    { id: 'peon-activity', label: '🧹 Peon Activity' },
-    { id: 'targets', label: '🎯 Targets' },
-    { id: 'amc', label: '🔄 AMC' },
-    { id: 'weekly-report', label: '📊 Weekly Report' },
-    { id: 'sales', label: '💼 Sales' },
-    { id: 'parts-catalog', label: '🔩 Parts Catalog' },
-    { id: 'fault-finder', label: '🔍 Fault Finder' },
-    { id: 'route-planning', label: '🗺️ Route Planning' },
-    { id: 'inquiries', label: '🔍 Inquiries' },
-    { id: 'auto-inventory', label: '📦 Auto Inventory' },
-    { id: 'auto-sites', label: '🏗️ Auto Sites' },
-    { id: 'auto-visits-report', label: '📋 Visit Report' },
-    { id: 'ai-agent', label: '🤖 Virtual AI Agent' },
-    { id: 'ai-analysis', label: '🤖 AI Analysis' },
-    { id: 'report-edit', label: '📥 Import Calls' },
-    { id: 'customer-approval', label: '✅ Customer Approval' },
-    { id: 'engineer-update', label: '🛠️ Engineer Update' },
-    { id: 'part-request', label: '🧰 Part Request' },
-    { id: 'followup', label: '📞 Follow-up Tracker' },
-    { id: 'reorder', label: '📦 Parts Reorder Alert' },
-    { id: 'km-report', label: '🛣️ KM Tracking' },
-    { id: 'payment-collection', label: '💰 Payment Collection' },
-    { id: 'field-tasks', label: '🚚 Other Work' },
-    { id: 'site-visits', label: '🏗️ Site Visits' },
-    { id: 'sw-survey', label: '🔌 SW Survey' },
-    { id: 'eng-daily-report', label: '📅 Engineer Daily Report' },
+type NavSection = 'Main' | 'Management' | 'Automation';
+const SECTION_ORDER: NavSection[] = ['Main', 'Management', 'Automation'];
+
+// `section` mirrors which of HTML's three sidebar <div class="nav-section">
+// groups (index.html:310-361) each item lives in. Admin-only screens with no
+// direct HTML sidebar equivalent (AI Agent, Import Calls, Engineer Update,
+// Part Request, Follow-up Tracker, Parts Reorder, Engineers) are bucketed
+// under Management, matching HTML's own catch-all for admin back-office tools.
+const NAV_ITEMS: { id: AdminTab; label: string; section: NavSection }[] = [
+    { id: 'overview', label: '📊 Overview', section: 'Main' },
+    { id: 'tickets', label: '🎫 All Tickets', section: 'Main' },
+    { id: 'walkin', label: '🚶 Walk-in', section: 'Main' },
+    { id: 'courier', label: '📦 Courier', section: 'Main' },
+    { id: 'km-report', label: '🛣️ KM Tracking', section: 'Main' },
+    { id: 'payment-collection', label: '💰 Payment Collection', section: 'Main' },
+    { id: 'field-tasks', label: '🚚 Other Work', section: 'Main' },
+    { id: 'site-visits', label: '🏗️ Site Visits', section: 'Main' },
+    { id: 'eng-daily-report', label: '📅 Engineer Daily Report', section: 'Main' },
+    { id: 'pending', label: '📋 Pending List', section: 'Management' },
+    { id: 'inventory', label: '🗃️ Inventory', section: 'Management' },
+    { id: 'eng-parts', label: '🧰 Eng. Parts', section: 'Management' },
+    { id: 'customers', label: '👥 Customers', section: 'Management' },
+    { id: 'walkin-report', label: '🚶 Walk-in Report', section: 'Management' },
+    { id: 'courier-report', label: '📦 Courier Register', section: 'Management' },
+    { id: 'reports', label: '📈 Reports', section: 'Management' },
+    { id: 'worklogs', label: '🕒 Work Logs', section: 'Management' },
+    { id: 'engineers', label: '👷 Engineers', section: 'Management' },
+    { id: 'master', label: '🗂️ Master Data', section: 'Management' },
+    { id: 'settings', label: '⚙️ Settings', section: 'Management' },
+    { id: 'live-map', label: '📍 Live Map', section: 'Management' },
+    { id: 'attendance', label: '🗓️ Attendance', section: 'Management' },
+    { id: 'peon-activity', label: '🧹 Peon Activity', section: 'Management' },
+    { id: 'targets', label: '🎯 Targets', section: 'Management' },
+    { id: 'amc', label: '🔄 AMC', section: 'Management' },
+    { id: 'weekly-report', label: '📊 Weekly Report', section: 'Management' },
+    { id: 'sales', label: '💼 Sales', section: 'Management' },
+    { id: 'parts-catalog', label: '🔩 Parts Catalog', section: 'Management' },
+    { id: 'fault-finder', label: '🔍 Fault Finder', section: 'Management' },
+    { id: 'route-planning', label: '🗺️ Route Planning', section: 'Management' },
+    { id: 'inquiries', label: '🔍 Inquiries', section: 'Management' },
+    { id: 'ai-agent', label: '🤖 Virtual AI Agent', section: 'Management' },
+    { id: 'ai-analysis', label: '🤖 AI Analysis', section: 'Management' },
+    { id: 'report-edit', label: '📥 Import Calls', section: 'Management' },
+    { id: 'customer-approval', label: '✅ Customer Approval', section: 'Management' },
+    { id: 'engineer-update', label: '🛠️ Engineer Update', section: 'Management' },
+    { id: 'part-request', label: '🧰 Part Request', section: 'Management' },
+    { id: 'followup', label: '📞 Follow-up Tracker', section: 'Management' },
+    { id: 'reorder', label: '📦 Parts Reorder Alert', section: 'Management' },
+    { id: 'auto-inventory', label: '📦 Auto Inventory', section: 'Automation' },
+    { id: 'auto-sites', label: '🏗️ Auto Sites', section: 'Automation' },
+    { id: 'auto-visits-report', label: '📋 Visit Report', section: 'Automation' },
+    { id: 'sw-survey', label: '🔌 SW Survey', section: 'Automation' },
 ];
 
 export default function AdminDashboard() {
@@ -204,31 +212,46 @@ export default function AdminDashboard() {
             <div className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`}>
                 <nav className="dashboard-nav">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 8px' }}>
-                        <h2 style={{ margin: 0 }}>Admin Menu</h2>
+                        <h2 className="dashboard-nav-title">Admin Menu</h2>
                         <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>✕</button>
                     </div>
-                    <ul>
-                        {NAV_ITEMS.map(item => (
-                            <li key={item.id}>
-                                <button
-                                    className={activeTab === item.id ? 'active' : ''}
-                                    onClick={() => handleNavClick(item.id)}
-                                >
-                                    {item.label}
-                                </button>
-                            </li>
-                        ))}
-                        <li>
-                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
-                                💳 Payment QR
-                            </button>
-                        </li>
-                        <li>
-                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
-                                📱 Customer Portal
-                            </button>
-                        </li>
-                    </ul>
+                    {SECTION_ORDER.map((section) => {
+                        const items = NAV_ITEMS.filter((item) => item.section === section);
+                        if (!items.length) return null;
+                        return (
+                            <div className="nav-section" key={section}>
+                                <div className="nav-section-title">{section}</div>
+                                <ul>
+                                    {items.map(item => (
+                                        <li key={item.id}>
+                                            <button
+                                                className={activeTab === item.id ? 'active' : ''}
+                                                onClick={() => handleNavClick(item.id)}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        </li>
+                                    ))}
+                                    {/* Payment QR sits with the rest of Main (index.html:315) */}
+                                    {section === 'Main' && (
+                                        <li>
+                                            <button onClick={() => { setShowPaymentQR(true); setSidebarOpen(false); }}>
+                                                💳 Payment QR
+                                            </button>
+                                        </li>
+                                    )}
+                                    {/* Customer Portal sits with the rest of Management (index.html:351) */}
+                                    {section === 'Management' && (
+                                        <li>
+                                            <button onClick={() => { setShowPortalQR(true); setSidebarOpen(false); }}>
+                                                📱 Customer Portal
+                                            </button>
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </nav>
             </div>
 
