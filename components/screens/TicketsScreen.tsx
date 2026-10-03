@@ -804,7 +804,9 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                 const isCarryIn = t.service_type === 'Carry In';
                 return (
                   <tr key={t.id} style={{ ...styles.tableRow, ...(isCarryIn ? { backgroundColor: '#ffedd5' } : {}) }} onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = isCarryIn ? '#ffedd5' : colors.card)}>
-                    <td style={styles.tableCell}><strong>{t.id}</strong></td>
+                    <td style={{ ...styles.tableCell, cursor: 'pointer' }} onClick={() => handleViewTicket(t)}>
+                      <strong style={{ color: colors.primary }}>{t.id}</strong>
+                    </td>
                     <td style={{ ...styles.tableCell, fontSize: '12px' }}>{new Date(t.created_at).toLocaleDateString()}</td>
                     <td style={styles.tableCell}><strong>{t.cname}</strong></td>
                     <td style={{ ...styles.tableCell, color: colors.primary, fontWeight: 600 }}>{t.mobile}</td>

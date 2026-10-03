@@ -29,6 +29,9 @@ export default function EngPartsScreen() {
         pendingRequests={pendingRequests}
         onRefetch={refetch}
         cspManagerMode={!isAdmin && cspMgr}
+        engName={engName}
+        engineerId={engineerId}
+        myRequests={myRequests}
       />
     );
   }

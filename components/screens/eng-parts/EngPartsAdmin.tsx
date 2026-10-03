@@ -18,11 +18,12 @@ import {
   adjustStock,
 } from '@/services/engPartsService';
 import AdjustStockModal from './AdjustStockModal';
-import { approvePartRequest, rejectPartRequest } from '@/services/partRequestService';
+import SelfRequestModal from './SelfRequestModal';
+import { approvePartRequest, rejectPartRequest, submitPartRequest } from '@/services/partRequestService';
 import { colors, styles } from '@/styles/ticketsStyles';
 
-type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log' | 'warranty-pending';
-type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | null;
+type AdminTabType = 'overview' | 'analysis' | 'pending' | 'log' | 'warranty-pending' | 'my-requests';
+type ModalType = 'issue' | 'use' | 'return' | 'warranty' | 'directWarranty' | 'selfReceive' | 'selfReturn' | null;
 
 interface Props {
   inventory: InventoryItem[];
@@ -34,6 +35,9 @@ interface Props {
   // HTML: isEng && isCspMgr → show ONLY the Pending Requests tab (with an
   // info banner), no KPI bar / action buttons / other admin tabs.
   cspManagerMode?: boolean;
+  engName?: string;
+  engineerId?: string;
+  myRequests?: PartRequest[];
 }
 
 export default function EngPartsAdmin({
@@ -44,11 +48,14 @@ export default function EngPartsAdmin({
   pendingRequests,
   onRefetch,
   cspManagerMode,
+  engName,
+  engineerId,
+  myRequests = [],
 }: Props) {
   const { data: session } = useSession();
   const approvedBy = (session?.user as any)?.name ?? 'Admin';
 
-  const [activeTab, setActiveTab] = useState<AdminTabType>(cspManagerMode ? 'pending' : 'overview');
+  const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [search, setSearch] = useState('');
   const [adjustTarget, setAdjustTarget] = useState<{ owner: string; partId: string; ownerLabel: string; partLabel: string; currentQty: number } | null>(null);
@@ -149,12 +156,26 @@ export default function EngPartsAdmin({
     onRefetch();
   };
 
+  const myStock = engStock.filter(s => s.owner === engName);
+  const handleSelfRequestSave = (type: 'RECEIVE' | 'RETURN') => async (params: { part_id: string; part_name: string; qty: number; note?: string }) => {
+    const r = await submitPartRequest({
+      engineer_id: engineerId,
+      engineer_name: engName || '',
+      parts: [{ part_id: params.part_id, part_name: params.part_name, qty: params.qty }],
+      notes: params.note,
+      type,
+    });
+    if (!r.success) alert('⚠️ ' + (r.error || 'Request failed'));
+    onRefetch();
+  };
+
   const tabs: { key: AdminTabType; label: string }[] = [
     { key: 'overview', label: 'Stock Overview' },
     { key: 'analysis', label: 'Engineer Analysis' },
     { key: 'pending', label: `Pending Approvals${pendingRequests.length > 0 ? ` (${pendingRequests.length})` : ''}` },
     { key: 'warranty-pending', label: '🔄 Warranty Pending' },
     { key: 'log', label: 'Log' },
+    ...(cspManagerMode ? [{ key: 'my-requests' as AdminTabType, label: '📋 My Requests' }] : []),
   ];
 
   const tabStyle = (key: AdminTabType): React.CSSProperties => ({
@@ -173,78 +194,85 @@ export default function EngPartsAdmin({
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
 
       {/* KPI Bar */}
-      {!cspManagerMode && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          {[
-            { label: 'Total Parts', value: inventory.length },
-            { label: 'Engineers with Stock', value: engineers.length },
-            { label: 'Office Stock Value', value: `₹${officeStockValue.toFixed(0)}` },
-            { label: 'Field Stock Value', value: `₹${fieldStockValue.toFixed(0)}` },
-          ].map(kpi => (
-            <div key={kpi.label} style={{ ...styles.card, textAlign: 'center' as const }}>
-              <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{kpi.value}</div>
-              <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>{kpi.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+        {[
+          { label: 'Total Parts', value: inventory.length },
+          { label: 'Engineers with Stock', value: engineers.length },
+          { label: 'Office Stock Value', value: `₹${officeStockValue.toFixed(0)}` },
+          { label: 'Field Stock Value', value: `₹${fieldStockValue.toFixed(0)}` },
+        ].map(kpi => (
+          <div key={kpi.label} style={{ ...styles.card, textAlign: 'center' as const }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: colors.primary }}>{kpi.value}</div>
+            <div style={{ fontSize: '12px', color: colors.textMuted, marginTop: '4px' }}>{kpi.label}</div>
+          </div>
+        ))}
+      </div>
 
       {/* Action Buttons */}
-      {!cspManagerMode && (
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
-          <button
-            style={{ ...styles.btn, ...styles.btnPrimary }}
-            onClick={() => setActiveModal('issue')}
-          >
-            📤 Issue to Engineer
-          </button>
-          <button
-            style={{ ...styles.btn, backgroundColor: colors.warning, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-            onClick={() => setActiveModal('use')}
-          >
-            🔧 Record Usage
-          </button>
-          <button
-            style={{ ...styles.btn, backgroundColor: colors.success, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-            onClick={() => setActiveModal('return')}
-          >
-            ↩️ Engineer Return
-          </button>
-          <button
-            style={{ ...styles.btn, ...styles.btnOutline }}
-            onClick={() => setActiveModal('warranty')}
-          >
-            🔄 Warranty Return
-          </button>
-          <button
-            style={{ ...styles.btn, backgroundColor: '#4338ca', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-            onClick={() => setActiveModal('directWarranty')}
-          >
-            🎁 Direct Warranty Issue
-          </button>
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
+        <button
+          style={{ ...styles.btn, ...styles.btnPrimary }}
+          onClick={() => setActiveModal('issue')}
+        >
+          📤 Issue to Engineer
+        </button>
+        <button
+          style={{ ...styles.btn, backgroundColor: colors.warning, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setActiveModal('use')}
+        >
+          🔧 Record Usage
+        </button>
+        <button
+          style={{ ...styles.btn, backgroundColor: colors.success, color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setActiveModal('return')}
+        >
+          ↩️ Engineer Return
+        </button>
+        <button
+          style={{ ...styles.btn, ...styles.btnOutline }}
+          onClick={() => setActiveModal('warranty')}
+        >
+          🔄 Warranty Return
+        </button>
+        <button
+          style={{ ...styles.btn, backgroundColor: '#4338ca', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          onClick={() => setActiveModal('directWarranty')}
+        >
+          🎁 Direct Warranty Issue
+        </button>
+        {/* index.html:12044 — CSP-Manager-only self-service extras */}
+        {cspManagerMode && (
+          <>
+            <button
+              style={{ ...styles.btn, backgroundColor: '#0d9488', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+              onClick={() => setActiveModal('selfReceive')}
+            >
+              📥 Request Parts (Self)
+            </button>
+            <button
+              style={{ ...styles.btn, backgroundColor: '#be185d', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+              onClick={() => setActiveModal('selfReturn')}
+            >
+              ↩️ Return My Parts
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Tabs */}
       <div style={{ ...styles.card, padding: 0, overflow: 'hidden' }}>
-        {cspManagerMode ? (
-          <div style={{ padding: '12px 16px', backgroundColor: colors.primaryLight, borderBottom: `1px solid ${colors.border}`, fontSize: '13px', color: colors.text }}>
-            ℹ️ Manager access — approve/reject any engineer&apos;s Parts Request (Receive or Return).
-          </div>
-        ) : (
-          <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px' }}>
-            {tabs.map(tab => (
-              <button key={tab.key} style={tabStyle(tab.key)} onClick={() => setActiveTab(tab.key)}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
+          {tabs.map(tab => (
+            <button key={tab.key} style={tabStyle(tab.key)} onClick={() => setActiveTab(tab.key)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         <div style={{ padding: '16px' }}>
 
           {/* ── Stock Overview ── */}
-          {!cspManagerMode && activeTab === 'overview' && (
+          {activeTab === 'overview' && (
             <>
               <div style={styles.filterBar}>
                 <input
@@ -311,7 +339,7 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Engineer Analysis ── */}
-          {!cspManagerMode && activeTab === 'analysis' && (() => {
+          {activeTab === 'analysis' && (() => {
             const selectedPart = selectedPartId ? inventory.find(i => i.id === selectedPartId) : null;
             const partMatches = analysisPartQ
               ? inventory.filter(i =>
@@ -466,7 +494,7 @@ export default function EngPartsAdmin({
           })()}
 
           {/* ── Pending Approvals ── */}
-          {(cspManagerMode || activeTab === 'pending') && (
+          {activeTab === 'pending' && (
             pendingRequests.length === 0 ? (
               <div style={styles.emptyMessage}>No pending requests</div>
             ) : (
@@ -527,12 +555,60 @@ export default function EngPartsAdmin({
           )}
 
           {/* ── Warranty Pending ── */}
-          {!cspManagerMode && activeTab === 'warranty-pending' && (
+          {activeTab === 'warranty-pending' && (
             <WarrantyPendingTab inventory={inventory} />
           )}
 
+          {/* ── My Requests (CSP Manager self-service, index.html:13547) ── */}
+          {cspManagerMode && activeTab === 'my-requests' && (
+            myRequests.length === 0 ? (
+              <div style={styles.emptyMessage}>No requests yet. Use the &quot;Request Parts (Self)&quot; button to submit a new request.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' as const }}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.tableHeader}>Date</th>
+                      <th style={styles.tableHeader}>Type</th>
+                      <th style={styles.tableHeader}>Parts</th>
+                      <th style={styles.tableHeader}>Notes</th>
+                      <th style={styles.tableHeader}>Status</th>
+                      <th style={styles.tableHeader}>Approved By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myRequests.map(req => {
+                      const getPartLabel = (partId?: string) => {
+                        const inv = partId ? inventory.find(i => i.id === partId) : undefined;
+                        return inv ? (inv.part_code ? `${inv.part_code} — ${inv.item_name}` : inv.item_name) : null;
+                      };
+                      const partsLines = (req.parts || []).map(p => {
+                        const label = getPartLabel(p.part_id) || p.part_name || p.part_id || '?';
+                        return `${label} × ${p.qty || 1}`;
+                      });
+                      return (
+                        <tr key={req.id} style={styles.tableRow}>
+                          <td style={styles.tableCell}>
+                            {req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td style={styles.tableCell}>{req.type || '—'}</td>
+                          <td style={styles.tableCell}>
+                            {partsLines.length ? partsLines.map((line, i) => <div key={i}>{line}</div>) : '—'}
+                          </td>
+                          <td style={styles.tableCell}>{req.notes ?? '—'}</td>
+                          <td style={styles.tableCell}>{req.status}</td>
+                          <td style={styles.tableCell}>{req.approved_by || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
           {/* ── Log ── */}
-          {!cspManagerMode && activeTab === 'log' && (() => {
+          {activeTab === 'log' && (() => {
             const q = logSearch.toLowerCase();
             const filteredMovements = movements.filter(mv => {
               if (logTypeFilter && mv.type !== logTypeFilter) return false;
@@ -612,7 +688,7 @@ export default function EngPartsAdmin({
       </div>
 
       {/* Modals */}
-      {!cspManagerMode && activeModal === 'issue' && (
+      {activeModal === 'issue' && (
         <IssueModal
           engineers={engineers}
           inventory={inventory}
@@ -620,7 +696,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {!cspManagerMode && activeModal === 'use' && (
+      {activeModal === 'use' && (
         <UseModal
           engineers={engineers}
           engStock={engStock}
@@ -629,7 +705,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {!cspManagerMode && activeModal === 'return' && (
+      {activeModal === 'return' && (
         <ReturnModal
           mode="return"
           engineers={engineers}
@@ -639,7 +715,7 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {!cspManagerMode && activeModal === 'warranty' && (
+      {activeModal === 'warranty' && (
         <ReturnModal
           mode="warranty"
           engineers={engineers}
@@ -649,11 +725,29 @@ export default function EngPartsAdmin({
           onClose={() => setActiveModal(null)}
         />
       )}
-      {!cspManagerMode && activeModal === 'directWarranty' && (
+      {activeModal === 'directWarranty' && (
         <DirectWarrantyIssueModal
           engineers={engineers}
           inventory={inventory}
           onSave={handleDirectWarrantyIssueSave}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {cspManagerMode && activeModal === 'selfReceive' && (
+        <SelfRequestModal
+          mode="receive"
+          inventory={inventory}
+          myStock={myStock}
+          onSave={handleSelfRequestSave('RECEIVE')}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      {cspManagerMode && activeModal === 'selfReturn' && (
+        <SelfRequestModal
+          mode="return"
+          inventory={inventory}
+          myStock={myStock}
+          onSave={handleSelfRequestSave('RETURN')}
           onClose={() => setActiveModal(null)}
         />
       )}
