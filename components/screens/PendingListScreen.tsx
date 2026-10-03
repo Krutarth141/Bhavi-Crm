@@ -14,6 +14,7 @@ import {
 import { EngineerTicket, PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import { isCspManager } from '@/lib/permissions';
+import TicketDetailModal from '@/components/screens/tickets/TicketDetailModal';
 
 // Status badge color map
 const statusBadgeStyle = (status: string): React.CSSProperties => {
@@ -143,6 +144,7 @@ export default function PendingListScreen() {
   const [routeChanges, setRouteChanges] = useState<Record<string, RouteChange>>({});
   const [routeDate, setRouteDate] = useState(new Date().toISOString().slice(0, 10));
   const [routeSaving, setRouteSaving] = useState(false);
+  const [viewTicketId, setViewTicketId] = useState<string | null>(null);
 
   // Status-update modal — mirrors HTML's only status-change entry point from
   // this screen, openEngUpdate()/viewTicket(), which goes through the full
@@ -674,7 +676,7 @@ export default function PendingListScreen() {
                   return (
                     <tr key={t.id} style={{ borderBottom: '1px solid #e9d5ff' }}>
                       <td style={{ padding: '10px 12px' }}>
-                        <div style={{ fontWeight: 700, color: '#7c3aed', fontSize: 13 }}>{t.id || '—'}</div>
+                        <div style={{ fontWeight: 700, color: '#7c3aed', fontSize: 13, cursor: 'pointer' }} onClick={() => setViewTicketId(t.id)}>{t.id || '—'}</div>
                         <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Repaired: {repairedDate}</div>
                       </td>
                       <td style={{ padding: '10px 12px' }}>
@@ -722,6 +724,7 @@ export default function PendingListScreen() {
             onRouteSeqChange={handleRouteSeqChange}
             onMove={moveRow}
             onUpdateClick={openFullUpdate}
+            onViewTicket={setViewTicketId}
             actionLabel="✏️ Update"
           />
         </div>
@@ -1023,6 +1026,7 @@ export default function PendingListScreen() {
           </div>
         </Modal>
       )}
+      <TicketDetailModal ticketId={viewTicketId} onClose={() => setViewTicketId(null)} />
     </div>
   );
 }
@@ -1039,6 +1043,7 @@ interface TicketTableProps {
   onRouteSeqChange?: (ticketId: string, seq: string) => void;
   onMove?: (ticketId: string, dir: 1 | -1) => void;
   onUpdateClick: (ticketId: string) => void;
+  onViewTicket: (ticketId: string) => void;
   actionLabel: string;
   // index.html:26768 — when set, gates the Action cell to the Update button
   // for permitted roles only, showing a plain "Awaiting pickup" text
@@ -1047,7 +1052,7 @@ interface TicketTableProps {
   gateAction?: boolean;
 }
 
-function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngChange, onRouteSeqChange, onMove, onUpdateClick, actionLabel, gateAction }: TicketTableProps) {
+function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngChange, onRouteSeqChange, onMove, onUpdateClick, onViewTicket, actionLabel, gateAction }: TicketTableProps) {
   const inlineSelectStyle: React.CSSProperties = {
     border: `1px solid ${colors.border}`,
     borderRadius: '6px',
@@ -1108,7 +1113,7 @@ function TicketTable({ tickets, engineers, routeMode, routeChanges, onRouteEngCh
                 }}
               >
                 {/* Ticket ID */}
-                <td style={styles.tableCell}>
+                <td style={{ ...styles.tableCell, cursor: 'pointer' }} onClick={() => onViewTicket(t.id)}>
                   <strong style={{ color: colors.primary }}>{t.id}</strong>
                 </td>
 
