@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useNavVisibility } from '@/hooks/useNavVisibility';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 // Existing screens
 import TicketsScreen from '@/components/screens/TicketsScreen';
@@ -104,6 +105,7 @@ export default function EngineerDashboard() {
 
     const [activeTab, setActiveTab] = useState<EngineerTab>('my-calls');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    useBodyScrollLock(sidebarOpen);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
     const [pendingTicketId, setPendingTicketId] = useState<string | null>(null);

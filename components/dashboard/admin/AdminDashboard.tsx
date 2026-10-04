@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import AdminUserManagement from './AdminUserManagement';
 
@@ -121,6 +122,7 @@ const NAV_ITEMS: { id: AdminTab; label: string; section: NavSection }[] = [
 export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState<AdminTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    useBodyScrollLock(sidebarOpen);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
     // "+ New Call" fired from the Dashboard's Recent Tickets card

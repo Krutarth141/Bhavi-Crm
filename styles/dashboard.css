@@ -609,6 +609,10 @@
     z-index: 999;
     transition: left 0.25s ease;
     overflow-y: auto;
+    /* Matches HTML's #page-content overscroll-behavior:contain
+       (index.html:38) — stops a drag that reaches the top/bottom of the
+       drawer's own list from scrolling whatever is behind it. */
+    overscroll-behavior: contain;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
     border-right: none;
   }
