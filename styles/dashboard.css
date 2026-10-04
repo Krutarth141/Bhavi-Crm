@@ -79,7 +79,7 @@
 .engineer-dashboard,
 .work-controller-dashboard {
   display: flex;
-  height: calc(100vh - 80px);
+  height: calc(100vh - 56px);
 }
 
 /* Matches HTML's dark-navy #sidebar (index.html:9-16) */
@@ -157,22 +157,25 @@
 }
 
 /* ── Mobile elements — hidden on desktop ── */
+/* Matches HTML's compact mobile #topbar (index.html:213-214,244: height
+   50px, h1 font-size 14px) */
 .mobile-topbar {
   display: none;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0 12px;
+  height: 50px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 100;
 }
 
 .mobile-topbar-title {
-  font-weight: 600;
-  font-size: 15px;
-  color: #111827;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
 }
 
 .hamburger-btn {
@@ -190,7 +193,7 @@
   display: block;
   width: 22px;
   height: 2px;
-  background: #374151;
+  background: var(--text);
   border-radius: 2px;
 }
 
@@ -581,7 +584,7 @@
   .work-controller-dashboard {
     flex-direction: column;
     height: auto;
-    min-height: calc(100vh - 80px);
+    min-height: calc(100vh - 50px);
   }
 
   /* Show mobile elements */
@@ -595,13 +598,14 @@
     display: block;
   } /* ← now works because base is display:none above */
 
-  /* Sidebar — fixed drawer from left */
+  /* Sidebar — fixed off-canvas drawer, matching HTML's #sidebar
+     (index.html:203-211: width 240px, transform:translateX(-100%) hidden) */
   .dashboard-sidebar {
     position: fixed !important;
-    left: -270px;
+    left: -240px;
     top: 0;
     height: 100vh;
-    width: 260px;
+    width: 240px;
     z-index: 999;
     transition: left 0.25s ease;
     overflow-y: auto;
@@ -621,7 +625,6 @@
   .dashboard-nav li {
     flex-shrink: unset;
     border-right: none;
-    border-bottom: 1px solid #f3f4f6;
   }
 
   .dashboard-content {
@@ -638,8 +641,34 @@
   .stats-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Compact single-line topbar, matching HTML's #topbar on mobile
+     (index.html:213-214,245: height 50px, user block decluttered) —
+     kept functional (name + logout stay reachable) rather than hidden
+     outright, since unlike HTML this app has no sidebar-bottom logout
+     to fall back on. */
+  .dashboard-header {
+    padding: 0 12px;
+    height: auto;
+    min-height: 50px;
+  }
+  .header-content {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 0;
+  }
+  .header-content h1 {
+    font-size: 15px;
+  }
   .user-info {
-    flex-direction: column;
-    gap: 0.5rem;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .user-role {
+    display: none;
+  }
+  .logout-btn {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 }
