@@ -189,6 +189,7 @@ export const styles = {
         padding: '14px 20px',
         borderTop: `1px solid ${colors.border}`,
         display: 'flex' as const,
+        flexWrap: 'wrap' as const,
         justifyContent: 'flex-end',
         gap: '10px',
         position: 'sticky' as const,
