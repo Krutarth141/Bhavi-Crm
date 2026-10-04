@@ -153,6 +153,7 @@ export const styles = {
         maxWidth: '900px',
         maxHeight: '90vh',
         overflowY: 'auto' as const,
+        overscrollBehavior: 'contain' as const,
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
     },
     modalHeader: {

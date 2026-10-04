@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/auth.config';
 import Providers from '@/components/Providers';
 import PwaRegister from '@/components/PwaRegister';
+import ScrollLockWatcher from '@/components/ScrollLockWatcher';
 import '@/styles/global.css';
 import '@/styles/auth.css';
 import '@/styles/screens.css';
@@ -30,6 +31,7 @@ export default async function RootLayout({
       <body>
         <Providers session={session}>{children}</Providers>
         <PwaRegister />
+        <ScrollLockWatcher />
       </body>
     </html>
   );
