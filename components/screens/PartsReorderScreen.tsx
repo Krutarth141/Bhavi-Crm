@@ -114,8 +114,8 @@ export default function PartsReorderScreen() {
                     )}
 
             {minModal && (
-                <div onClick={() => setMinModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 360, padding: 20 }}>
+                <div className="modal-overlay" onClick={() => setMinModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 360, padding: 20 }}>
                         <h2 style={{ margin: '0 0 12px', fontSize: 16 }}>⚙️ Set Minimum Stock</h2>
                         <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 10 }}>{minModal.item_name}</div>
                         <input type="number" min={0} value={minVal} onChange={e => setMinVal(e.target.value)} style={{ width: '100%', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 12px', fontSize: 14, boxSizing: 'border-box', marginBottom: 14 }} autoFocus />

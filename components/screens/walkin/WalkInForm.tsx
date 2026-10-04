@@ -181,8 +181,8 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
   };
 
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={{ ...styles.modal, maxWidth: '740px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" style={styles.modalOverlay} onClick={onClose}>
+      <div className="modal" style={{ ...styles.modal, maxWidth: '740px' }} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <h2 style={styles.modalTitle}>{entry ? '✏️ Edit Walk-in' : '➕ New Walk-in'}</h2>
           <button style={styles.closeBtn} onClick={onClose}>✕</button>

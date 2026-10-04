@@ -158,8 +158,8 @@ export default function WalkInList({ entries, brandsById, onEdit, onDeparture, o
       )}
 
       {editCust && (
-        <div style={styles.modalOverlay} onClick={() => setEditCust(null)}>
-          <div style={{ ...styles.modal, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={() => setEditCust(null)}>
+          <div className="modal" style={{ ...styles.modal, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <h2 style={styles.modalTitle}>👤 Customer Details</h2>
               <button style={styles.closeBtn} onClick={() => setEditCust(null)}>✕</button>

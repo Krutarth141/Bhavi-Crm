@@ -68,8 +68,8 @@ export default function DCPrintModal({ entry, receivers, onClose, onSaved }: Pro
     };
 
     return (
-        <div style={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-            <div style={{ ...styles.modal, maxWidth: 500 }}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div className="modal" style={{ ...styles.modal, maxWidth: 500 }}>
                 <div style={styles.modalHeader}>
                     <div style={styles.modalTitle}>🖨️ DC — {entry.dc_no || '(will be generated)'}</div>
                     <button style={styles.closeBtn} onClick={onClose}>✕</button>

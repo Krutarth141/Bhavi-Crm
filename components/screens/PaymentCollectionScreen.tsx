@@ -257,8 +257,8 @@ export default function PaymentCollectionScreen() {
                             ))}
 
             {invoiceTicket && (
-                <div onClick={() => setInvoiceTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 20 }}>
+                <div className="modal-overlay" onClick={() => setInvoiceTicket(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 20 }}>
                         <h2 style={{ margin: '0 0 4px', fontSize: 16 }}>🧾 Invoice Entry — {invoiceTicket.id}</h2>
                         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>{invoiceTicket.cname || ''}{invoiceTicket.model ? ` | ${invoiceTicket.model}` : ''}</div>
                         {(() => {

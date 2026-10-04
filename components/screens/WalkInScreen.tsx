@@ -305,8 +305,8 @@ export default function WalkInScreen() {
 
       {/* QR Modal */}
       {showQR && (
-        <div style={styles.modalOverlay} onClick={() => setShowQR(false)}>
-          <div style={{ ...styles.modal, maxWidth: 360, textAlign: 'center', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={() => setShowQR(false)}>
+          <div className="modal" style={{ ...styles.modal, maxWidth: 360, textAlign: 'center', padding: 24 }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>📱 Customer Self Check-in</h3>
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(checkinUrl)}`}

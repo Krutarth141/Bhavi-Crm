@@ -43,8 +43,8 @@ export default function TicketDetailModal({ ticketId, onClose }: Props) {
     if (!ticketId) return null;
 
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 20 }}>
+        <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto', padding: 20 }}>
                 {loading || !detail ? (
                     <p style={{ textAlign: 'center', color: '#6b7280', padding: 30 }}>{loading ? 'Loading ticket…' : 'Ticket not found.'}</p>
                 ) : (() => {

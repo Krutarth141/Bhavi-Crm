@@ -179,8 +179,8 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
     };
 
     return (
-        <div style={overlayStyle} onClick={onClose}>
-            <div style={boxStyle} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={overlayStyle} onClick={onClose}>
+            <div className="modal" style={boxStyle} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <h3 style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>{mode === 'in' ? '▶ Punch In' : '⏹ Punch Out'}</h3>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>

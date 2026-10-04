@@ -196,8 +196,8 @@ export default function PublicHomeScreen() {
             </div>
 
             {checkoutOpen && (
-                <div style={styles.modalOverlay} onClick={() => setCheckoutOpen(false)}>
-                    <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-overlay" style={styles.modalOverlay} onClick={() => setCheckoutOpen(false)}>
+                    <div className="modal" style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
                         <h3 style={{ margin: '0 0 4px', fontSize: 18 }}>Place Order</h3>
                         <p style={{ margin: '0 0 14px', fontSize: 13, color: '#64748b' }}>{cart.length} item{cart.length > 1 ? 's' : ''} — ₹{cartTotal}</p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -65,8 +65,8 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modal}>
+    <div className="modal-overlay" style={styles.modalOverlay}>
+      <div className="modal" style={styles.modal}>
         {/* Header */}
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>🔧 Record Usage</span>

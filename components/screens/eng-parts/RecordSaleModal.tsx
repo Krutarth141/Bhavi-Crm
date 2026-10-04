@@ -62,8 +62,8 @@ export default function RecordSaleModal({ inventory, onSave, onClose }: Props) {
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modal}>
+    <div className="modal-overlay" style={styles.modalOverlay}>
+      <div className="modal" style={styles.modal}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>🛒 Record Sale</span>
           <button style={styles.closeBtn} onClick={onClose}>✕</button>

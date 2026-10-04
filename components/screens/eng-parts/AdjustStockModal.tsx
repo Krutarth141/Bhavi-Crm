@@ -41,8 +41,8 @@ export default function AdjustStockModal({ ownerLabel, partLabel, currentQty, on
     };
 
     return (
-        <div style={styles.modalOverlay}>
-            <div style={styles.modal}>
+        <div className="modal-overlay" style={styles.modalOverlay}>
+            <div className="modal" style={styles.modal}>
                 <div style={styles.modalHeader}>
                     <span style={styles.modalTitle}>🛠️ Stock Correction</span>
                     <button style={styles.closeBtn} onClick={onClose}>✕</button>

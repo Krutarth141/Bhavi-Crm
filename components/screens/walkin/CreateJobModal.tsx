@@ -155,8 +155,8 @@ export default function CreateJobModal({ entry, onClose, onCreated }: Props) {
     };
 
     return (
-        <div style={styles.modalOverlay} onClick={onClose}>
-            <div style={{ ...styles.modal, maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={onClose}>
+            <div className="modal" style={{ ...styles.modal, maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
                 <div style={styles.modalHeader}>
                     <h2 style={styles.modalTitle}>🔧 Create Job from Walk-in — Token #{entry.token_no}</h2>
                     <button style={styles.closeBtn} onClick={onClose}>✕</button>

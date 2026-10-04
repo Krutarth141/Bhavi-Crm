@@ -860,8 +860,8 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
         </div>
       )}
       {modalOpen && (
-        <div style={styles.modalOverlay} onClick={() => { setModalOpen(false); setGroupBanner(null); }}>
-          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={() => { setModalOpen(false); setGroupBanner(null); }}>
+          <div className="modal" style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <div>
                 <h2 style={styles.modalTitle}>{modalMode === 'add' ? '➕ New' : modalMode === 'edit' ? '✏️ Edit' : '👁 View'} Ticket</h2>
@@ -1411,8 +1411,8 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
         />
       )}
       {estimateTicket && (
-        <div style={styles.modalOverlay} onClick={() => setEstimateTicket(null)}>
-          <div style={{ ...styles.modal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={() => setEstimateTicket(null)}>
+          <div className="modal" style={{ ...styles.modal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div style={styles.modalHeader}>
               <h2 style={styles.modalTitle}>Estimate — {estimateTicket.cname}</h2>
               <button style={styles.closeBtn} onClick={() => setEstimateTicket(null)}>✕</button>

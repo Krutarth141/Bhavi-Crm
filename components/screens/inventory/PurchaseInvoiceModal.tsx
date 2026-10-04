@@ -89,11 +89,11 @@ export default function PurchaseInvoiceModal({ inventory, addedBy, onClose, onSa
     };
 
     return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }} onClick={onClose}>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflowY: 'auto' }} onClick={onClose}>
             <datalist id="pur-parts-dl">
                 {inventory.map(i => i.part_code ? <option key={i.id} value={i.part_code} /> : null)}
             </datalist>
-            <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, maxHeight: '96vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+            <div className="modal" style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, maxHeight: '96vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px 14px', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, background: '#fff', zIndex: 2 }}>
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>🛒 Purchase Invoice Entry</div>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8' }}>✕</button>

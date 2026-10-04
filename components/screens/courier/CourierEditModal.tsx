@@ -59,8 +59,8 @@ export default function CourierEditModal({ entry, onClose, onSaved }: Props) {
     };
 
     return (
-        <div style={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-            <div style={{ ...styles.modal, maxWidth: 560 }}>
+        <div className="modal-overlay" style={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div className="modal" style={{ ...styles.modal, maxWidth: 560 }}>
                 <div style={styles.modalHeader}>
                     <div style={styles.modalTitle}>{isIn ? '📥' : '📤'} Edit — {entry.awb_no || 'AWB Pending'}</div>
                     <button style={styles.closeBtn} onClick={onClose}>✕</button>

@@ -49,8 +49,8 @@ export default function AIWriteButton({ type, onInsert, label = '✨ AI Write' }
         <>
             <button type="button" onClick={() => setOpen(true)} style={btnStyle}>{label}</button>
             {open && (
-                <div onClick={close} style={overlayStyle}>
-                    <div onClick={(e) => e.stopPropagation()} style={boxStyle}>
+                <div className="modal-overlay" onClick={close} style={overlayStyle}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()} style={boxStyle}>
                         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>✨ AI Assistant</div>
                         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Type rough notes — AI will turn it into a professional remark.</div>
                         <textarea

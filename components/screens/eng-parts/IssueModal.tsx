@@ -48,8 +48,8 @@ export default function IssueModal({ engineers, inventory, onSave, onClose }: Pr
   };
 
   return (
-    <div style={styles.modalOverlay}>
-      <div style={styles.modal}>
+    <div className="modal-overlay" style={styles.modalOverlay}>
+      <div className="modal" style={styles.modal}>
         {/* Header */}
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>📤 Issue to Engineer</span>

@@ -485,8 +485,8 @@ export default function EngineerUpdateScreen() {
                 />
             )}
             {holdTicket && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-                    <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                    <div className="modal" style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                         <div style={{ fontSize: 16, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>⏸️ Work on Hold</div>
                         <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>Work log will be paused. You can start another call and come back to resume this one.</div>
                         <div style={{ marginBottom: 14 }}>

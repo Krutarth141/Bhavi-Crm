@@ -86,8 +86,8 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
     };
 
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, fontSize: 17 }}>📦 Request Part{addedCount > 0 ? ` (${addedCount} added)` : ''}</h2>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
@@ -134,8 +134,8 @@ export default function PartIndentModal({ ticket, byUser, isEngineerOnSite, onCl
             </div>
             {/* Warranty/Chargeable prompt — index.html:7468-7484 askWarrantyOrChargeable */}
             {chargePrompt && (
-                <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: 360, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                <div className="modal-overlay" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="modal" style={{ background: '#fff', borderRadius: 14, padding: 22, width: 360, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                         <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>⚠️ {chargePrompt.partLabel}</h3>
                         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
                             This part can be either free (genuine Canon defect) or chargeable (customer-caused damage). Which applies to THIS call?
