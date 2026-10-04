@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useScrollLock } from '@/hooks/useScrollLock';
 import { useSession } from 'next-auth/react';
 import { useNavVisibility } from '@/hooks/useNavVisibility';
 
@@ -96,6 +97,7 @@ export default function WorkControllerDashboard() {
 
     const [activeTab, setActiveTab] = useState<WorkControllerTab>('overview');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    useScrollLock(sidebarOpen);
     const [showWCReport, setShowWCReport] = useState(false);
     const [showPaymentQR, setShowPaymentQR] = useState(false);
     const [showPortalQR, setShowPortalQR] = useState(false);
