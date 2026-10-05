@@ -228,6 +228,31 @@ export const updateTicketRemarks = async (ticketId: string, remarks: string): Pr
     return updateTicket(ticketId, { remarks });
 };
 
+// Mirrors HTML's openAdminEdit() (index.html:5978-5986) — a quick remark
+// add for admin/WC, separate from the Edit Report approval flow: overwrites
+// `remarks` directly and logs a distinct "Admin Remark Added" timeline entry
+// (recoverable later via fetchRemarkHistory's "Remark" filter) rather than
+// going through pending_edit review.
+export const addTicketRemark = async (ticketId: string, remark: string, byUser: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+        const { data: existing } = await supabase.from('tickets').select('timeline').eq('id', ticketId).single();
+        const tl = existing?.timeline || [];
+        const now = new Date().toISOString();
+        const { error } = await supabase
+            .from('tickets')
+            .update({
+                remarks: remark,
+                timeline: [...tl, { action: 'Admin Remark Added', by: byUser, at: now, note: remark }],
+                updated_at: now,
+            })
+            .eq('id', ticketId);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: String(err) };
+    }
+};
+
 export const markInvoiceDone = async (ticket: Ticket, invoiceNo: string, updatedBy: string): Promise<{ success: boolean; error?: string }> => {
     try {
         const existing = ticket.timeline || [];

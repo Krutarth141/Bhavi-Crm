@@ -8,7 +8,8 @@ import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
-import { createTicket, updateTicket, closeTicket, ensureGroupId } from '@/services/ticketService';
+import { createTicket, updateTicket, closeTicket, ensureGroupId, addTicketRemark } from '@/services/ticketService';
+import { setFollowup, markFollowupDone } from '@/services/followupService';
 import { printTicket, getBadgeStyle, printJobSheet } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
@@ -367,6 +368,52 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
       }
     } catch (err) {
       alert('❌ Error');
+    }
+  };
+
+  // index.html:5978-5986 — quick direct remark add, separate from the Edit
+  // Report approval flow.
+  const handleAddRemark = async () => {
+    if (!selectedTicket) return;
+    const remark = window.prompt(`Add remark for ${selectedTicket.id}:\n(Note: Customer & product details cannot be changed after job sheet creation)`);
+    if (remark === null) return;
+    const result = await addTicketRemark(selectedTicket.id, remark, (session?.user as any)?.name || currentUserRole || '');
+    if (result.success) {
+      await fetchTickets();
+    } else {
+      alert('❌ Error: ' + result.error);
+    }
+  };
+
+  // index.html:6628-6668 (openFollowUpModal/clearFollowUp) — this call stays
+  // off Pending List / Dashboard counts until the follow-up date.
+  const handleSetFollowUp = async () => {
+    if (!selectedTicket) return;
+    const defDate = new Date(); defDate.setDate(defDate.getDate() + 15);
+    const date = window.prompt('Follow-Up Date (YYYY-MM-DD):', defDate.toLocaleDateString('en-CA'));
+    if (date === null) return;
+    if (!date.trim()) { alert('Follow-up date is required.'); return; }
+    const note = window.prompt('Reason for follow-up:');
+    if (note === null) return;
+    if (!note.trim()) { alert('A reason is required.'); return; }
+    const result = await setFollowup(selectedTicket.id, date.trim(), note.trim());
+    if (result.success) {
+      await fetchTickets();
+    } else {
+      alert('❌ Error: ' + result.error);
+    }
+  };
+
+  const handleClearFollowUp = async () => {
+    if (!selectedTicket) return;
+    const remark = window.prompt('✅ Mark this Follow-Up as done — what happened? (mandatory)');
+    if (remark === null) return;
+    if (!remark.trim()) { alert('A remark is required.'); return; }
+    const result = await markFollowupDone(selectedTicket.id);
+    if (result.success) {
+      await fetchTickets();
+    } else {
+      alert('❌ Error: ' + result.error);
     }
   };
 
@@ -867,6 +914,11 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                 <h2 style={styles.modalTitle}>{modalMode === 'add' ? '➕ New' : modalMode === 'edit' ? '✏️ Edit' : '👁 View'} Ticket</h2>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
+                {modalMode === 'view' && selectedTicket && (
+                  <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm, borderColor: '#0d9488', color: '#0d9488' }} onClick={() => openCallPhotos(selectedTicket)}>
+                    📷 Photos
+                  </button>
+                )}
                 {modalMode === 'view' && (
                   <button style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)} onClick={handlePrintTicket}>
                     🖨️ Print
@@ -1237,6 +1289,29 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                     <button style={{ ...styles.btn, background: '#15803d', color: 'white' }} onClick={handleMarkDeliveredAfterReject}>
                       📦 Mark Delivered (Customer Collected)
                     </button>
+                  )}
+                  {/* index.html:6453 — admin/WC quick remark add, !isClosed only. */}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                    <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={handleAddRemark}>
+                      📝 Add Remark
+                    </button>
+                  )}
+                  {/* index.html:6456 — admin/WC follow-up later/done, !isClosed only. */}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                    selectedTicket?.follow_up_date ? (
+                      <>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600, color: '#7c3aed' }}>
+                          📅 Follow-Up: {selectedTicket.follow_up_date}
+                        </span>
+                        <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={handleClearFollowUp}>
+                          ✅ Follow-Up Done
+                        </button>
+                      </>
+                    ) : (
+                      <button style={{ ...styles.btn, background: '#7c3aed', color: 'white' }} onClick={handleSetFollowUp}>
+                        📅 Follow-Up Later
+                      </button>
+                    )
                   )}
                   {selectedTicket?.status !== 'Closed' && canEditTicket(selectedTicket!) && (
                     <button
