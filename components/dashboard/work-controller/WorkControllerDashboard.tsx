@@ -162,7 +162,7 @@ export default function WorkControllerDashboard() {
             {sidebarOpen && (
                 <div
                     onClick={() => setSidebarOpen(false)}
-                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 998 }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 998, overscrollBehavior: 'contain' }}
                 />
             )}
 

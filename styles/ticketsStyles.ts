@@ -145,6 +145,10 @@ export const styles = {
         alignItems: 'center' as const,
         justifyContent: 'center' as const,
         padding: '16px',
+        // Stops a touch/scroll on the backdrop from chaining up to whatever
+        // scrollable ancestor the modal happens to be nested inside (see
+        // the matching comment on .modal-overlay in screens.css).
+        overscrollBehavior: 'contain' as const,
     },
     modal: {
         background: colors.card,

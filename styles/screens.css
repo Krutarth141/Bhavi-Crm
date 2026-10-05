@@ -308,6 +308,14 @@ tr:hover td {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  /* Without this, a touch/scroll gesture that starts on the dark backdrop
+     (not the .modal box) finds nothing scrollable locally and CHAINS up
+     through its DOM ancestors looking for one — which, since every modal
+     is nested inside whatever scrollable screen content rendered it (e.g.
+     .dashboard-content), means the page behind it scrolls first, before
+     the modal's own content ever does. This stops that chain at the
+     overlay itself, regardless of where in the DOM tree it's nested. */
+  overscroll-behavior: contain;
 }
 
 .modal {
@@ -323,6 +331,14 @@ tr:hover td {
 
 .modal-sm {
   max-width: 480px;
+}
+
+/* Same scroll-chaining fix as .modal-overlay, for the handful of full-screen
+   overlays (photo lightboxes, chat widget, a loading toast) that can't use
+   .modal-overlay itself because its mobile layout rules don't apply to them.
+   No other styling attached — purely functional. */
+.scroll-lock-trigger {
+  overscroll-behavior: contain;
 }
 
 .modal-lg {
