@@ -20,6 +20,8 @@ import {
     needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
 } from '@/services/engineerUpdateService';
 import { PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
+import { PaymentSplit, summarizePaymentMode, validatePaymentSplits } from '@/lib/paymentSplits';
+import PaymentModeSplits from '@/components/screens/shared/PaymentModeSplits';
 import { hasDailyReportToday } from '@/services/engDailyReportService';
 import { DailyReportModal } from '@/components/screens/MyCallsScreen';
 import { isCspManager, isAccountant } from '@/lib/permissions';
@@ -165,6 +167,12 @@ export default function DashboardOverview({ role }: Props) {
     const [updatePhotos, setUpdatePhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
     const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
     const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
+    const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
+    useEffect(() => {
+        const total = (Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0);
+        setPaymentSplits((prev) => (prev.length === 1 ? [{ ...prev[0], amount: total }] : prev));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paymentForm.service, paymentForm.parts]);
     // "📬 Received?" (Recent Tickets, Sent to MSC row) — reuses the same
     // MSC dispatch/receive panel TicketsScreen's view modal shows, rather than
     // the plain status modal (whose New Status dropdown is empty for "Sent to
@@ -277,16 +285,20 @@ export default function DashboardOverview({ role }: Props) {
             setPaymentForm({
                 cname: (updateTicket as any).cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '',
             });
+            setPaymentSplits([{ mode: '', amount: prefill.serviceCharges + prefill.partsCost }]);
             return;
         }
         await doTicketUpdateSave();
     };
 
     const handleConfirmPayment = async () => {
-        if (!paymentForm.mode) { alert('Please select a payment mode.'); return; }
+        const total = (Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0);
+        const err = validatePaymentSplits(paymentSplits, total);
+        if (err) { alert(err); return; }
         await doTicketUpdateSave({
             cname: paymentForm.cname.trim(),
-            payment_mode: paymentForm.mode,
+            payment_mode: summarizePaymentMode(paymentSplits),
+            payment_splits: paymentSplits.filter((s) => (Number(s.amount) || 0) > 0),
             service_charges: Number(paymentForm.service) || 0,
             parts_cost: Number(paymentForm.parts) || 0,
             payment_notes: paymentForm.notes.trim(),
@@ -760,14 +772,8 @@ export default function DashboardOverview({ role }: Props) {
                             </div>
                         </div>
                         <div style={styles.formGroup}>
-                            <label style={styles.formLabel}>Payment Mode *</label>
-                            <select value={paymentForm.mode} onChange={(e) => setPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
-                                <option value="">— Select —</option>
-                                <option value="Cash">💵 Cash</option>
-                                <option value="Online">💻 Online</option>
-                                <option value="Check">📋 Cheque</option>
-                                <option value="Card">💳 Card</option>
-                            </select>
+                            <label style={styles.formLabel}>Payment Mode(s) *</label>
+                            <PaymentModeSplits total={(Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0)} splits={paymentSplits} onChange={setPaymentSplits} />
                         </div>
                         <div style={styles.formGroup}>
                             <label style={styles.formLabel}>Additional Notes</label>

@@ -12,6 +12,8 @@ import {
   needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
 } from '@/services/engineerUpdateService';
 import { EngineerTicket, PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
+import { PaymentSplit, summarizePaymentMode, validatePaymentSplits } from '@/lib/paymentSplits';
+import PaymentModeSplits from './shared/PaymentModeSplits';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
 import { isCspManager } from '@/lib/permissions';
 import TicketDetailModal from '@/components/screens/tickets/TicketDetailModal';
@@ -159,6 +161,14 @@ export default function PendingListScreen() {
   const [updateConsumableCodes, setUpdateConsumableCodes] = useState<Set<string>>(new Set());
   const [paymentPrompt, setPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
   const [paymentForm, setPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
+  // index.html:18798-18812 updatePconfTotal — keep the single row's amount in
+  // sync with service+parts while the user hasn't split into multiple modes.
+  useEffect(() => {
+    const total = (Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0);
+    setPaymentSplits((prev) => (prev.length === 1 ? [{ ...prev[0], amount: total }] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentForm.service, paymentForm.parts]);
 
   // index.html:26669-26686 — "Ready for Pickup" is computed from the RAW
   // ticket list with only wcTypeFilter/brandFilter applied — deliberately
@@ -358,6 +368,7 @@ export default function PendingListScreen() {
         : { serviceCharges: charges.serviceCharges, partsCost: paymentPartsCost(updateTicket, spares, updateConsumableCodes) };
       setPaymentPrompt(prefill);
       setPaymentForm({ cname: updateTicket.cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '' });
+      setPaymentSplits([{ mode: '', amount: prefill.serviceCharges + prefill.partsCost }]);
       return;
     }
     await doSaveUpdate();
@@ -381,6 +392,12 @@ export default function PendingListScreen() {
   const [fullPhotos, setFullPhotos] = useState<(PhotoSlot | null)[]>([null, null, null]);
   const [fullPaymentPrompt, setFullPaymentPrompt] = useState<{ serviceCharges: number; partsCost: number } | null>(null);
   const [fullPaymentForm, setFullPaymentForm] = useState({ cname: '', service: '0', parts: '0', mode: '', notes: '' });
+  const [fullPaymentSplits, setFullPaymentSplits] = useState<PaymentSplit[]>([]);
+  useEffect(() => {
+    const total = (Number(fullPaymentForm.service) || 0) + (Number(fullPaymentForm.parts) || 0);
+    setFullPaymentSplits((prev) => (prev.length === 1 ? [{ ...prev[0], amount: total }] : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullPaymentForm.service, fullPaymentForm.parts]);
   const engId = (session?.user as any)?.email ?? '';
 
   const openFullUpdate = async (ticketId: string) => {
@@ -483,16 +500,20 @@ export default function PendingListScreen() {
         : { serviceCharges: charges.serviceCharges, partsCost: paymentPartsCost(fullTicket, fullSpares, fullConsumableCodes) };
       setFullPaymentPrompt(prefill);
       setFullPaymentForm({ cname: fullTicket.cname || '', service: prefill.serviceCharges.toFixed(0), parts: prefill.partsCost.toFixed(0), mode: '', notes: '' });
+      setFullPaymentSplits([{ mode: '', amount: prefill.serviceCharges + prefill.partsCost }]);
       return;
     }
     await doFullUpdateSave();
   };
 
   const handleConfirmFullPayment = async () => {
-    if (!fullPaymentForm.mode) { alert('Please select a payment mode.'); return; }
+    const total = (Number(fullPaymentForm.service) || 0) + (Number(fullPaymentForm.parts) || 0);
+    const err = validatePaymentSplits(fullPaymentSplits, total);
+    if (err) { alert(err); return; }
     await doFullUpdateSave({
       cname: fullPaymentForm.cname.trim(),
-      payment_mode: fullPaymentForm.mode,
+      payment_mode: summarizePaymentMode(fullPaymentSplits),
+      payment_splits: fullPaymentSplits.filter((s) => (Number(s.amount) || 0) > 0),
       service_charges: Number(fullPaymentForm.service) || 0,
       parts_cost: Number(fullPaymentForm.parts) || 0,
       payment_notes: fullPaymentForm.notes.trim(),
@@ -500,10 +521,13 @@ export default function PendingListScreen() {
   };
 
   const handleConfirmPayment = async () => {
-    if (!paymentForm.mode) { alert('Please select a payment mode.'); return; }
+    const total = (Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0);
+    const err = validatePaymentSplits(paymentSplits, total);
+    if (err) { alert(err); return; }
     await doSaveUpdate({
       cname: paymentForm.cname.trim(),
-      payment_mode: paymentForm.mode,
+      payment_mode: summarizePaymentMode(paymentSplits),
+      payment_splits: paymentSplits.filter((s) => (Number(s.amount) || 0) > 0),
       service_charges: Number(paymentForm.service) || 0,
       parts_cost: Number(paymentForm.parts) || 0,
       payment_notes: paymentForm.notes.trim(),
@@ -848,14 +872,8 @@ export default function PendingListScreen() {
               </div>
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Payment Mode *</label>
-              <select value={paymentForm.mode} onChange={(e) => setPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
-                <option value="">— Select —</option>
-                <option value="Cash">💵 Cash</option>
-                <option value="Online">💻 Online</option>
-                <option value="Check">📋 Cheque</option>
-                <option value="Card">💳 Card</option>
-              </select>
+              <label style={styles.formLabel}>Payment Mode(s) *</label>
+              <PaymentModeSplits total={(Number(paymentForm.service) || 0) + (Number(paymentForm.parts) || 0)} splits={paymentSplits} onChange={setPaymentSplits} />
             </div>
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Additional Notes</label>
@@ -1029,14 +1047,8 @@ export default function PendingListScreen() {
               </div>
             </div>
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Payment Mode *</label>
-              <select value={fullPaymentForm.mode} onChange={(e) => setFullPaymentForm((f) => ({ ...f, mode: e.target.value }))} style={styles.formInput}>
-                <option value="">— Select —</option>
-                <option value="Cash">💵 Cash</option>
-                <option value="Online">💻 Online</option>
-                <option value="Check">📋 Cheque</option>
-                <option value="Card">💳 Card</option>
-              </select>
+              <label style={styles.formLabel}>Payment Mode(s) *</label>
+              <PaymentModeSplits total={(Number(fullPaymentForm.service) || 0) + (Number(fullPaymentForm.parts) || 0)} splits={fullPaymentSplits} onChange={setFullPaymentSplits} />
             </div>
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Additional Notes</label>

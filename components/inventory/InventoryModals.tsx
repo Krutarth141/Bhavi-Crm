@@ -60,7 +60,7 @@ export function InventoryModals({
                             Cancel
                         </button>
                         <button className="btn btn-primary" onClick={onSaveForm} disabled={submitting}>
-                            {submitting ? 'Saving...' : '💾 Save Item'}
+                            {submitting ? 'Saving...' : '💾 Save'}
                         </button>
                     </div>
                 }

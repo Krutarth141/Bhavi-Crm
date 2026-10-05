@@ -603,6 +603,7 @@ export const updateTicketStatus = async (
             const p = extra.payment;
             if (p.cname) updateData.cname = p.cname;
             updateData.payment_mode = p.payment_mode;
+            if (p.payment_splits) updateData.payment_splits = p.payment_splits;
             updateData.service_charges = p.service_charges;
             if (p.payment_notes) {
                 updateData.charges_note = (updateData.charges_note || '') + `\nPayment notes: ${p.payment_notes}`;
@@ -627,6 +628,7 @@ export const updateTicketStatus = async (
             if (updateData.jobsheet_photo && msg.includes('jobsheet_photo')) { delete updateData.jobsheet_photo; stripped = true; }
             if (updateData.attachments && msg.includes('attachments')) { delete updateData.attachments; stripped = true; }
             if (updateData.payment_mode && msg.includes('payment_mode')) { delete updateData.payment_mode; stripped = true; }
+            if (updateData.payment_splits && msg.includes('payment_splits')) { delete updateData.payment_splits; stripped = true; }
             if (updateData.page_count !== undefined && msg.includes('page_count')) { delete updateData.page_count; delete updateData.page_count_skip_reason; stripped = true; }
             if (updateData.condition_type && msg.includes('condition_type')) { delete updateData.condition_type; stripped = true; }
             if (updateData.condition_photos && msg.includes('condition_photos')) { delete updateData.condition_photos; stripped = true; }

@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import * as XLSX from 'xlsx';
 import { useEngineers } from '@/hooks/useEngineers';
 import { isCspManager } from '@/lib/permissions';
+import { PaymentSplit, summarizePaymentMode, validatePaymentSplits } from '@/lib/paymentSplits';
+import PaymentModeSplits from '@/components/screens/shared/PaymentModeSplits';
 import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import {
@@ -170,14 +172,14 @@ export default function FieldTasksScreen() {
     // yet) needs the same Payment Confirmation capture a Non-Warranty call's
     // delivery gets, before it's marked Done.
     const [paymentPromptTask, setPaymentPromptTask] = useState<FieldTask | null>(null);
-    const [paymentMode, setPaymentMode] = useState('');
+    const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
     const [paymentNotes, setPaymentNotes] = useState('');
     const [paymentSaving, setPaymentSaving] = useState(false);
 
     const handleDone = async (t: FieldTask) => {
         if ((t.amount || 0) > 0 && !t.payment_mode) {
             setPaymentPromptTask(t);
-            setPaymentMode('');
+            setPaymentSplits([{ mode: '', amount: t.amount || 0 }]);
             setPaymentNotes('');
             return;
         }
@@ -187,9 +189,14 @@ export default function FieldTasksScreen() {
     };
     const handleConfirmPayment = async () => {
         if (!paymentPromptTask) return;
-        if (!paymentMode) { alert('Please select a payment mode.'); return; }
+        const err = validatePaymentSplits(paymentSplits, paymentPromptTask.amount || 0);
+        if (err) { alert(err); return; }
         setPaymentSaving(true);
-        const r = await ftDone(paymentPromptTask.id, myId, myName, memberRole, paymentPromptTask, { payment_mode: paymentMode, payment_notes: paymentNotes || undefined });
+        const r = await ftDone(paymentPromptTask.id, myId, myName, memberRole, paymentPromptTask, {
+            payment_mode: summarizePaymentMode(paymentSplits),
+            payment_splits: paymentSplits.filter((s) => (Number(s.amount) || 0) > 0),
+            payment_notes: paymentNotes || undefined,
+        });
         setPaymentSaving(false);
         if (!r.success) { alert('Error: ' + r.error); return; }
         setPaymentPromptTask(null);
@@ -335,14 +342,8 @@ export default function FieldTasksScreen() {
                                 <div style={{ fontSize: 24, fontWeight: 800, color: '#15803d' }}>₹{(paymentPromptTask.amount || 0).toFixed(0)}</div>
                             </div>
                             <div>
-                                <label style={{ fontSize: 12, fontWeight: 700 }}>Payment Mode *</label>
-                                <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} style={fieldStyle}>
-                                    <option value="">— Select —</option>
-                                    <option value="Cash">💵 Cash</option>
-                                    <option value="Online">💻 Online</option>
-                                    <option value="Check">📋 Cheque</option>
-                                    <option value="Card">💳 Card</option>
-                                </select>
+                                <label style={{ fontSize: 12, fontWeight: 700 }}>Payment Mode(s) *</label>
+                                <PaymentModeSplits total={paymentPromptTask.amount || 0} splits={paymentSplits} onChange={setPaymentSplits} />
                             </div>
                             <div>
                                 <label style={{ fontSize: 12, fontWeight: 700 }}>Additional Notes</label>

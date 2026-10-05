@@ -83,7 +83,7 @@ export default function TCSelectorModal({ onClose, onApply }: Props) {
     const footer = (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button onClick={onClose} style={{ padding: '8px 16px', border: '1px solid #e5e7eb', background: 'white', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>Cancel</button>
-            <button onClick={() => onApply(selectedTexts())} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>📄 Apply & Print Quotation</button>
+            <button onClick={() => onApply(selectedTexts())} style={{ padding: '8px 16px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>📄 Generate Quotation →</button>
         </div>
     );
 

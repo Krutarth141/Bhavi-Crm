@@ -58,6 +58,7 @@ export interface PhotoSlot { url: string; isNew: boolean }
 export interface PaymentConfirmData {
     cname: string;
     payment_mode: string;
+    payment_splits?: { mode: string; amount: number }[];
     service_charges: number;
     parts_cost: number;
     payment_notes: string;

@@ -175,7 +175,7 @@ export const ftReached = async (
 // how it was paid. `payment` is omitted for tasks with no amount due.
 export const ftDone = async (
     id: number, engId: string, engName: string, memberRole: string, task?: FieldTask,
-    payment?: { payment_mode: string; payment_notes?: string }
+    payment?: { payment_mode: string; payment_notes?: string; payment_splits?: { mode: string; amount: number }[] }
 ): Promise<{ success: boolean; error?: string }> => {
     try {
         const now = new Date();
@@ -184,9 +184,14 @@ export const ftDone = async (
             patch.payment_mode = payment.payment_mode;
             patch.payment_collected_by = engName;
             patch.payment_collected_by_id = engId;
+            if (payment.payment_splits) patch.payment_splits = payment.payment_splits;
             if (payment.payment_notes) patch.notes = (task?.notes ? task.notes + '\n' : '') + 'Payment notes: ' + payment.payment_notes;
         }
         let { error } = await supabase.from('field_tasks').update(patch).eq('id', id);
+        if (error && String((error as any)?.message || error).includes('payment_splits')) {
+            delete patch.payment_splits;
+            ({ error } = await supabase.from('field_tasks').update(patch).eq('id', id));
+        }
         if (error) {
             const msg = String((error as any)?.message || error);
             if (msg.includes('payment_collected_by_id')) { delete patch.payment_collected_by_id; delete patch.payment_collected_by; ({ error } = await supabase.from('field_tasks').update(patch).eq('id', id)); }

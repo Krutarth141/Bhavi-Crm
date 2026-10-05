@@ -38,6 +38,7 @@ export interface FieldTask {
     assigned_name?: string | null;
     notes?: string | null;
     payment_mode?: string | null;
+    payment_splits?: { mode: string; amount: number }[] | null;
     payment_collected_by?: string | null;
     payment_collected_by_id?: string | null;
     status: FieldTaskStatus;
