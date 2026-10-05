@@ -384,7 +384,7 @@ export default function ChatbotWidget() {
     }
 
     return (
-        <div onClick={(e) => { if (e.target === e.currentTarget) closeChat(); }} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)' }}>
+        <div className="scroll-lock-trigger" onClick={(e) => { if (e.target === e.currentTarget) closeChat(); }} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(15,23,42,.55)' }}>
             <style>{'@keyframes bhaiBlink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}'}</style>
             <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, width: '100%', maxWidth: 520, margin: '0 auto', height: '88vh', maxHeight: '88vh',

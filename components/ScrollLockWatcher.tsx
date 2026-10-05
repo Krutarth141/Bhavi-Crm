@@ -11,12 +11,20 @@ import { acquireScrollLock, releaseScrollLock } from '@/lib/scrollLock';
 // janky/unresponsive. The sidebar drawer locks separately via its own
 // sidebarOpen state (see useScrollLock), since it only toggles a class on an
 // element that's already mounted rather than mounting/unmounting.
+//
+// A few full-screen overlays (photo lightboxes, the chat widget, a loading
+// toast) are deliberately NOT given the .modal-overlay class, because its
+// mobile CSS forces bottom-sheet alignment that's wrong for a centered photo
+// viewer. They still need the page behind them locked, so they carry the
+// purely-functional .scroll-lock-trigger marker instead (no CSS attached).
+const LOCK_SELECTOR = '.modal-overlay, .scroll-lock-trigger';
+
 export default function ScrollLockWatcher() {
     const lockedRef = useRef(false);
 
     useEffect(() => {
         const sync = () => {
-            const hasModal = document.querySelector('.modal-overlay') !== null;
+            const hasModal = document.querySelector(LOCK_SELECTOR) !== null;
             if (hasModal && !lockedRef.current) {
                 lockedRef.current = true;
                 acquireScrollLock();

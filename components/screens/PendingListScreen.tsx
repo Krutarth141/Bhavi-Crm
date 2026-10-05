@@ -770,7 +770,7 @@ export default function PendingListScreen() {
       )}
 
       {(updateLoading || fullLoading) && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="scroll-lock-trigger" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 10, padding: '16px 24px', fontSize: 14, fontWeight: 600 }}>Loading ticket…</div>
         </div>
       )}

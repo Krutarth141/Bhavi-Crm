@@ -124,7 +124,7 @@ export default function AttendanceTable({ logs, rosterRows, shiftMap, isAdmin, m
             </table>
 
             {photo && (
-                <div onClick={() => setPhoto(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <div className="scroll-lock-trigger" onClick={() => setPhoto(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <img src={photo} style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 12 }} />
                 </div>
             )}

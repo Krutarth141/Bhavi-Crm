@@ -185,6 +185,7 @@ export default function AutoVisitsReportScreen() {
 
             {photoPreview && (
                 <div
+                    className="scroll-lock-trigger"
                     onClick={() => setPhotoPreview(null)}
                     style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, cursor: 'zoom-out' }}
                 >
