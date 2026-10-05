@@ -791,7 +791,11 @@ tr:hover td {
 
   .form-grid,
   .form-grid-3 {
-    grid-template-columns: 1fr;
+    /* !important: several screens still set gridTemplateColumns inline via
+       styles.formGrid (ticketsStyles.ts) alongside this class — without it,
+       the inline 2-column value wins and form fields overflow the modal on
+       a narrow phone screen instead of stacking to 1 column. */
+    grid-template-columns: 1fr !important;
   }
 
   .form-full {

@@ -70,7 +70,7 @@ export default function RecordSaleModal({ inventory, onSave, onClose }: Props) {
         </div>
 
         <div style={styles.modalBody}>
-          <div style={styles.formGrid}>
+          <div className="form-grid" style={styles.formGrid}>
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Date</label>
               <input type="date" style={styles.formInput} value={date} onChange={e => setDate(e.target.value)} />

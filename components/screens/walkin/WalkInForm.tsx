@@ -202,7 +202,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
 
           <div style={styles.sectionDivider}>
             <h3 style={styles.sectionHeader2}>👤 Customer Details</h3>
-            <div style={styles.formGrid}>
+            <div className="form-grid" style={styles.formGrid}>
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Mobile No *</label>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -252,7 +252,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
 
           <div style={styles.sectionDivider}>
             <h3 style={styles.sectionHeader2}>📍 Address <span style={{ fontWeight: 400, fontSize: 12, color: colors.textMuted }}>(optional — auto-filled if customer exists)</span></h3>
-            <div style={styles.formGrid}>
+            <div className="form-grid" style={styles.formGrid}>
               <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
                 <label style={styles.formLabel}>Address Line 1</label>
                 <input type="text" value={addressLine1} onChange={(e) => setAddressLine1(e.target.value)} style={styles.formInput} placeholder="House No, Street, Building..." />

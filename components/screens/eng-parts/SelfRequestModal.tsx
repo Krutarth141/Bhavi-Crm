@@ -63,7 +63,7 @@ export default function SelfRequestModal({ mode, inventory, myStock, onSave, onC
                 </div>
 
                 <div style={styles.modalBody}>
-                    <div style={styles.formGrid}>
+                    <div className="form-grid" style={styles.formGrid}>
                         <div style={styles.formGroup}>
                             <label style={styles.formLabel}>Part *</label>
                             <select

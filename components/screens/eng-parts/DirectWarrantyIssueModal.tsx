@@ -55,7 +55,7 @@ export default function DirectWarrantyIssueModal({ engineers, inventory, onSave,
                 </div>
 
                 <div style={styles.modalBody}>
-                    <div style={styles.formGrid}>
+                    <div className="form-grid" style={styles.formGrid}>
                         <div style={styles.formGroup}>
                             <label style={styles.formLabel}>Engineer *</label>
                             <select

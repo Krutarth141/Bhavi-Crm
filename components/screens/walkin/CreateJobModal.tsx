@@ -184,7 +184,7 @@ export default function CreateJobModal({ entry, onClose, onCreated }: Props) {
                         </div>
                     )}
 
-                    <div style={styles.formGrid}>
+                    <div className="form-grid" style={styles.formGrid}>
                         <div style={styles.formGroup}><label style={styles.formLabel}>Customer Name *</label><input value={cname} onChange={(e) => setCname(e.target.value)} style={styles.formInput} /></div>
                         <div style={styles.formGroup}><label style={styles.formLabel}>Mobile *</label><input value={mobile} onChange={(e) => setMobile(e.target.value)} style={styles.formInput} /></div>
                         <div style={styles.formGroup}><label style={styles.formLabel}>Alt Mobile</label><input value={altMobile} onChange={(e) => setAltMobile(e.target.value)} style={styles.formInput} /></div>

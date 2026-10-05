@@ -989,7 +989,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>👤 Customer</h3>
-                <div style={styles.formGrid}>
+                <div className="form-grid" style={styles.formGrid}>
                   <FormInput label="Name *" name="cname" value={formData.cname} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="Mobile *" name="mobile" value={formData.mobile} onChange={handleFormChange} disabled={modalMode === 'view'} />
                   <FormInput label="City *" name="city" value={formData.city} onChange={handleFormChange} disabled={modalMode === 'view'} />
@@ -1017,7 +1017,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🏭 Product</h3>
-                <div style={styles.formGrid}>
+                <div className="form-grid" style={styles.formGrid}>
                   {modalMode === 'add' ? (
                     <>
                       {/* Brand + Sub-Category drive wc_type (index.html:5688) —
@@ -1061,7 +1061,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🔧 Problem</h3>
-                <div style={styles.formGrid}>
+                <div className="form-grid" style={styles.formGrid}>
                   <div style={{ ...styles.formGroup, gridColumn: '1 / -1' }}>
                     <label style={styles.formLabel}>Problem *</label>
                     <textarea name="problem" value={formData.problem} onChange={handleFormChange} rows={2} disabled={modalMode === 'view'} style={{ ...styles.formInput, fontFamily: 'inherit', width: '100%', opacity: modalMode === 'view' ? 0.6 : 1 }} />
@@ -1109,7 +1109,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
 
               <div style={styles.sectionDivider}>
                 <h3 style={styles.sectionHeader2}>🔧 Service</h3>
-                <div style={styles.formGrid}>
+                <div className="form-grid" style={styles.formGrid}>
                   <FormSelect label="Call Type" name="call_type" value={formData.call_type} onChange={handleFormChange} options={['Warranty', 'Non-Warranty', 'AMC', 'Warranty Repeat', 'Non-Warranty Repeat', 'Other']} disabled={modalMode === 'view'} />
                   <FormSelect label="Service Type" name="service_type" value={formData.service_type} onChange={handleFormChange} options={['On Site', 'Carry In']} disabled={modalMode === 'view'} />
                   <FormSelect label="Priority" name="priority" value={formData.priority} onChange={handleFormChange} options={['Normal', 'High', 'Urgent']} disabled={modalMode === 'view'} />

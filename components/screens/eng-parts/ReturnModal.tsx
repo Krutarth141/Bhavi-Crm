@@ -85,7 +85,7 @@ export default function ReturnModal({ mode, engineers, engStock, inventory, onSa
               Part received back from company — will be added to Office stock.
             </p>
           )}
-          <div style={styles.formGrid}>
+          <div className="form-grid" style={styles.formGrid}>
             {/* Engineer — Engineer Return only */}
             {!isWarranty && (
               <div style={styles.formGroup}>

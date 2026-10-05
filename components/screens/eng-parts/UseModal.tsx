@@ -75,7 +75,7 @@ export default function UseModal({ engineers, engStock, inventory, onSave, onClo
 
         {/* Body */}
         <div style={styles.modalBody}>
-          <div style={styles.formGrid}>
+          <div className="form-grid" style={styles.formGrid}>
             {/* Engineer */}
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Engineer *</label>

@@ -51,7 +51,7 @@ export default function AdjustStockModal({ ownerLabel, partLabel, currentQty, on
                     <p style={{ fontSize: 12, color: colors.textMuted, background: '#f8fafc', padding: '8px 12px', borderRadius: 8, marginBottom: 12 }}>
                         {ownerLabel} · {partLabel} · Current: {currentQty}
                     </p>
-                    <div style={styles.formGrid}>
+                    <div className="form-grid" style={styles.formGrid}>
                         <div style={styles.formGroup}>
                             <label style={styles.formLabel}>Set To (exact qty)</label>
                             <input
