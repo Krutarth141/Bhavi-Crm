@@ -156,7 +156,16 @@ export const styles = {
         width: '100%',
         maxWidth: '900px',
         maxHeight: '90vh',
-        overflowY: 'auto' as const,
+        // Flex column with the body as the only flexed/scrolling child (below)
+        // keeps header+body+footer as a single scroll region no matter how
+        // tall the header/footer grow (e.g. the ticket View modal's header
+        // and footer button rows wrapping on mobile) — a fixed split like
+        // `calc(90vh - Npx)` on the body breaks the moment header+footer
+        // together exceed N, producing two independently-scrollable nested
+        // containers (the modal itself AND its body) at once.
+        display: 'flex' as const,
+        flexDirection: 'column' as const,
+        overflow: 'hidden' as const,
         overscrollBehavior: 'contain' as const,
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
     },
@@ -166,10 +175,8 @@ export const styles = {
         display: 'flex' as const,
         alignItems: 'center' as const,
         justifyContent: 'space-between' as const,
-        position: 'sticky' as const,
-        top: 0,
         background: colors.card,
-        zIndex: 1,
+        flexShrink: 0,
     },
     modalTitle: {
         fontSize: '16px',
@@ -187,8 +194,13 @@ export const styles = {
     },
     modalBody: {
         padding: '20px',
-        maxHeight: 'calc(90vh - 130px)',
+        // The sole scroll container: flex:1 + minHeight:0 makes it fill
+        // whatever space `.modal`'s fixed header/footer don't take, instead
+        // of guessing their height with a magic-number calc().
+        flex: '1 1 auto' as const,
+        minHeight: 0,
         overflowY: 'auto' as const,
+        overscrollBehavior: 'contain' as const,
     },
     modalFooter: {
         padding: '14px 20px',
@@ -197,9 +209,8 @@ export const styles = {
         flexWrap: 'wrap' as const,
         justifyContent: 'flex-end',
         gap: '10px',
-        position: 'sticky' as const,
-        bottom: 0,
         background: colors.card,
+        flexShrink: 0,
     },
     formGrid: {
         display: 'grid' as const,

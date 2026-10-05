@@ -161,7 +161,7 @@ export default function CreateJobModal({ entry, onClose, onCreated }: Props) {
                     <h2 style={styles.modalTitle}>🔧 Create Job from Walk-in — Token #{entry.token_no}</h2>
                     <button style={styles.closeBtn} onClick={onClose}>✕</button>
                 </div>
-                <div style={{ padding: 20 }}>
+                <div style={{ padding: 20, flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
                     <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#1d4ed8' }}>
                         Customer details auto-filled from the walk-in entry. Please verify Serial No and Problem before saving.
                     </div>

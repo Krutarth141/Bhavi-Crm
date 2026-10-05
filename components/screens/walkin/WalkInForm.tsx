@@ -188,7 +188,7 @@ export default function WalkInForm({ entry, onSave, onClose, nextToken }: WalkIn
           <button style={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        <div style={{ padding: '20px' }}>
+        <div style={{ padding: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
           {showRouteSelect && (
             <div style={{ ...styles.formGroup, marginBottom: 14 }}>
               <label style={styles.formLabel}>Route To Work Center</label>

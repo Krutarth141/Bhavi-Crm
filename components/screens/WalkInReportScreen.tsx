@@ -398,7 +398,7 @@ export default function WalkInReportScreen() {
               <h2 style={styles.modalTitle}>👤 Customer Details</h2>
               <button style={styles.closeBtn} onClick={() => setEditCust(null)}>✕</button>
             </div>
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
               <div>
                 <label style={styles.formLabel}>CUSTOMER NAME</label>
                 <input value={custForm.name} onChange={(e) => setCustForm((p) => ({ ...p, name: e.target.value }))} style={styles.formInput} />

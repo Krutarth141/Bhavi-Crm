@@ -365,6 +365,7 @@ tr:hover td {
 .modal-body {
   padding: 20px;
   background: #ffffff;
+  overscroll-behavior: contain;
 }
 
 .modal-footer {
