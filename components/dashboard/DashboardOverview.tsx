@@ -596,7 +596,7 @@ export default function DashboardOverview({ role }: Props) {
                 </div>
             </div>
 
-            {kpiDetail && <KpiDetailModal title={kpiDetail.title} tickets={kpiDetail.tickets} onClose={() => setKpiDetail(null)} onView={printTicket} />}
+            {kpiDetail && <KpiDetailModal title={kpiDetail.title} tickets={kpiDetail.tickets} onClose={() => setKpiDetail(null)} onView={printTicket} isEngineer={role === 'engineer'} />}
 
             {updateTicket && (
                 <Modal

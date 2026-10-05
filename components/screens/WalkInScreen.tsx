@@ -314,6 +314,37 @@ export default function WalkInScreen() {
               style={{ width: 240, height: 240, margin: '0 auto', display: 'block' }}
             />
             <p style={{ fontSize: 12, color: colors.textMuted, marginTop: 12 }}>Customers can scan this to check themselves in.</p>
+            {/* index.html:19916-19918 */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+              <button
+                onClick={() => window.open(checkinUrl, '_blank')}
+                style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSm }}
+              >
+                🔗 Open Link
+              </button>
+              <button
+                onClick={() => {
+                  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=${encodeURIComponent(checkinUrl)}`;
+                  const win = window.open('', '_blank', 'width=420,height=560');
+                  if (!win) return;
+                  win.document.write(`<!DOCTYPE html><html><head><title>Bhavi Electronics — Self Check-in QR</title>
+<style>body{font-family:Arial,sans-serif;text-align:center;padding:30px;background:#fff;}h2{color:#1d4ed8;font-size:18px;margin-bottom:4px;}p{font-size:12px;color:#555;margin:6px 0;}img{border:1px solid #e5e7eb;border-radius:8px;}@media print{body{margin:0;padding:20px;}}</style></head><body>
+<h2>Bhavi Electronics &amp; Automation</h2>
+<p style="font-size:11px;color:#888;letter-spacing:.5px;">WHERE CUSTOMER DELIGHT IS FIRST</p>
+<div style="margin:16px 0;"><img src="${qrSrc}" width="280" height="280" onload="window.print();"></div>
+<p style="font-size:14px;font-weight:700;color:#1d4ed8;">📱 Scan to Self Check-in</p>
+<p>Scan the QR code above with your mobile camera<br>to register your visit without waiting in queue.</p>
+<p style="font-size:10px;color:#9ca3af;margin-top:16px;">${checkinUrl}</p>
+</body></html>`);
+                  win.document.close();
+                }}
+                style={{ ...styles.btn, ...styles.btnOutline, ...styles.btnSm }}
+                onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnOutlineHover)}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnOutline)}
+              >
+                🖨️ Print QR
+              </button>
+            </div>
             <button
               onClick={() => setShowQR(false)}
               style={{ ...styles.btn, ...styles.btnOutline, marginTop: 8 }}

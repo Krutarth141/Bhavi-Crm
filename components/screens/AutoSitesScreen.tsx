@@ -504,7 +504,15 @@ export default function AutoSitesScreen() {
                                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                                     <button onClick={() => { setEditingItem(null); setItemFormOpen(true); }} style={{ padding: '7px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>➕ Add Item</button>
                                     <button onClick={() => setPaymentModalOpen(true)} style={{ padding: '7px 14px', background: '#059669', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>💰 Add Payment</button>
-                                    {pendingItems.length > 0 && <button onClick={() => setDispatchModalOpen(true)} style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>📤 Dispatch Material</button>}
+                                    {/* index.html:23252,23290 — button is always shown; clicking with nothing
+                                        pending just alerts instead of opening an empty dispatch form. */}
+                                    <button
+                                        onClick={() => {
+                                            if (!pendingItems.length) { alert('All items are already delivered!'); return; }
+                                            setDispatchModalOpen(true);
+                                        }}
+                                        style={{ padding: '7px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                                    >📤 Dispatch Material</button>
                                     {/* index.html:20747 — swOpenSiteSurvey() one-click launch into this site's SW Survey. */}
                                     <button
                                         onClick={() => {

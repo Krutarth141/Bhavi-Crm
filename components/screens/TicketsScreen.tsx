@@ -1277,11 +1277,18 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                       </span>
                     )
                   )}
-                  {/* index.html:6458 — WC OR CSP Manager, not work_controller only. */}
-                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'work_controller' || cspMgr) && !selectedTicket?.pending_edit && (
+                  {/* index.html:6458,6496 — WC/CSP Manager (admin branch) OR the assigned
+                      engineer on their own open ticket (separate engineer branch) — not
+                      work_controller only, and not admin/WC exclusively either. */}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'work_controller' || cspMgr || (currentUserRole === 'engineer' && selectedTicket?.assigned_to === currentUserId)) && !selectedTicket?.pending_edit && (
                     <button style={{ ...styles.btn, background: '#0ea5e9', color: 'white' }} onClick={() => setReportEditTicket(selectedTicket)}>
                       ✏️ Edit Report
                     </button>
+                  )}
+                  {/* index.html:6496 — engineer sees a simple badge instead of the
+                      admin/WC-only detailed Approve/Reject banner above. */}
+                  {currentUserRole === 'engineer' && selectedTicket?.assigned_to === currentUserId && selectedTicket?.pending_edit && (
+                    <span style={{ fontSize: 12, color: '#92400e', background: '#fef3c7', padding: '6px 12px', borderRadius: 8, fontWeight: 600 }}>⏳ Edit request pending approval</span>
                   )}
                   {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && selectedTicket?.warranty_coverage !== 'Out of Coverage' && ['Warranty', 'Warranty Repeat', 'AMC'].includes(selectedTicket?.call_type || '') && (
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>

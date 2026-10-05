@@ -365,13 +365,14 @@ export default function EngineerUpdateScreen() {
                             />
                         )}
 
-                        {(selected.call_type === 'Non-Warranty' || selected.call_type === 'Non-Warranty Repeat') && !selected.warranty_claim_pending && (
+                        {/* index.html:7628,7809-7814 — isW = Warranty/Warranty Repeat/AMC */}
+                        {!['Warranty', 'Warranty Repeat', 'AMC'].includes(selected.call_type || '') && !selected.warranty_claim_pending && (
                             <button onClick={() => setWarrantyModalOpen(true)} style={{ padding: '8px 14px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>🔓 Submit Warranty Claim</button>
                         )}
                         {selected.warranty_claim_pending && (
                             <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
                         )}
-                        {selected.warranty_coverage !== 'Out of Coverage' && (
+                        {['Warranty', 'Warranty Repeat', 'AMC'].includes(selected.call_type || '') && selected.warranty_coverage !== 'Out of Coverage' && (
                             <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>
                         )}
                         {selected.status === 'Sent to MSC' && (

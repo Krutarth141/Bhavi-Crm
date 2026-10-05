@@ -9,9 +9,20 @@ interface Props {
     tickets: Ticket[];
     onClose: () => void;
     onView: (ticket: Ticket) => void;
+    isEngineer?: boolean;
 }
 
-export default function KpiDetailModal({ title, tickets, onClose, onView }: Props) {
+export default function KpiDetailModal({ title, tickets, onClose, onView, isEngineer }: Props) {
+    // index.html:4069-4071 — engineers get "Update" (opens their own call-update
+    // form), everyone else gets "View".
+    const handleAction = (t: Ticket) => {
+        if (isEngineer) {
+            onClose();
+            window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'my-calls', ticketId: t.id } }));
+        } else {
+            onView(t);
+        }
+    };
     return (
         <Modal isOpen title={`${title} — ${tickets.length} calls`} onClose={onClose}>
             {tickets.length === 0 ? (
@@ -36,7 +47,7 @@ export default function KpiDetailModal({ title, tickets, onClose, onView }: Prop
                                     <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{t.assigned_name || <span style={{ color: '#f05252', fontSize: 11 }}>Unassigned</span>}</td>
                                     <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}><span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span></td>
                                     <td style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9' }}>
-                                        <button onClick={() => onView(t)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>View</button>
+                                        <button onClick={() => handleAction(t)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{isEngineer ? 'Update' : 'View'}</button>
                                     </td>
                                 </tr>
                             ))}
