@@ -503,3 +503,43 @@ export const saveSignature = async (ticketId: string, dataUrl: string, byName: s
         return { success: false, error: String(err) };
     }
 };
+
+// An engineer assigned via Pending List's Route Plan who never actually
+// starts the call (status sits at 'Assigned' past its planned_date) has
+// effectively dropped it — return it to Pending Allocation so it shows up
+// for re-allocation instead of silently looking "handled" forever. Checked
+// every time Pending List loads (see usePendingList). Not in the HTML
+// reference — Route Plan assignments there never auto-expire — this is a
+// new feature, requested on top of the port.
+export const resetStalePendingAssignments = async (): Promise<void> => {
+    try {
+        const today = new Date().toLocaleDateString('en-CA');
+        const { data, error } = await supabase
+            .from('tickets')
+            .select('id, assigned_name, planned_date, timeline')
+            .eq('status', 'Assigned')
+            .lt('planned_date', today);
+        if (error || !data || !data.length) return;
+        for (const t of data) {
+            const timeline = Array.isArray(t.timeline) ? t.timeline : [];
+            try {
+                await supabase.from('tickets').update({
+                    status: 'Pending Allocation',
+                    assigned_to: null,
+                    assigned_name: null,
+                    sequence_no: null,
+                    planned_date: null,
+                    timeline: [...timeline, {
+                        action: 'Assignment Auto-Reset — Not Started',
+                        by: 'System',
+                        at: new Date().toISOString(),
+                        note: `Was assigned to ${t.assigned_name || 'an engineer'} for ${t.planned_date} but never moved past Assigned — automatically returned to Pending Allocation.`,
+                    }],
+                    updated_at: new Date().toISOString(),
+                }).eq('id', t.id);
+            } catch { /* best-effort — one failure shouldn't block the rest */ }
+        }
+    } catch (err) {
+        console.error('resetStalePendingAssignments error:', err);
+    }
+};

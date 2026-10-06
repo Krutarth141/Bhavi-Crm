@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { resetStalePendingAssignments } from '@/services/ticketService';
 
 interface PendingTicket {
     id: string;
@@ -20,6 +21,7 @@ interface PendingTicket {
     wc_type?: string;
     tat_date?: string;
     sequence_no?: number;
+    planned_date?: string;
     problem?: string;
     remarks?: string;
 }
@@ -50,6 +52,10 @@ export function usePendingList() {
 
     const fetchTickets = useCallback(async () => {
         try {
+            // Return any engineer assignment that was never started past its
+            // planned date to Pending Allocation before loading the list, so
+            // it shows up fresh instead of still looking "assigned".
+            await resetStalePendingAssignments();
             let data: any[] = [];
             let from = 0;
             const PAGE = 1000;
@@ -57,7 +63,7 @@ export function usePendingList() {
                 const { data: page, error: ticketsError } = await supabase
                     .from('tickets')
                     .select(
-                        'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,tat_date,problem,remarks'
+                        'id,cname,mobile,wc_type,brand_name,model,serial,pin,area,status,created_at,updated_at,assigned_to,assigned_name,call_type,service_type,sequence_no,planned_date,tat_date,problem,remarks'
                     )
                     .not('status', 'in', `(${CLOSED_STATUSES.map((s) => `"${s}"`).join(',')})`)
                     .order('created_at', { ascending: false })
