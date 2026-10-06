@@ -370,7 +370,6 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: white;
-  text-transform: capitalize;
 }
 
 .status-badge {
@@ -378,7 +377,6 @@
   border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 600;
-  text-transform: capitalize;
 }
 
 .status-pending,
@@ -402,7 +400,6 @@
   border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 600;
-  text-transform: capitalize;
   color: white;
 }
 

@@ -90,7 +90,7 @@ export default function SalesScreen() {
                                                 <div style={{ fontSize: 14, fontWeight: 800, color: '#111' }}>{o.customer_name}</div>
                                                 <div style={{ fontSize: 11, color: '#6b7280' }}>{o.order_no || ''}{o.customer_mobile ? ` | 📞 ${o.customer_mobile}` : ''} | {o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
                                             </div>
-                                            <span style={{ background: statusInfo?.color || '#9ca3af', color: '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{o.status}</span>
+                                            <span style={{ background: statusInfo?.color || '#9ca3af', color: '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 11, fontWeight: 700 }}>{o.status}</span>
                                         </div>
                                         <div style={{ marginTop: 6, fontSize: 15, fontWeight: 800, color: '#1d4ed8' }}>₹{(o.total_amount || 0).toLocaleString('en-IN')}<span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}> incl. all taxes</span></div>
                                         {o.courier_name && <div style={{ marginTop: 6, fontSize: 12, color: '#0ea5e9', fontWeight: 600 }}>🚚 {o.courier_name} — AWB: {o.awb_number}{o.tracking_url && <a href={o.tracking_url} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: 11, marginLeft: 6 }}>Track →</a>}</div>}

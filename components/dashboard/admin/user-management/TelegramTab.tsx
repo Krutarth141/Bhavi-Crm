@@ -123,7 +123,7 @@ export default function TelegramTab() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-                <label style={labelStyle}>📱 Office / Second Chat ID <span style={{ fontWeight: 400, textTransform: 'none' }}>(receives every notification too)</span></label>
+                <label style={labelStyle}>📱 Office / Second Chat ID <span style={{ fontWeight: 400 }}>(receives every notification too)</span></label>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <input type="text" defaultValue={settings.owner_chat} onChange={e => setOwnerInput(e.target.value)} placeholder="Office Telegram Chat ID..." style={fieldStyle} />
                     <button onClick={handleSaveOwner} style={{ padding: '8px 16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Save</button>
