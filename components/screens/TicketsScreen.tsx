@@ -23,6 +23,7 @@ import { printLabel } from '@/utils/printLabel';
 import MSCDispatchPanel from '@/components/screens/tickets/MSCDispatchPanel';
 import SetTATModal from '@/components/screens/tickets/SetTATModal';
 import SignatureModal from '@/components/screens/tickets/SignatureModal';
+import PartIndentModal from '@/components/screens/tickets/PartIndentModal';
 import { approveTicket, rejectTicket, markDeliveredAfterReject, markDeliveredWithPayment, DeliveryPaymentData } from '@/services/customerApprovalService';
 import {
   computeCloseCharges, needsPaymentConfirmation, deliveryPaymentPrefill, fetchSpareConsumableCodes, deductTicketParts,
@@ -70,6 +71,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
   const [invoiceFilter, setInvoiceFilter] = useState<'all' | 'pending' | 'done'>('all');
   const [invoiceModalTicket, setInvoiceModalTicket] = useState<Ticket | null>(null);
   const [voidWarrantyTicket, setVoidWarrantyTicket] = useState<Ticket | null>(null);
+  const [requestPartTicket, setRequestPartTicket] = useState<Ticket | null>(null);
   const [reportEditTicket, setReportEditTicket] = useState<Ticket | null>(null);
   const [backdateTicket, setBackdateTicket] = useState<Ticket | null>(null);
   const [tatTicket, setTatTicket] = useState<Ticket | null>(null);
@@ -273,7 +275,13 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     await fetchTickets();
   };
 
-  const handleSaveRemarks = async () => {
+  // statusOverride lets the quick-action banners/buttons below (Customer
+  // Arrived, Mark Delivered, Cancel Call, Force Status...) drive the exact
+  // same save path as the Status dropdown + Save button, instead of each
+  // re-implementing the mandatory-reason/delivery-payment/timeline logic —
+  // mirrors HTML's many one-click buttons all funnelling through the single
+  // quickStatusChange() (index.html:7122).
+  const handleSaveRemarks = async (statusOverride?: string) => {
     if (!selectedTicket) return;
 
     // Check authorization
@@ -286,27 +294,28 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     // mirrors HTML's quickStatusChange()/quickEngChange() dropdowns, which
     // are always available on the ticket view (not gated behind a separate
     // edit mode). Only include them in the update when actually changed.
+    const targetStatus = statusOverride ?? formData.status;
     const updates: Record<string, any> = { remarks: formData.remarks };
     let forceReason: string | null = null;
-    if (formData.status && formData.status !== selectedTicket.status) {
+    if (targetStatus && targetStatus !== selectedTicket.status) {
       // Carry-In device handover (Repaired → Delivered, or a Customer Reject
       // pickup) bills & collects payment before anything else — checked
       // BEFORE the generic mandatory-reason prompt below, same order HTML's
       // quickStatusChange uses (index.html:6670 needsDeliveryPayment, then
       // 6710 the admin/WC Force Status fallback).
-      if (formData.status === 'Delivered' && await openDeliveryPaymentGate(selectedTicket)) return;
+      if (targetStatus === 'Delivered' && await openDeliveryPaymentGate(selectedTicket)) return;
       // HTML's showForceStatusRemarkModal (index.html:6709-6712,6727-6751):
       // admin/WC always forces a mandatory reason before ANY status change is
       // applied — not just Call Cancel. Reusing that exact copy for Call
       // Cancel keeps its wording identical to before; every other status
       // change gets the equivalent "Force Status Change" mandatory-reason
       // prompt.
-      const isCancel = formData.status === 'Call Cancel';
-      const reason = prompt(isCancel ? '🚫 Cancel Reason (mandatory):' : `⚠️ Reason for status change to "${formData.status}" (mandatory):`);
+      const isCancel = targetStatus === 'Call Cancel';
+      const reason = prompt(isCancel ? '🚫 Cancel Reason (mandatory):' : `⚠️ Reason for status change to "${targetStatus}" (mandatory):`);
       if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
       const label = isCancel ? 'Cancel reason' : 'Status change reason';
       updates.remarks = updates.remarks ? `${updates.remarks}\n\n${label}: ${reason}` : `${label}: ${reason}`;
-      updates.status = formData.status;
+      updates.status = targetStatus;
       forceReason = reason;
     }
     if (formData.assigned_to !== undefined && formData.assigned_to !== selectedTicket.assigned_to) {
@@ -976,6 +985,28 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                 </div>
               )}
 
+              {/* index.html:6410-6415 — Carry-In calls sit here waiting for the
+                  customer to physically bring the device in before allocation. */}
+              {modalMode === 'view' && selectedTicket?.status === 'Pending Customer Arrival' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400e' }}>
+                  ⏳ <b>Waiting for customer to bring in the device.</b> Once the customer arrives with their device, click the button below.
+                  <div style={{ marginTop: 8 }}>
+                    <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleSaveRemarks('Pending Allocation')}>✅ Customer Arrived → Move to Allocation</button>
+                  </div>
+                </div>
+              )}
+              {/* index.html:6424-6429 — device is fixed and waiting at the office;
+                  this is the OTHER Mark Delivered path besides the Customer Reject
+                  Carry-In pickup one above (canMarkDeliveredAfterReject). */}
+              {modalMode === 'view' && selectedTicket && ['Repaired', 'Pending for Delivery'].includes(selectedTicket.status) && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#15803d' }}>
+                  ✅ <b>Device is Repaired.</b> When customer collects the device, click Mark Delivered below.
+                  <div style={{ marginTop: 8 }}>
+                    <button style={{ ...styles.btn, ...styles.btnSm, background: '#15803d', color: '#fff', border: 'none' }} onClick={() => handleSaveRemarks('Delivered')}>📦 Mark Delivered</button>
+                  </div>
+                </div>
+              )}
+
               {modalMode === 'view' && selectedTicket && selectedTicket.warranty_coverage === 'Out of Coverage' && (
                 <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, fontWeight: 600 }}>
                   ⛔ OUT OF COVERAGE {selectedTicket.coverage_remark ? `— ${selectedTicket.coverage_remark}` : ''}
@@ -1290,6 +1321,39 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                       📦 Mark Delivered (Customer Collected)
                     </button>
                   )}
+                  {/* index.html:6447 — dedicated one-click cancel for early-stage
+                      calls, same mandatory-reason prompt as picking "Call Cancel"
+                      from Status below (handleSaveRemarks('Call Cancel')). */}
+                  {selectedTicket && ['Pending Customer Arrival', 'Pending Allocation', 'Assigned'].includes(selectedTicket.status) && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                    <button style={{ ...styles.btn, background: '#dc2626', color: 'white' }} onClick={() => handleSaveRemarks('Call Cancel')}>
+                      🚫 Cancel Call
+                    </button>
+                  )}
+                  {/* index.html:6436-6446 — dedicated Force Status dropdown,
+                      separate from the regular Status field below so WC/admin
+                      can jump straight to an override without touching the rest
+                      of the form. Goes through the exact same mandatory-reason
+                      save path (handleSaveRemarks) as every other status change. */}
+                  {selectedTicket && canForceStatus(selectedTicket.status) && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v && confirm(`Change status to: ${v}?`)) handleSaveRemarks(v);
+                        e.target.value = '';
+                      }}
+                      style={{ border: '1.5px solid #f59e0b', borderRadius: 8, padding: '6px 10px', fontSize: 13, background: '#fffbeb', color: '#92400e', fontWeight: 600 }}
+                    >
+                      <option value="">⚙️ Force Status...</option>
+                      {FORCE_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  )}
+                  {/* index.html:6452 — admin/WC part request, !isClosed only. */}
+                  {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
+                    <button style={{ ...styles.btn, background: '#0d9488', color: 'white' }} onClick={() => setRequestPartTicket(selectedTicket)}>
+                      📦 Request Part
+                    </button>
+                  )}
                   {/* index.html:6453 — admin/WC quick remark add, !isClosed only. */}
                   {selectedTicket?.status !== 'Closed' && (currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && (
                     <button style={{ ...styles.btn, ...styles.btnOutline }} onClick={handleAddRemark}>
@@ -1368,7 +1432,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                   {(currentUserRole === 'admin' || currentUserRole === 'work_controller' || cspMgr) && selectedTicket?.warranty_coverage !== 'Out of Coverage' && ['Warranty', 'Warranty Repeat', 'AMC'].includes(selectedTicket?.call_type || '') && (
                     <button style={{ ...styles.btn, background: '#f59e0b', color: 'white' }} onClick={() => setVoidWarrantyTicket(selectedTicket)}>🚫 Void Warranty</button>
                   )}
-                  <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={handleSaveRemarks}>
+                  <button style={{ ...styles.btn, ...styles.btnPrimary }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, styles.btnPrimaryHover)} onMouseLeave={(e) => Object.assign(e.currentTarget.style, styles.btnPrimary)} onClick={() => handleSaveRemarks()}>
                     💾 Save Changes
                   </button>
                 </>
@@ -1451,6 +1515,15 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
           byUser={(session?.user as any)?.name || currentUserRole || ''}
           onClose={() => setVoidWarrantyTicket(null)}
           onDone={async () => { setVoidWarrantyTicket(null); setModalOpen(false); await fetchTickets(); }}
+        />
+      )}
+      {requestPartTicket && (
+        <PartIndentModal
+          ticket={requestPartTicket}
+          byUser={(session?.user as any)?.name || currentUserRole || ''}
+          isEngineerOnSite={false}
+          onClose={() => setRequestPartTicket(null)}
+          onDone={async () => { setRequestPartTicket(null); setModalOpen(false); await fetchTickets(); }}
         />
       )}
       {reportEditTicket && (
