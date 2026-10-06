@@ -4,6 +4,7 @@ import { authOptions } from '@/auth.config';
 import Providers from '@/components/Providers';
 import PwaRegister from '@/components/PwaRegister';
 import ScrollLockWatcher from '@/components/ScrollLockWatcher';
+import UppercaseInputWatcher from '@/components/UppercaseInputWatcher';
 import '@/styles/global.css';
 import '@/styles/auth.css';
 import '@/styles/screens.css';
@@ -32,6 +33,7 @@ export default async function RootLayout({
         <Providers session={session}>{children}</Providers>
         <PwaRegister />
         <ScrollLockWatcher />
+        <UppercaseInputWatcher />
       </body>
     </html>
   );
