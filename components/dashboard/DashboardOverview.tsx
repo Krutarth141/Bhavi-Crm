@@ -136,7 +136,9 @@ export default function DashboardOverview({ role }: Props) {
     const handlePunchSubmit = async (data: { photo: string; lat: number | null; lng: number | null; meter: string; remark?: string }) => {
         if (punchModalMode === 'in') {
             const today = new Date().toLocaleDateString('en-CA');
-            const currentTime = new Date().toTimeString().slice(0, 5);
+            // index.html:4516 — AM/PM, not 24h (toLocaleTimeString('en-IN',...)
+            // defaults to 12-hour for this locale).
+            const currentTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
             const result = await punchIn({
                 eng_id: userId ?? '', eng_name: userName, punch_in_date: today, punch_in_time: currentTime,
                 start_meter: data.meter ? Number(data.meter) : undefined, photo: data.photo, lat: data.lat, lng: data.lng,
@@ -145,7 +147,7 @@ export default function DashboardOverview({ role }: Props) {
             if (result.success) { startLocationTracking(userId ?? '', userName); refetchPunch(); }
             return result;
         }
-        const currentTime = new Date().toTimeString().slice(0, 5);
+        const currentTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const result = await punchOut({
             eng_id: userId ?? '', punch_out_time: currentTime, end_meter: data.meter ? Number(data.meter) : undefined,
             photo: data.photo, lat: data.lat, lng: data.lng, lateRemark: data.remark,
