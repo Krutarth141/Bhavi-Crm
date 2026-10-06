@@ -15,6 +15,7 @@ import EngineerLiveStatusTable from './EngineerLiveStatusTable';
 import { useMyCalls } from '@/hooks/useMyCalls';
 import { punchIn, punchOut, startLocationTracking, stopLocationTracking, saveLocationEvent } from '@/services/myCallsService';
 import { hasKmEntryToday } from '@/services/kmTrackingService';
+import { ATT_EXCLUDED_IDS } from '@/types/attendance';
 import {
     updateTicketStatus, validateEngineerUpdate, computeCloseCharges,
     needsPaymentConfirmation, paymentPartsCost, fetchSpareConsumableCodes, deliveryPaymentPrefill,
@@ -78,8 +79,10 @@ export default function DashboardOverview({ role }: Props) {
 
     const { tickets: allTickets, loading } = useTickets({ userRole: role, userId, userName, isAccountant: isAcct });
 
-    // Punch In/Out bar — engineers AND work controllers (matches HTML:3754).
-    const canPunch = role === 'engineer' || role === 'work_controller';
+    // Punch In/Out bar — engineers AND work controllers (matches HTML:3754),
+    // except the named accounts HTML exempts from attendance entirely
+    // (index.html:4433 ATT_EXCLUDED_IDS check inside doPunchOut/doPunchIn).
+    const canPunch = (role === 'engineer' || role === 'work_controller') && !ATT_EXCLUDED_IDS.includes(userId ?? '');
     const { punchLog, refetch: refetchPunch } = useMyCalls(canPunch ? (userId ?? '') : '', userName);
     const [punchModalMode, setPunchModalMode] = useState<'in' | 'out' | null>(null);
     const [kmCaptureType, setKmCaptureType] = useState<'opening' | 'closing' | null>(null);
@@ -108,6 +111,14 @@ export default function DashboardOverview({ role }: Props) {
         setForcedDailyReport(true);
     };
     const handlePunchOut = async () => {
+        // index.html:4437 — the KM-closing/Daily-Report gate chain only
+        // applies to engineers (both are field-engineer-only concepts: an
+        // odometer reading and a day's call report). A work_controller falls
+        // straight through to the plain punch-out modal there, never seeing
+        // either gate — gating them the same way the engineer flow does left
+        // a WC stuck on prompts that can never be satisfied (no KM logs, no
+        // daily reports to file), which looked like Punch Out "not working".
+        if (role !== 'engineer') { setPunchModalMode('out'); return; }
         const today = new Date().toLocaleDateString('en-CA');
         const skipKey = `kmSkip_${userId}_${today}`;
         let skipTicket: string | null = null;
