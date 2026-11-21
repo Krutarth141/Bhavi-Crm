@@ -55,7 +55,7 @@ export default function EngPartsAdmin({
   myRequests = [],
 }: Props) {
   const { data: session } = useSession();
-  const approvedBy = (session?.user as any)?.name ?? 'Admin';
+  const approvedBy = (session?.user as { name?: string } | undefined)?.name ?? 'Admin';
 
   const [activeTab, setActiveTab] = useState<AdminTabType>('overview');
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -205,9 +205,12 @@ export default function EngPartsAdmin({
 
   return (
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
+      <h1 style={{ margin: '0 0 16px', fontSize: '20px', fontWeight: 800, color: colors.text, textAlign: 'left' }}>
+        ENGINEER PARTS STOCK
+      </h1>
 
       {/* KPI Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+      <div className="ep-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
         {[
           { label: 'Total Parts', value: inventory.length },
           { label: 'Engineers with Stock', value: engineers.length },
@@ -222,7 +225,7 @@ export default function EngPartsAdmin({
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
+      <div className="ep-action-grid" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '20px' }}>
         <button
           style={{ ...styles.btn, ...styles.btnPrimary }}
           onClick={() => setActiveModal('issue')}
@@ -280,7 +283,7 @@ export default function EngPartsAdmin({
 
       {/* Tabs */}
       <div style={{ ...styles.card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
+        <div className="ep-tabs" style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
           {tabs.map(tab => (
             <button key={tab.key} style={tabStyle(tab.key)} onClick={() => setActiveTab(tab.key)}>
               {tab.label}
@@ -448,7 +451,7 @@ export default function EngPartsAdmin({
                     </div>
                   );
                 })() : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+                  <div className="ep-engineer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
                     {engineers
                       .filter(eng => !analysisEngFilter || eng === analysisEngFilter)
                       .map(eng => {

@@ -8,7 +8,7 @@ import { colors, styles } from '@/styles/ticketsStyles';
 import { useTickets } from '@/hooks/useTickets';
 import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
-import { createTicket, updateTicket, closeTicket, ensureGroupId, addTicketRemark } from '@/services/ticketService';
+import { createTicket, updateTicket, closeTicket, ensureGroupId, addTicketRemark, approveCancelRequest, rejectCancelRequest } from '@/services/ticketService';
 import { setFollowup, markFollowupDone } from '@/services/followupService';
 import { printTicket, getBadgeStyle, printJobSheet } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
@@ -50,6 +50,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
   const { data: session } = useSession();
   const currentUserRole = (session?.user as any)?.roleType;
   const currentUserId = (session?.user as any)?.email;
+  const dbRole = (session?.user as any)?.role;
   const cspMgr = isCspManager(session);
   const isAcct = isAccountant(session);
 
@@ -315,8 +316,30 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
       if (!reason || !reason.trim()) { alert('Reason is mandatory!'); return; }
       const label = isCancel ? 'Cancel reason' : 'Status change reason';
       updates.remarks = updates.remarks ? `${updates.remarks}\n\n${label}: ${reason}` : `${label}: ${reason}`;
-      updates.status = targetStatus;
       forceReason = reason;
+      if (isCancel) {
+        const isTrueAdmin = (dbRole === 'admin' && currentUserRole !== 'work_controller') || cspMgr;
+        if (!isTrueAdmin) {
+          const existing = selectedTicket.pending_cancel;
+          if (existing) { alert('⏳ This call already has a pending cancellation request.'); return; }
+          const now = new Date().toISOString();
+          const pc = {
+            requested_by: (session?.user as any)?.name || currentUserRole || '',
+            requested_by_role: currentUserRole === 'work_controller' ? 'WC' : (currentUserRole || ''),
+            reason: reason.trim(),
+            at: now,
+            prev_status: selectedTicket.status,
+            prev_assigned_to: selectedTicket.assigned_to || null,
+            prev_assigned_name: selectedTicket.assigned_name || null,
+          };
+          updates.pending_cancel = pc;
+          delete updates.status;
+        } else {
+          updates.status = targetStatus;
+        }
+      } else {
+        updates.status = targetStatus;
+      }
     }
     if (formData.assigned_to !== undefined && formData.assigned_to !== selectedTicket.assigned_to) {
       updates.assigned_to = formData.assigned_to || null;
@@ -326,6 +349,24 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     try {
       const result = await updateTicket(selectedTicket.id, updates);
       if (result.success) {
+        if (updates.pending_cancel) {
+          const byUser = (session?.user as any)?.name || currentUserRole || '';
+          try {
+            const { data: fresh } = await supabase.from('tickets').select('timeline').eq('id', selectedTicket.id).single();
+            await supabase.from('tickets').update({
+              timeline: [...(fresh?.timeline || []), {
+                action: 'Cancel Requested — Pending Approval',
+                by: byUser,
+                at: new Date().toISOString(),
+                note: `Reason: ${forceReason}`,
+              }],
+            }).eq('id', selectedTicket.id);
+          } catch { /* best-effort audit trail */ }
+          alert('✅ Cancel request sent — waiting for Admin/Manager approval. Call stays active until decided.');
+          setModalOpen(false);
+          await fetchTickets();
+          return;
+        }
         if (updates.status && forceReason) {
           const byUser = (session?.user as any)?.name || currentUserRole || '';
           try {
@@ -564,6 +605,27 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
     if (!confirm(`Approve report edit for ${t.id} — ${t.cname}?`)) return;
     const r = await approveReportEdit(t, (session?.user as any)?.name || 'Admin');
     if (r.success) { alert('✅ Edit approved! Report has been updated.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleApproveCancelRequest = async (t: Ticket) => {
+    const remark = prompt('Approve this cancellation? This is PERMANENT.\n\nRemark (mandatory):');
+    if (remark === null) return;
+    if (!remark.trim()) { alert('Remark is mandatory.'); return; }
+    const r = await approveCancelRequest(t, (session?.user as any)?.name || 'Admin', remark);
+    if (r.success) { alert('✅ Cancellation approved.'); setModalOpen(false); await fetchTickets(); }
+    else alert('Error: ' + r.error);
+  };
+
+  const handleRejectCancelRequest = async (t: Ticket) => {
+    const remark = prompt('Reject cancel request.\n\nRemark (mandatory):');
+    if (remark === null) return;
+    if (!remark.trim()) { alert('Remark is mandatory.'); return; }
+    const choice = confirm('Unallocate this call?\n\nOK = Unallocate (Pending Allocation)\nCancel = Keep with the same engineer')
+      ? 'unallocate'
+      : 'keep';
+    const r = await rejectCancelRequest(t, (session?.user as any)?.name || 'Admin', choice, remark);
+    if (r.success) { alert('✅ Cancellation request rejected. Call remains active.'); setModalOpen(false); await fetchTickets(); }
     else alert('Error: ' + r.error);
   };
 
@@ -878,6 +940,7 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                     <td style={styles.tableCell}>
                       <span style={{ ...styles.badge, ...getBadgeStyle(statusBadges[t.status] || 'badge-open') }}>{t.status}</span>
                       {t.pending_edit && <span style={{ marginLeft: 4, background: '#fbbf24', color: '#78350f', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>✏️ Edit</span>}
+                      {t.pending_cancel && <span style={{ marginLeft: 4, background: '#fecaca', color: '#7f1d1d', borderRadius: 4, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>🚫 Cancel Pending</span>}
                     </td>
                     <td style={styles.tableCell}>
                       {isInvoiceable(t) && (
@@ -966,6 +1029,16 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
                     <button style={{ ...styles.btn, ...styles.btnSm, background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => handleApproveReportEdit(selectedTicket)}>✅ Approve</button>
                     <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleRejectReportEdit(selectedTicket)}>❌ Reject</button>
                     <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onClick={() => handleViewEditDiff(selectedTicket)}>🔍 View Changes</button>
+                  </div>
+                </div>
+              )}
+              {modalMode === 'view' && selectedTicket?.pending_cancel && ((dbRole === 'admin' && currentUserRole !== 'work_controller') || cspMgr) && (
+                <div style={{ background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#991b1b' }}>
+                  🚫 <b>Cancel Requested — Pending Approval</b> — Requested by <b>{selectedTicket.pending_cancel.requested_by}</b> ({selectedTicket.pending_cancel.requested_by_role})<br />
+                  <span style={{ fontSize: 12 }}>Reason: {selectedTicket.pending_cancel.reason}</span>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    <button style={{ ...styles.btn, ...styles.btnSm, background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => handleApproveCancelRequest(selectedTicket)}>✅ Approve Cancel (Permanent)</button>
+                    <button style={{ ...styles.btn, ...styles.btnSm, ...styles.btnOutline }} onClick={() => handleRejectCancelRequest(selectedTicket)}>❌ Reject — Keep Call Active</button>
                   </div>
                 </div>
               )}

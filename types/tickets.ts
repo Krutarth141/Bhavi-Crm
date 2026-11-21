@@ -25,6 +25,16 @@ export interface PendingEdit {
     changes: Record<string, { old: string; new: string }>;
 }
 
+export interface PendingCancel {
+    requested_by: string;
+    requested_by_role: string;
+    reason: string;
+    at: string;
+    prev_status: string;
+    prev_assigned_to?: string | null;
+    prev_assigned_name?: string | null;
+}
+
 export interface Ticket {
     id: string;
     call_type: string;
@@ -38,6 +48,7 @@ export interface Ticket {
     city: string;
     state?: string;
     pending_edit?: PendingEdit | null;
+    pending_cancel?: PendingCancel | null;
     pin?: string;
     area?: string;
     address?: string;

@@ -688,8 +688,6 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
 
   const handlePunchIn = async () => {
     if (ATT_EXCLUDED_IDS.includes(engId)) { alert('This account does not require Punch In.'); return; }
-    const hasOpening = await hasKmEntryToday(engId, 'opening');
-    if (!hasOpening) { setKmCaptureType('opening'); return; }
     setPunchModalMode('in');
   };
   const proceedToPunchOutReportGate = async () => {

@@ -1,8 +1,9 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { deviceCall, getDeviceId } from '@/lib/deviceSecurity';
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import EngineerDashboard from '@/components/dashboard/engineer/EngineerDashboard';
 import WorkControllerDashboard from '@/components/dashboard/work-controller/WorkControllerDashboard';
@@ -20,6 +21,33 @@ export default function DashboardPage() {
         }
     }, [status, router]);
 
+    useEffect(() => {
+        if (status !== 'authenticated' || !session?.user?.email) return;
+
+        const checkBlocked = async () => {
+            const result = await deviceCall({
+                action: 'status',
+                user_id: session.user.email,
+                device_id: getDeviceId(),
+            }, 5000);
+            if (result?.status === 'blocked') {
+                alert('🚫 This device has been blocked. Please contact the Admin.');
+                await signOut({ redirect: true, callbackUrl: '/login' });
+            }
+        };
+
+        void checkBlocked();
+        const timer = window.setInterval(() => void checkBlocked(), 60000);
+        const onVisibility = () => {
+            if (!document.hidden) void checkBlocked();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [status, session?.user?.email]);
+
     if (status === 'loading') {
         return <div style={{ padding: '20px', textAlign: 'center' }}>Loading dashboard...</div>;
     }
@@ -28,7 +56,7 @@ export default function DashboardPage() {
         return <div style={{ padding: '20px', textAlign: 'center' }}>Redirecting to login...</div>;
     }
 
-    const userRole = (session.user as any)?.roleType;
+    const userRole = (session.user as typeof session.user & { roleType?: string }).roleType;
 
     const renderDashboard = () => {
         switch (userRole) {

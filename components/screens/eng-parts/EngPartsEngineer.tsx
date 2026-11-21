@@ -178,8 +178,11 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
 
   return (
     <div style={{ padding: '20px', background: colors.bg, minHeight: '100vh' }}>
+      <h1 style={{ margin: '0 0 16px', fontSize: '20px', fontWeight: 800, color: colors.text }}>
+        ENGINEER PARTS STOCK
+      </h1>
       {/* index.html:13437 — Record Sale, alongside the self-service request buttons */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '12px' }}>
+      <div className="ep-action-grid" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginBottom: '12px' }}>
         <button
           style={{ ...styles.btn, backgroundColor: '#059669', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
           onClick={() => setRecordSaleOpen(true)}
@@ -189,7 +192,7 @@ export default function EngPartsEngineer({ engName, engineerId, inventory, mySto
       </div>
       <div style={styles.card}>
         {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
+        <div className="ep-tabs" style={{ display: 'flex', borderBottom: `1px solid ${colors.border}`, padding: '0 4px', flexWrap: 'wrap' as const }}>
           <button style={tabStyle('my-stock')} onClick={() => setActiveTab('my-stock')}>
             📦 My Stock
           </button>

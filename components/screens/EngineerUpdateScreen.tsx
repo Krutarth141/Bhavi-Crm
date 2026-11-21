@@ -249,6 +249,10 @@ export default function EngineerUpdateScreen() {
 
     const handleSave = async () => {
         if (!selected || !form.newStatus) { alert('Select new status'); return; }
+        if (selected.pending_cancel) {
+            alert('⏳ This call already has a pending cancellation request. It stays active until Admin/Manager decides.');
+            return;
+        }
         if (['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'].includes(selected.status || '')) {
             alert('❌ This call is closed — no updates allowed.');
             return;
@@ -267,8 +271,13 @@ export default function EngineerUpdateScreen() {
 
         setSaving(true);
         const r = await update(selected, form.newStatus, note, form.labour, userName, form.faultCode);
-        if (r.success) { setModalOpen(false); }
-        else alert('Error: ' + r.error);
+        if (r.success) {
+            setModalOpen(false);
+            await refetch();
+            if (r.finalStatus === 'PENDING_CANCEL_APPROVAL') {
+                alert('✅ Cancel request sent — waiting for Admin/Manager approval. Call stays in your list until decided.');
+            }
+        } else alert('Error: ' + r.error);
         setSaving(false);
     };
 
@@ -371,6 +380,12 @@ export default function EngineerUpdateScreen() {
                         )}
                         {selected.warranty_claim_pending && (
                             <div style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>⏳ Warranty claim pending review</div>
+                        )}
+                        {selected.pending_cancel && (
+                            <div style={{ background: '#fef2f2', color: '#991b1b', border: '1.5px solid #fca5a5', borderRadius: 8, padding: '10px 12px', fontSize: 12, fontWeight: 600 }}>
+                                🚫 Cancel Requested — Pending Admin/Manager Approval
+                                <div style={{ marginTop: 3, fontWeight: 400 }}>Reason: {selected.pending_cancel.reason}</div>
+                            </div>
                         )}
                         {['Warranty', 'Warranty Repeat', 'AMC'].includes(selected.call_type || '') && selected.warranty_coverage !== 'Out of Coverage' && (
                             <button onClick={() => setVoidModalOpen(true)} style={{ padding: '8px 14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>⚠️ Mark Out of Coverage</button>

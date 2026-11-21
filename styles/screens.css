@@ -776,6 +776,38 @@ tr:hover td {
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
+  .ep-kpi-grid {
+    display: none !important;
+  }
+
+  .ep-action-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .ep-action-grid > button {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .ep-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .ep-tabs > button {
+    border-bottom: 1px solid var(--border, #e2e8f0) !important;
+    border-right: 1px solid var(--border, #e2e8f0);
+    min-height: 44px;
+    padding: 8px 6px !important;
+  }
+
+  .ep-engineer-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
@@ -805,15 +837,43 @@ tr:hover td {
 
   .modal {
     max-width: 100% !important;
+    width: 100% !important;
     background: #ffffff;
     margin: 0 !important;
     border-radius: 16px 16px 0 0 !important;
-    max-height: 90vh;
+    max-height: 92dvh;
     position: fixed !important;
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
     top: auto !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    flex-shrink: 0;
+  }
+
+  .modal-body {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .modal-footer {
+    flex-shrink: 0;
+  }
+
+  .modal-footer > div {
+    width: 100%;
+  }
+
+  .modal-footer button {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .modal-overlay {

@@ -100,8 +100,6 @@ export default function DashboardOverview({ role }: Props) {
     }, [canPunch, punchLog?.punch_in_time, punchLog?.punch_out_time, userId, userName]);
 
     const handlePunchIn = async () => {
-        const hasOpening = await hasKmEntryToday(userId ?? '', 'opening');
-        if (!hasOpening) { setKmCaptureType('opening'); return; }
         setPunchModalMode('in');
     };
     const proceedToPunchOutReportGate = async () => {

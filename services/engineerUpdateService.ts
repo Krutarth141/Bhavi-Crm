@@ -6,7 +6,7 @@ import { missingBagParts, missingCompanyStockParts, fetchConsumableCodes } from 
 import { saveWorkLog, saveLocationEvent } from './myCallsService';
 import { getAllowedStatuses } from '@/types/ticketStatus';
 
-const TICKET_COLUMNS = 'id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, assigned_name, status, service_charges, labor, final_charges, charges_note, payment_mode, work_done, jobsheet_photo, attachments, address, area, city, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date, visit_out, meter_start, meter_end, se_call_id, page_count, other_charge, wc_type';
+const TICKET_COLUMNS = 'id, job_sheet, cname, mobile, model, serial, brand_name, problem, fault_code, call_type, service_type, warranty_coverage, warranty_claim_pending, pending_cancel, assigned_name, status, service_charges, labor, final_charges, charges_note, payment_mode, work_done, jobsheet_photo, attachments, address, area, city, pin, timeline, spares, rerepair, rerepair_foc, created_at, updated_at, visit_in, visit_date, visit_out, meter_start, meter_end, se_call_id, page_count, other_charge, wc_type';
 
 const PHOTO_BUCKET = 'product-images';
 
@@ -477,6 +477,39 @@ export const updateTicketStatus = async (
         const isMsc = newStatus === 'Sent to MSC';
         const nowIso = new Date().toISOString();
         const workDone = (extra?.workDone ?? ticket.work_done ?? '').trim();
+
+        // WC/Engineer cancellation stays pending until a true admin or CSP
+        // manager approves/rejects it. The ticket status and assignment remain
+        // unchanged until that decision.
+        if (newStatus === 'Call Cancel' && extra?.memberRole === 'Engineer') {
+            if (ticket.pending_cancel) {
+                return { success: false, error: 'A cancellation request is already pending approval.' };
+            }
+            if (workDone.length < 10) {
+                return { success: false, error: 'Valid Cancel Reason required (at least 10 characters).' };
+            }
+            const pendingCancel = {
+                requested_by: updatedBy,
+                requested_by_role: 'Engineer',
+                reason: workDone,
+                at: nowIso,
+                prev_status: ticket.status || '',
+                prev_assigned_to: (ticket as EngineerTicket & { assigned_to?: string }).assigned_to || null,
+                prev_assigned_name: ticket.assigned_name || null,
+            };
+            const { error } = await supabase.from('tickets').update({
+                pending_cancel: pendingCancel,
+                timeline: [...existing, {
+                    action: 'Cancel Requested — Pending Approval',
+                    by: updatedBy,
+                    at: nowIso,
+                    note: `Reason: ${workDone}`,
+                }],
+                updated_at: nowIso,
+            }).eq('id', ticket.id);
+            if (error) throw error;
+            return { success: true, finalStatus: 'PENDING_CANCEL_APPROVAL' };
+        }
         // The charges calc below bills off this list, so it must be the real
         // current set of parts. Callers that render the spares list pass their
         // edited copy; the ones that don't (admin/dashboard status changes) get

@@ -25,6 +25,15 @@ export interface EngineerTicket {
     created_at?: string;
     updated_at?: string;
     warranty_claim_pending?: boolean;
+    pending_cancel?: {
+        requested_by: string;
+        requested_by_role: string;
+        reason: string;
+        at: string;
+        prev_status: string;
+        prev_assigned_to?: string | null;
+        prev_assigned_name?: string | null;
+    } | null;
     fault_code?: string;
     spares?: TicketSpare[];
     rerepair?: boolean;

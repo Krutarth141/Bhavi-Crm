@@ -253,6 +253,71 @@ export const addTicketRemark = async (ticketId: string, remark: string, byUser: 
     }
 };
 
+export const approveCancelRequest = async (
+    ticket: Ticket,
+    approvedBy: string,
+    remark: string,
+): Promise<{ success: boolean; error?: string }> => {
+    if (!ticket.pending_cancel) return { success: false, error: 'No pending cancellation request.' };
+    if (!remark.trim()) return { success: false, error: 'Remark is mandatory.' };
+    try {
+        const now = new Date().toISOString();
+        const pc = ticket.pending_cancel;
+        const { error } = await supabase.from('tickets').update({
+            status: 'Call Cancel',
+            pending_cancel: null,
+            last_status_by: approvedBy,
+            timeline: [...(ticket.timeline || []), {
+                action: 'Call Cancelled (Approved)',
+                by: approvedBy,
+                at: now,
+                note: `Cancel requested by ${pc.requested_by}. Reason: ${pc.reason}. Approval remark: ${remark.trim()}`,
+            }],
+            updated_at: now,
+        }).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as Error).message };
+    }
+};
+
+export const rejectCancelRequest = async (
+    ticket: Ticket,
+    rejectedBy: string,
+    choice: 'unallocate' | 'keep',
+    remark: string,
+): Promise<{ success: boolean; error?: string }> => {
+    if (!ticket.pending_cancel) return { success: false, error: 'No pending cancellation request.' };
+    if (!remark.trim()) return { success: false, error: 'Remark is mandatory.' };
+    try {
+        const now = new Date().toISOString();
+        const pc = ticket.pending_cancel;
+        const patch: Record<string, unknown> = {
+            pending_cancel: null,
+            updated_at: now,
+            timeline: [...(ticket.timeline || []), {
+                action: 'Cancel Request Rejected',
+                by: rejectedBy,
+                at: now,
+                note: choice === 'unallocate'
+                    ? `Cancel request rejected by ${rejectedBy} — call unallocated, needs re-assignment. Remark: ${remark.trim()}`
+                    : `Cancel request rejected by ${rejectedBy} — kept with ${pc.prev_assigned_name || 'the same engineer'}, call continues as-is. Remark: ${remark.trim()}`,
+            }],
+        };
+        if (choice === 'unallocate') {
+            patch.status = 'Pending Allocation';
+            patch.assigned_to = null;
+            patch.assigned_name = null;
+        }
+        const { error } = await supabase.from('tickets').update(patch).eq('id', ticket.id);
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: (err as Error).message };
+    }
+};
+
 export const markInvoiceDone = async (ticket: Ticket, invoiceNo: string, updatedBy: string): Promise<{ success: boolean; error?: string }> => {
     try {
         const existing = ticket.timeline || [];

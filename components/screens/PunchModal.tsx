@@ -18,7 +18,6 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
     // stuck when GPS won't fix (index.html:4288-4326, pinFetchGPS/pinAllowNoGps).
     const [gpsAttempts, setGpsAttempts] = useState(0);
     const [allowNoGps, setAllowNoGps] = useState(false);
-    const [meter, setMeter] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [needsRemark, setNeedsRemark] = useState(false);
@@ -166,7 +165,7 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
         setSubmitting(true);
         setError('');
         try {
-            const result = await onSubmit({ photo, lat: loc?.lat ?? null, lng: loc?.lng ?? null, meter, remark: needsRemark ? remark : undefined });
+            const result = await onSubmit({ photo, lat: loc?.lat ?? null, lng: loc?.lng ?? null, meter: '', remark: needsRemark ? remark : undefined });
             if (!result.success) {
                 if (result.needsRemark) { setNeedsRemark(true); setError(result.error || 'A reason is required.'); return; }
                 setError(result.error || 'Failed.');
@@ -233,13 +232,6 @@ export default function PunchModal({ mode, onSubmit, onClose }: Props) {
                         <button onClick={() => setAutoCountdown(null)} style={{ marginTop: 6, padding: '4px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12 }}>Cancel Auto-Punch</button>
                     </div>
                 )}
-
-                <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
-                        {mode === 'in' ? 'Start' : 'End'} Meter Reading (optional)
-                    </label>
-                    <input type="number" value={meter} onChange={(e) => setMeter(e.target.value)} placeholder="Odometer / meter reading" style={inputStyle} />
-                </div>
 
                 {needsRemark && (
                     <div style={{ marginBottom: 12 }}>
