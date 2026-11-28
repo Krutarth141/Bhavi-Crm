@@ -490,14 +490,27 @@ export default function EngPartsAdmin({
                               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                                 {parts.map(s => {
                                   const inv = inventory.find(i => i.id === s.part_id);
+                                  const partCode = inv?.part_code ?? inv?.item_code;
                                   return (
                                     <li key={s.id} style={{
-                                      display: 'flex', justifyContent: 'space-between',
-                                      padding: '4px 0', borderBottom: `1px solid ${colors.border}`,
-                                      fontSize: '12px', color: colors.text,
+                                      display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto',
+                                      alignItems: 'start', gap: '8px',
+                                      padding: '7px 0', borderBottom: `1px solid ${colors.border}`,
+                                      color: colors.text,
                                     }}>
-                                      <span>{inv?.item_name ?? s.part_id}</span>
-                                      <span style={{ fontWeight: 600 }}>{s.qty}</span>
+                                      <span style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '3px 6px', minWidth: 0 }}>
+                                        {partCode && (
+                                          <span style={{ fontFamily: 'monospace', fontSize: '10px', fontWeight: 600, color: colors.primary, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '4px', padding: '1px 5px', whiteSpace: 'nowrap' }}>
+                                            {partCode}
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: '12px', lineHeight: 1.4, overflowWrap: 'anywhere' }}>
+                                          {inv?.item_name ?? s.part_id}
+                                        </span>
+                                      </span>
+                                      <span style={{ minWidth: '20px', padding: '2px 6px', borderRadius: '10px', background: '#f1f5f9', color: colors.text, fontSize: '11px', fontWeight: 700, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                        {s.qty}
+                                      </span>
                                     </li>
                                   );
                                 })}
