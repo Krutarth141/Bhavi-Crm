@@ -23,9 +23,11 @@ export const useEngineerUpdate = (engineerName: string, statusFilter: 'active' |
         note: string,
         labour: string,
         updatedBy: string,
-        faultCode: string
+        faultCode: string,
+        memberRole = 'Engineer',
+        canCancelDirectly = false
     ) => {
-        const r = await updateTicketStatus(ticket, newStatus, note, labour, updatedBy, faultCode);
+        const r = await updateTicketStatus(ticket, newStatus, note, labour, updatedBy, faultCode, { memberRole, canCancelDirectly });
         if (r.success) await load();
         return r;
     };

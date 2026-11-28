@@ -341,7 +341,7 @@ export default function EngPartsAdmin({
                               title="Click to correct stock"
                               onClick={() => setAdjustTarget({ owner: eng, partId: item.id, ownerLabel: `👷 ${eng}`, partLabel: `${item.part_code ?? item.item_code ?? ''} ${item.item_name}`.trim(), currentQty: stock ? stock.qty : 0 })}
                             >
-                              {stock ? stock.qty : 0}
+                              {stock && stock.qty > 0 ? stock.qty : '—'}
                             </td>
                           );
                         })}
@@ -455,7 +455,7 @@ export default function EngPartsAdmin({
                     {engineers
                       .filter(eng => !analysisEngFilter || eng === analysisEngFilter)
                       .map(eng => {
-                        const parts = engStock.filter(s => s.owner === eng);
+                        const parts = engStock.filter(s => s.owner === eng && s.qty > 0);
                         const totalValue = parts.reduce((sum, s) => {
                           const inv = inventory.find(i => i.id === s.part_id);
                           return sum + s.qty * (inv?.unit_price || 0);

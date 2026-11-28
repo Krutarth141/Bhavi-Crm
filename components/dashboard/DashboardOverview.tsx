@@ -76,8 +76,10 @@ export default function DashboardOverview({ role }: Props) {
     // this DB field, so it must too — mirrors AttendanceScreen's `dbRole`.
     const dbRole = (session?.user as any)?.role;
     const isAdminOrWC = role === 'admin' || role === 'work_controller';
+    const roleType = session?.user?.roleType;
+    const canCancelDirectly = (dbRole === 'admin' && roleType !== 'work_controller') || cspMgr;
 
-    const { tickets: allTickets, loading } = useTickets({ userRole: role, userId, userName, isAccountant: isAcct });
+    const { tickets: allTickets, loading, fetchTickets } = useTickets({ userRole: role, userId, userName, isAccountant: isAcct, cspOnly: cspMgr });
 
     // Punch In/Out bar — engineers AND work controllers (matches HTML:3754),
     // except the named accounts HTML exempts from attendance entirely
@@ -258,11 +260,18 @@ export default function DashboardOverview({ role }: Props) {
         setUpdateSaving(true);
         const r = await updateTicketStatus(
             updateTicket as any, updateForm.newStatus, updateForm.note.trim(), updateForm.labour, userName, updateForm.faultCode,
-            { workDone: updateForm.note.trim(), spares: updateSpares, photos: updatePhotos, payment, engId: userId ?? '', memberRole },
+            { workDone: updateForm.note.trim(), spares: updateSpares, photos: updatePhotos, payment, engId: userId ?? '', memberRole, canCancelDirectly },
         );
         setUpdateSaving(false);
         if (!r.success) { alert('Error: ' + r.error); return; }
         if (r.stockWarning) alert(r.stockWarning);
+        if (r.finalStatus === 'PENDING_CANCEL_APPROVAL') {
+            alert('✅ Cancel request sent — waiting for Admin/Manager approval. The call stays active until decided.');
+            setPaymentPrompt(null);
+            setUpdateTicket(null);
+            await fetchTickets();
+            return;
+        }
         setPaymentPrompt(null);
         setUpdateTicket(null);
     };
@@ -413,6 +422,7 @@ export default function DashboardOverview({ role }: Props) {
     // Recent Tickets deliberately ignores the period filter, but excludes
     // Delivered/Call Cancel — matches HTML (index.html:3860).
     const recentTickets = allTickets.filter(t => !['Delivered', 'Call Cancel'].includes(t.status)).slice(0, 10);
+    const cancelApprovalTickets = allTickets.filter(t => !!t.pending_cancel);
 
     if (loading) return <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>Loading...</div>;
 
@@ -482,6 +492,16 @@ export default function DashboardOverview({ role }: Props) {
                 <KpiCard label="Active" sub="In pipeline" value={active} icon="🔥" color="#d97706" onClick={() => setKpiDetail({ title: `Active Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketActive(t.status)) })} />
                 <KpiCard label="Closed" sub="Successfully resolved" value={closed} icon="✅" color="#0d9488" onClick={() => setKpiDetail({ title: `Closed Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketClosed(t.status)) })} />
                 <KpiCard label="Unassigned" sub="Needs attention" value={unalloc} icon="⏳" color="#7c3aed" onClick={() => setKpiDetail({ title: `Unassigned Tickets (${periodLabel})`, tickets: dashTix.filter(t => isTicketActive(t.status) && !t.assigned_to) })} />
+                {canCancelDirectly && (
+                    <KpiCard
+                        label="Cancel Approval"
+                        sub="Open All Tickets to review"
+                        value={cancelApprovalTickets.length}
+                        icon="🚫"
+                        color="#dc2626"
+                        onClick={() => window.dispatchEvent(new CustomEvent('bhavi:navigate-tab', { detail: { tab: 'tickets' } }))}
+                    />
+                )}
             </div>
 
             {!isAdminOrWC && engDaily && (

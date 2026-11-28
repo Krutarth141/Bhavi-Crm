@@ -8,9 +8,10 @@ interface ModalProps {
     children: React.ReactNode;
     footer?: React.ReactNode;
     size?: 'sm' | 'lg';
+    className?: string;
 }
 
-export default function Modal({ isOpen, title, onClose, children, footer, size }: ModalProps) {
+export default function Modal({ isOpen, title, onClose, children, footer, size, className }: ModalProps) {
     // Mirrors HTML's global Escape-to-close (index.html:2069-2080) — it
     // closes every visible modal-overlay at once (not just the topmost), so
     // one listener per open Modal instance, each closing only itself, adds
@@ -27,7 +28,7 @@ export default function Modal({ isOpen, title, onClose, children, footer, size }
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className={`modal${size ? ` modal-${size}` : ''}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`modal${size ? ` modal-${size}` : ''}${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <h2>{title}</h2>
                     <button className="close-btn" onClick={onClose}>✕</button>

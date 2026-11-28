@@ -876,6 +876,55 @@ tr:hover td {
     min-width: 0;
   }
 
+  .update-ticket-modal {
+    max-height: 100dvh;
+  }
+
+  .update-ticket-modal .modal-header {
+    padding: 10px 16px;
+  }
+
+  .update-ticket-modal .modal-body {
+    padding: 12px 16px;
+    min-width: 0;
+  }
+
+  .update-ticket-modal .modal-footer {
+    padding: 10px 16px;
+  }
+
+  .update-ticket-form {
+    gap: 8px !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .update-ticket-form > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .update-ticket-form input,
+  .update-ticket-form select,
+  .update-ticket-form textarea {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .update-ticket-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .update-ticket-spare-row {
+    flex-wrap: wrap;
+  }
+
+  .update-ticket-spare-row > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .modal-overlay {
     align-items: flex-end !important;
     padding: 0 !important;

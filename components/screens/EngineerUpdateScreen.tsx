@@ -16,6 +16,7 @@ import KmCaptureModal from '@/components/screens/tickets/KmCaptureModal';
 import { hasKmEntryToday, hasArrivalKmForTicket } from '@/services/kmTrackingService';
 import { startVisit, stopVisit, doWorkStart, doWorkHold, recordReachedLocation, computeWorkPanel, WorkPanelState } from '@/services/visitStartService';
 import { fetchTicketById } from '@/services/engineerUpdateService';
+import { isCspManager } from '@/lib/permissions';
 
 export const VISIT_BLOCKED_STATUSES = ['Closed', 'Customer Reject', 'Call Cancel', 'Delivered'];
 
@@ -130,6 +131,7 @@ export default function EngineerUpdateScreen() {
     const userName = (session?.user as any)?.name ?? '';
     const engId = (session?.user as any)?.email ?? '';
     const roleType = (session?.user as any)?.roleType ?? '';
+    const canCancelDirectly = roleType === 'admin' || isCspManager(session);
 
     const [statusFilter, setStatusFilter] = useState<'active' | 'closed' | 'all'>('active');
     const { activeEngineers } = useEngineers();
@@ -270,7 +272,8 @@ export default function EngineerUpdateScreen() {
         }
 
         setSaving(true);
-        const r = await update(selected, form.newStatus, note, form.labour, userName, form.faultCode);
+        const memberRole = roleType === 'work_controller' ? 'WC' : 'Engineer';
+        const r = await update(selected, form.newStatus, note, form.labour, userName, form.faultCode, memberRole, canCancelDirectly);
         if (r.success) {
             setModalOpen(false);
             await refetch();

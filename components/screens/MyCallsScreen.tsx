@@ -101,6 +101,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
   const roleType = (session?.user as any)?.roleType ?? '';
   const cspMgr = isCspManager(session);
   const memberRole = roleType === 'work_controller' ? 'WC' : 'Engineer';
+  const canCancelDirectly = (session?.user?.role === 'admin' && roleType !== 'work_controller') || cspMgr;
 
   const { punchLog, workLogs, myTickets, loading, error, refetch } = useMyCalls(engId, engName);
 
@@ -569,14 +570,16 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
       otherCharge: updateForm.otherCharge, visitDate: updateForm.visitDate, visitIn: updateForm.visitIn, visitOut: updateForm.visitOut,
       meterStart: updateForm.meterStart, meterEnd: updateForm.meterEnd, mscCenter: updateForm.mscCenter,
       workDone: updateForm.workDone, spares: updateSpares, photos: updatePhotos, payment,
-      engId, memberRole,
+      engId, memberRole, canCancelDirectly,
       conditionType: updateForm.conditionType, conditionPhotos,
       manualTimeReason: isManualTimeEdit ? updateForm.manualTimeReason : undefined,
     });
     setUpdateSaving(false);
     if (!r.success) { alert('Error: ' + r.error); return; }
     if (r.stockWarning) alert(r.stockWarning);
-    if (r.finalStatus && r.finalStatus !== updateForm.newStatus) {
+    if (r.finalStatus === 'PENDING_CANCEL_APPROVAL') {
+      alert('✅ Cancel request sent — waiting for Admin/Manager approval. The call stays active until decided.');
+    } else if (r.finalStatus && r.finalStatus !== updateForm.newStatus) {
       alert(`✅ Saved — status set to "${r.finalStatus}".`);
     }
     setPaymentPrompt(null);
@@ -1330,6 +1333,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
           isOpen
           onClose={() => setUpdateTicket(null)}
           title={`${isClosedView ? '👁️ View' : 'Update'} — ${updateTicket.cname || ''}`}
+          className="update-ticket-modal"
           footer={
             isClosedView ? (
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -1351,7 +1355,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
         >
           {/* fieldset(disabled) locks every input/select/textarea/button
               descendant read-only in one place when viewing a closed ticket. */}
-          <fieldset disabled={isClosedView} style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <fieldset disabled={isClosedView} className="update-ticket-form" style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: '#f9fafb', borderRadius: 8, padding: 12, fontSize: 13 }}>
               <div style={{ fontWeight: 600 }}>{updateTicket.brand_name} {updateTicket.model} | {updateTicket.serial}</div>
               <div style={{ color: '#6b7280', marginTop: 2 }}>{updateTicket.problem}</div>
@@ -1454,7 +1458,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                 </div>
               )}
               {updateTicket.service_type === 'On Site' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="update-ticket-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>Visit Date</label>
                     <input type="date" value={updateForm.visitDate} onChange={(e) => setUpdateForm((f) => ({ ...f, visitDate: e.target.value }))} style={styles.formInput} />
@@ -1506,7 +1510,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
                   const hidePrice = spareHidesPrice(s);
                   const isCons = isChargeableSpare(s, consumableCodes);
                   return (
-                    <div key={`${s.code || 'x'}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13, background: '#f9fafb', borderRadius: 8, padding: '6px 10px' }}>
+                    <div key={`${s.code || 'x'}-${i}`} className="update-ticket-spare-row" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13, background: '#f9fafb', borderRadius: 8, padding: '6px 10px' }}>
                       <span style={{ flex: 1, color: colors.primary, fontWeight: 600 }}>
                         {s.code || '-'}
                         {isCons && <span style={{ fontSize: 9, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 4px', borderRadius: 4, marginLeft: 4 }}>CONS</span>}
@@ -1525,7 +1529,7 @@ export default function MyCallsScreen({ initialTicketId, onConsumedInitialTicket
               {['Warranty', 'Warranty Repeat', 'AMC'].includes(updateTicket.call_type || '') && updateTicket.warranty_coverage !== 'Out of Coverage' ? (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#1e3a8a' }}>Warranty — no charges</div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="update-ticket-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div style={styles.formGroup}>
                     <label style={styles.formLabel}>Service / Labour ₹ (incl. GST)</label>
                     <input type="number" value={updateForm.labour} onChange={(e) => setUpdateForm((f) => ({ ...f, labour: e.target.value }))} style={styles.formInput} placeholder="0" />

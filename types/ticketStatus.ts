@@ -85,11 +85,9 @@ export function getAllowedStatuses(
     if (isEng) {
         switch (current) {
             case 'Assigned':
-                // Call Cancel is always available to the engineer directly — e.g.
-                // customer not available at site, or charges not approved — no admin
-                // approval needed, just a mandatory reason. Customer Reject: customer
-                // had agreed earlier but backs out later — engineer sets it directly
-                // with amount + remark, no admin approval hop needed.
+                // Call Cancel remains selectable here, but the update service
+                // sends it for Admin/Manager approval instead of cancelling directly.
+                // Customer Reject remains a direct engineer action.
                 return isCarryIn
                     ? ['In Progress', 'Repaired', 'Sent to MSC', 'Customer Reject', 'Call Cancel']
                     : ['In Progress', 'Closed', 'Resolved By Phone', 'Customer Reject', 'Call Cancel'];

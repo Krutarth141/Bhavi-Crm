@@ -10,6 +10,7 @@ import { useTicketForm, deriveWcType } from '@/hooks/useTicketForm';
 import { useEngineers } from '@/hooks/useEngineers';
 import { createTicket, updateTicket, closeTicket, ensureGroupId, addTicketRemark, approveCancelRequest, rejectCancelRequest } from '@/services/ticketService';
 import { setFollowup, markFollowupDone } from '@/services/followupService';
+import { notifyCancelApprovalRequested } from '@/services/telegramNotify';
 import { printTicket, getBadgeStyle, printJobSheet } from '@/utils/printTicket';
 import { generateInvoice } from '@/utils/printInvoice';
 import InvoiceModal from '@/components/screens/tickets/InvoiceModal';
@@ -351,6 +352,12 @@ export default function TicketsScreen({ autoOpenAdd, onConsumedAutoOpenAdd, auto
       if (result.success) {
         if (updates.pending_cancel) {
           const byUser = (session?.user as any)?.name || currentUserRole || '';
+          void notifyCancelApprovalRequested(
+            selectedTicket,
+            byUser,
+            updates.pending_cancel.requested_by_role,
+            updates.pending_cancel.reason,
+          );
           try {
             const { data: fresh } = await supabase.from('tickets').select('timeline').eq('id', selectedTicket.id).single();
             await supabase.from('tickets').update({

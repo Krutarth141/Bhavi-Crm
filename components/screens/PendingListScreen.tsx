@@ -331,10 +331,13 @@ export default function PendingListScreen() {
     setUpdateSaving(true);
     const r = await updateTicketStatus(
       updateTicket, updateForm.newStatus, updateForm.note, updateForm.labour, byUser, updateForm.faultCode,
-      { workDone: updateForm.note, payment, engId, memberRole: 'WC' },
+      { workDone: updateForm.note, payment, engId, memberRole: 'WC', canCancelDirectly: false },
     );
     setUpdateSaving(false);
     if (!r.success) { alert('Error: ' + r.error); return; }
+    if (r.finalStatus === 'PENDING_CANCEL_APPROVAL') {
+      alert('✅ Cancel request sent — waiting for Admin/Manager approval. The call stays active until decided.');
+    }
     setPaymentPrompt(null);
     setUpdateTicket(null);
     refetch();
@@ -459,11 +462,14 @@ export default function PendingListScreen() {
     setFullSaving(true);
     const r = await updateTicketStatus(
       fullTicket, fullForm.newStatus, fullForm.note.trim(), fullForm.labour, byUser, fullForm.faultCode,
-      { workDone: fullForm.note.trim(), spares: fullSpares, photos: fullPhotos, payment, engId, memberRole: 'WC' },
+      { workDone: fullForm.note.trim(), spares: fullSpares, photos: fullPhotos, payment, engId, memberRole: 'WC', canCancelDirectly: false },
     );
     setFullSaving(false);
     if (!r.success) { alert('Error: ' + r.error); return; }
     if (r.stockWarning) alert(r.stockWarning);
+    if (r.finalStatus === 'PENDING_CANCEL_APPROVAL') {
+      alert('✅ Cancel request sent — waiting for Admin/Manager approval. The call stays active until decided.');
+    }
     setFullPaymentPrompt(null);
     setFullTicket(null);
     refetch();

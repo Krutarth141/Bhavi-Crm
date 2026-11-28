@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { EngineerTicket, PhotoSlot, PaymentConfirmData } from '@/types/engineerUpdate';
 import { TicketSpare, isChargeableSpare } from '@/types/tickets';
-import { notifyTicketClosed } from './telegramNotify';
+import { notifyCancelApprovalRequested, notifyTicketClosed } from './telegramNotify';
 import { missingBagParts, missingCompanyStockParts, fetchConsumableCodes } from './engPartsService';
 import { saveWorkLog, saveLocationEvent } from './myCallsService';
 import { getAllowedStatuses } from '@/types/ticketStatus';
@@ -112,6 +112,8 @@ export interface UpdateExtra {
     engId?: string;
     /** 'WC' | 'Engineer' — member_role on the auto work-log row. */
     memberRole?: string;
+    /** True only for an admin or CSP manager allowed to cancel without approval. */
+    canCancelDirectly?: boolean;
     // ── Product Condition (index.html:7302-7316) ────────────────────────────
     /** condition_type — Normal / Physical Damage / Liquid-Leakage / Burnt / Missing Parts / Other. */
     conditionType?: string;
@@ -478,20 +480,24 @@ export const updateTicketStatus = async (
         const nowIso = new Date().toISOString();
         const workDone = (extra?.workDone ?? ticket.work_done ?? '').trim();
 
-        // WC/Engineer cancellation stays pending until a true admin or CSP
-        // manager approves/rejects it. The ticket status and assignment remain
-        // unchanged until that decision.
-        if (newStatus === 'Call Cancel' && extra?.memberRole === 'Engineer') {
-            if (ticket.pending_cancel) {
-                return { success: false, error: 'A cancellation request is already pending approval.' };
+        if (newStatus === 'Call Cancel' && ticket.pending_cancel) {
+            return { success: false, error: 'A cancellation request is already pending approval.' };
+        }
+
+        // Non-approvers request cancellation; the ticket stays active and
+        // assigned until an admin or CSP manager makes the decision.
+        if (newStatus === 'Call Cancel' && !extra?.canCancelDirectly) {
+            const reason = workDone.trim();
+            if (!reason) {
+                return { success: false, error: 'A cancellation reason is required.' };
             }
-            if (workDone.length < 10) {
+            if ((extra?.memberRole || 'Engineer') === 'Engineer' && reason.length < 10) {
                 return { success: false, error: 'Valid Cancel Reason required (at least 10 characters).' };
             }
             const pendingCancel = {
                 requested_by: updatedBy,
-                requested_by_role: 'Engineer',
-                reason: workDone,
+                requested_by_role: extra?.memberRole || 'Engineer',
+                reason,
                 at: nowIso,
                 prev_status: ticket.status || '',
                 prev_assigned_to: (ticket as EngineerTicket & { assigned_to?: string }).assigned_to || null,
@@ -508,6 +514,7 @@ export const updateTicketStatus = async (
                 updated_at: nowIso,
             }).eq('id', ticket.id);
             if (error) throw error;
+            void notifyCancelApprovalRequested(ticket, updatedBy, extra?.memberRole || 'Engineer', reason);
             return { success: true, finalStatus: 'PENDING_CANCEL_APPROVAL' };
         }
         // The charges calc below bills off this list, so it must be the real

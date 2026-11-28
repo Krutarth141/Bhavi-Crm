@@ -79,3 +79,20 @@ export const notifyPunchIn = async (engName: string, time: string) => {
         await notifyAll(text);
     } catch { /* best-effort */ }
 };
+
+export const notifyCancelApprovalRequested = async (
+    ticket: { id: string; cname?: string },
+    requestedBy: string,
+    role: string,
+    reason: string,
+) => {
+    const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    await notifyAll(
+        `🚫 <b>Cancel Request — Approval Needed</b>\n`
+        + `Ticket: ${escapeHtml(ticket.id)}\n`
+        + `Customer: ${escapeHtml(ticket.cname || '-')}\n`
+        + `Requested by: ${escapeHtml(requestedBy)} (${escapeHtml(role)})\n`
+        + `Reason: ${escapeHtml(reason)}\n\n`
+        + 'Open All Tickets to approve or reject. The call stays active until decided.'
+    );
+};
